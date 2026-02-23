@@ -7,7 +7,7 @@ const DEVICE_ICONS: Record<string, string> = {
   phone: '📱',
   laptop: '💻',
   kiosk: '🖥️',
-  holobox: '🔮',
+  holobox: '🔲',
 };
 
 export function Sidebar() {
