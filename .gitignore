@@ -1,3 +1,25 @@
+# deps
 node_modules/
+
+# build
 dist/
+
+# env
 .env
+.env.local
+
+# Yarn PnP
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+.DS_Store

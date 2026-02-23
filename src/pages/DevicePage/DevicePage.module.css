@@ -1,0 +1,22 @@
+.devicePage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.notFound {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.notFoundIcon {
+  font-size: 48px;
+  opacity: 0.4;
+}
