@@ -154,7 +154,6 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                   src={url}
                   title={`${device.name} preview`}
                   sandbox={resolvedSandbox}
-                  referrerPolicy="strict-origin-when-cross-origin"
                   loading="lazy"
                   onLoad={handleIframeLoad}
                   allow="autoplay; microphone; fullscreen"
