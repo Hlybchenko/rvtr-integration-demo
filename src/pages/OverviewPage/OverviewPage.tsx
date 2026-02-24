@@ -31,14 +31,14 @@ const DEVICE_FIELDS: Array<{
     placeholder: 'https://your-kiosk-url.com',
   },
   {
-    id: 'holobox',
-    label: 'Holobox',
-    placeholder: 'https://your-holobox-url.com',
-  },
-  {
     id: 'keba-kiosk',
     label: 'Keba Kiosk',
     placeholder: 'https://your-keba-kiosk-url.com',
+  },
+  {
+    id: 'holobox',
+    label: 'Holobox',
+    placeholder: 'https://your-holobox-url.com',
   },
 ];
 
