@@ -1,76 +1,57 @@
-import { useState, useCallback, type FormEvent } from 'react';
-import { useWidgetUrl } from '@/hooks/useWidgetUrl';
+import { useEffect, useState } from 'react';
 import styles from './TopBar.module.css';
 
-interface TopBarProps {
-  pageName?: string;
-  iframeRef?: React.RefObject<HTMLIFrameElement | null>;
+type ThemeMode = 'dark' | 'light';
+const THEME_STORAGE_KEY = 'rvtr-theme';
+
+function resolveInitialTheme(): ThemeMode {
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'light' || stored === 'dark') return stored;
+
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
-export function TopBar({ pageName, iframeRef }: TopBarProps) {
-  const { widgetUrl, setWidgetUrl } = useWidgetUrl();
-  const [inputValue, setInputValue] = useState(widgetUrl);
+function applyTheme(theme: ThemeMode): void {
+  document.documentElement.setAttribute('data-theme', theme);
+  window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+}
 
-  // Sync input when widgetUrl changes externally
-  // (kept simple — no useEffect to avoid loops)
+export function TopBar() {
+  const [theme, setTheme] = useState<ThemeMode>('dark');
 
-  const handleSubmit = useCallback(
-    (e: FormEvent) => {
-      e.preventDefault();
-      setWidgetUrl(inputValue.trim());
-    },
-    [inputValue, setWidgetUrl],
-  );
-
-  const handleReload = useCallback(() => {
-    if (iframeRef?.current) {
-      // Force reload by resetting src
-      const src = iframeRef.current.src;
-      iframeRef.current.src = '';
-      requestAnimationFrame(() => {
-        if (iframeRef.current) iframeRef.current.src = src;
-      });
-    }
-  }, [iframeRef]);
-
-  const handleCopyLink = useCallback(() => {
-    void navigator.clipboard.writeText(window.location.href);
+  useEffect(() => {
+    const initial = resolveInitialTheme();
+    setTheme(initial);
+    applyTheme(initial);
   }, []);
 
+  const switchTheme = (nextTheme: ThemeMode) => {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+  };
+
   return (
-    <form className={styles.topBar} onSubmit={handleSubmit} role="search">
-      {pageName && <span className={styles.pageName}>{pageName}</span>}
+    <header className={styles.topBar}>
+      <div className={styles.brand}></div>
 
-      <input
-        className={styles.urlInput}
-        type="url"
-        placeholder="Widget URL (https://…)"
-        value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
-        aria-label="Widget iframe URL"
-      />
-
-      <button type="submit" className={`${styles.btn} ${styles.btnAccent}`}>
-        Load
-      </button>
-
-      <button
-        type="button"
-        className={styles.btn}
-        onClick={handleReload}
-        aria-label="Reload iframe"
-      >
-        ↻ Reload
-      </button>
-
-      <button
-        type="button"
-        className={styles.btn}
-        onClick={handleCopyLink}
-        aria-label="Copy shareable link"
-      >
-        🔗 Copy Link
-      </button>
-    </form>
+      <div className={styles.themeSwitch} role="group" aria-label="Theme switcher">
+        <button
+          type="button"
+          className={`${styles.themeBtn} ${theme === 'dark' ? styles.themeBtnActive : ''}`}
+          onClick={() => switchTheme('dark')}
+          aria-pressed={theme === 'dark'}
+        >
+          Dark
+        </button>
+        <button
+          type="button"
+          className={`${styles.themeBtn} ${theme === 'light' ? styles.themeBtnActive : ''}`}
+          onClick={() => switchTheme('light')}
+          aria-pressed={theme === 'light'}
+        >
+          Light
+        </button>
+      </div>
+    </header>
   );
 }

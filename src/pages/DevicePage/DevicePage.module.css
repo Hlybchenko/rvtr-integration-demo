@@ -5,6 +5,35 @@
   overflow: hidden;
 }
 
+.previewStage {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  opacity: 1;
+  transition-property: opacity;
+  transition-duration: var(--preview-transition-ms, 500ms);
+  transition-timing-function: var(--preview-transition-easing, ease-in-out);
+  will-change: opacity;
+}
+
+.previewIdle {
+  opacity: 1;
+  --preview-transition-ms: 500ms;
+  --preview-transition-easing: ease-in-out;
+}
+
+.previewExit {
+  opacity: 0;
+  --preview-transition-ms: 220ms;
+  --preview-transition-easing: ease-in-out;
+}
+
+.previewEnter {
+  opacity: 1;
+  --preview-transition-ms: 1500ms;
+  --preview-transition-easing: cubic-bezier(0.72, 0, 0.24, 1);
+}
+
 .notFound {
   flex: 1;
   display: flex;
@@ -19,4 +48,10 @@
 .notFoundIcon {
   font-size: 48px;
   opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .previewStage {
+    transition: none;
+  }
 }

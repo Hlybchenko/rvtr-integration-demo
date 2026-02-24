@@ -25,6 +25,15 @@ body {
   overflow: hidden;
 }
 
+body,
+#root {
+  transition:
+    background-color 360ms ease,
+    color 360ms ease,
+    border-color 360ms ease,
+    box-shadow 360ms ease;
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
@@ -65,4 +74,11 @@ input {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  #root {
+    transition: none;
+  }
 }

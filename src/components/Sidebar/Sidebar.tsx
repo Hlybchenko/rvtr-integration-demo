@@ -1,7 +1,23 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { devices } from '@/config/devices';
 import { useHealthCheck } from '@/hooks/useHealthCheck';
 import styles from './Sidebar.module.css';
+
+type ThemeMode = 'dark' | 'light';
+const THEME_STORAGE_KEY = 'rvtr-theme';
+
+function resolveInitialTheme(): ThemeMode {
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'light' || stored === 'dark') return stored;
+
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyTheme(theme: ThemeMode): void {
+  document.documentElement.setAttribute('data-theme', theme);
+  window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+}
 
 const DEVICE_ICONS: Record<string, string> = {
   phone: '📱',
@@ -12,6 +28,18 @@ const DEVICE_ICONS: Record<string, string> = {
 
 export function Sidebar() {
   useHealthCheck();
+  const [theme, setTheme] = useState<ThemeMode>('dark');
+
+  useEffect(() => {
+    const initial = resolveInitialTheme();
+    setTheme(initial);
+    applyTheme(initial);
+  }, []);
+
+  const switchTheme = (nextTheme: ThemeMode) => {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+  };
 
   return (
     <aside className={styles.sidebar} aria-label="Main navigation">
@@ -45,12 +73,31 @@ export function Sidebar() {
               `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
             }
           >
-            <span className={styles.navIcon}>
-              {DEVICE_ICONS[device.id] || '📦'}
-            </span>
+            <span className={styles.navIcon}>{DEVICE_ICONS[device.id] || '📦'}</span>
             {device.name}
           </NavLink>
         ))}
+
+        <div className={styles.navBottom}>
+          <div className={styles.themeRow}>
+            <span className={styles.themeModeText}>
+              {theme === 'dark' ? 'Dark mode' : 'Light mode'}
+            </span>
+            <button
+              type="button"
+              className={`${styles.themeToggle} ${theme === 'light' ? styles.themeToggleLight : styles.themeToggleDark}`}
+              onClick={() => switchTheme(theme === 'dark' ? 'light' : 'dark')}
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+              aria-pressed={theme === 'light'}
+            >
+              <span className={styles.themeToggleTrack}>
+                <span className={styles.themeToggleThumb}>
+                  <span className={styles.themeGlyph} aria-hidden="true" />
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
       </nav>
     </aside>
   );

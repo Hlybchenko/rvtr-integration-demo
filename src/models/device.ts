@@ -39,4 +39,9 @@ export interface DeviceTemplate {
   screenExpandBottom?: number;
   /** Extra pixels to expand the detected screen area on all sides (native px). */
   screenExpand?: number;
+  /**
+   * Visual scale multiplier for the rendered device frame.
+   * Values below 1 make it smaller, above 1 make it larger.
+   */
+  previewScale?: number;
 }

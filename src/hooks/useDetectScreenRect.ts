@@ -7,6 +7,9 @@ export interface Rect {
   h: number;
 }
 
+const detectedRectCache = new Map<string, Rect | null>();
+const pendingRectDetection = new Map<string, Promise<Rect | null>>();
+
 /**
  * Detects the transparent screen cutout in a device frame PNG.
  *
@@ -42,8 +45,7 @@ function detectScreenCutout(src: string): Promise<Rect | null> {
       const alphaAt = (index: number): number => data[index * 4 + 3] ?? 0;
       const pixelIndex = (x: number, y: number): number => y * w + x;
       const alphaThreshold = 16;
-      const isTransparent = (index: number): boolean =>
-        alphaAt(index) < alphaThreshold;
+      const isTransparent = (index: number): boolean => alphaAt(index) < alphaThreshold;
 
       // 0 = unseen, 1 = exterior transparent, 2 = interior transparent visited
       const visited = new Uint8Array(w * h);
@@ -147,14 +149,34 @@ function detectScreenCutout(src: string): Promise<Rect | null> {
   });
 }
 
+function detectScreenCutoutCached(src: string): Promise<Rect | null> {
+  if (detectedRectCache.has(src)) {
+    return Promise.resolve(detectedRectCache.get(src) ?? null);
+  }
+
+  const pending = pendingRectDetection.get(src);
+  if (pending) return pending;
+
+  const task = detectScreenCutout(src).then((rect) => {
+    detectedRectCache.set(src, rect);
+    pendingRectDetection.delete(src);
+    return rect;
+  });
+
+  pendingRectDetection.set(src, task);
+  return task;
+}
+
+export function warmDetectScreenRect(src: string): void {
+  if (!src) return;
+  void detectScreenCutoutCached(src);
+}
+
 /**
  * React hook that auto-detects the transparent bounding box in a device
  * frame image. Returns `null` while loading, or the detected Rect.
  */
-export function useDetectScreenRect(
-  src: string,
-  enabled: boolean,
-): Rect | null {
+export function useDetectScreenRect(src: string, enabled: boolean): Rect | null {
   const [rect, setRect] = useState<Rect | null>(null);
 
   useEffect(() => {
@@ -163,8 +185,15 @@ export function useDetectScreenRect(
       return;
     }
 
+    if (detectedRectCache.has(src)) {
+      setRect(detectedRectCache.get(src) ?? null);
+      return;
+    }
+
+    setRect(null);
+
     let cancelled = false;
-    detectScreenCutout(src).then((r) => {
+    detectScreenCutoutCached(src).then((r) => {
       if (!cancelled) setRect(r);
     });
 

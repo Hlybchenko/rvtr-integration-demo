@@ -22,10 +22,11 @@ export const devices: DeviceTemplate[] = [
     frameSrc: phoneFrame,
     frameWidth: 500,
     frameHeight: 787,
-    screenRect: { x: 26, y: 80, w: 348, h: 660, r: 8 },
+    screenRect: { x: 26, y: 80, w: 348, h: 660 / 1.4, r: 8 },
     autoDetectScreen: true,
     screenRadius: 46,
     screenExpand: 5,
+    previewScale: 0.7,
   },
   {
     id: 'laptop',
@@ -37,6 +38,7 @@ export const devices: DeviceTemplate[] = [
     autoDetectScreen: true,
     screenRadius: 16,
     screenExpandBottom: 5,
+    previewScale: 1.3,
   },
   {
     id: 'kiosk',
@@ -46,6 +48,7 @@ export const devices: DeviceTemplate[] = [
     frameHeight: 1267,
     screenRect: { x: 60, y: 70, w: 480, h: 720, r: 6 },
     autoDetectScreen: true,
+    previewScale: 1.1,
   },
   {
     id: 'holobox',
@@ -55,7 +58,22 @@ export const devices: DeviceTemplate[] = [
     frameHeight: 1600,
     screenRect: { x: 280, y: 170, w: 1440, h: 1630, r: 0 },
     autoDetectScreen: true,
+    previewScale: 1.1,
   },
 ];
 
 export const devicesMap = new Map(devices.map((d) => [d.id, d]));
+
+const preloadedFrameSrc = new Set<string>();
+
+export function preloadDeviceFrameImages(deviceList: DeviceTemplate[] = devices): void {
+  deviceList.forEach((device) => {
+    const src = device.frameSrc;
+    if (!src || preloadedFrameSrc.has(src)) return;
+
+    preloadedFrameSrc.add(src);
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = src;
+  });
+}

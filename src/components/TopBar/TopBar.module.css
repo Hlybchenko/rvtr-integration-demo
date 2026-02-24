@@ -1,7 +1,9 @@
 .topBar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 60px;
   padding: 12px 20px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -9,70 +11,43 @@
   -webkit-backdrop-filter: blur(8px);
 }
 
-.urlInput {
-  flex: 1;
-  padding: 8px 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+.brand {
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text);
-  font-size: 13px;
-  font-family: var(--font-mono);
-  transition: border-color var(--transition-fast);
+  letter-spacing: 0.2px;
 }
 
-.urlInput::placeholder {
-  color: var(--muted);
-}
-
-.urlInput:focus {
-  border-color: var(--accent);
-  outline: none;
-  box-shadow: 0 0 0 2px var(--accent-glow);
-}
-
-.btn {
+.themeSwitch {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
+  padding: 3px;
   background: var(--panel-hover);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  gap: 3px;
+}
+
+.themeBtn {
+  min-width: 74px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
   color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast),
-    border-color var(--transition-fast);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.btn:hover {
-  background: var(--panel);
-  color: var(--text);
-  border-color: var(--border-hover);
-}
-
-.btnAccent {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.btnAccent:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: #fff;
-}
-
-.pageName {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.themeBtn:hover {
   color: var(--text);
-  margin-right: auto;
-  white-space: nowrap;
+}
+
+.themeBtnActive {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--text);
 }

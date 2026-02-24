@@ -1,16 +1,62 @@
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { devicesMap } from '@/config/devices';
-import { useResolvedUrl, useSettingsStore } from '@/stores/settingsStore';
+import { useResolvedUrl, useRawDeviceUrl } from '@/stores/settingsStore';
 import { DevicePreview } from '@/components/DevicePreview/DevicePreview';
 import styles from './DevicePage.module.css';
 
+const EXIT_TRANSITION_MS = 220;
+const ENTER_TRANSITION_MS = 1500;
+
+type TransitionPhase = 'idle' | 'exiting' | 'entering';
+
 export function DevicePage() {
   const { deviceId } = useParams<{ deviceId: string }>();
-  const device = deviceId ? devicesMap.get(deviceId) : undefined;
-  const resolvedUrl = useResolvedUrl(deviceId ?? '');
-  const widgetUrl = useSettingsStore((s) => s.widgetUrl);
+  const targetDevice = deviceId ? devicesMap.get(deviceId) : undefined;
+  const [displayedDeviceId, setDisplayedDeviceId] = useState(deviceId ?? '');
+  const [transitionPhase, setTransitionPhase] = useState<TransitionPhase>('idle');
+  const startEnterTimerRef = useRef<number | null>(null);
+  const finishEnterTimerRef = useRef<number | null>(null);
 
-  if (!device) {
+  const displayedDevice =
+    devicesMap.get(displayedDeviceId) ??
+    (deviceId && devicesMap.has(deviceId) ? devicesMap.get(deviceId) : undefined);
+
+  const resolvedUrl = useResolvedUrl(displayedDevice?.id ?? '');
+  const rawDeviceUrl = useRawDeviceUrl(displayedDevice?.id ?? '');
+
+  useEffect(() => {
+    return () => {
+      if (startEnterTimerRef.current) window.clearTimeout(startEnterTimerRef.current);
+      if (finishEnterTimerRef.current) window.clearTimeout(finishEnterTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!deviceId || !targetDevice || displayedDeviceId === deviceId) return;
+
+    if (startEnterTimerRef.current) window.clearTimeout(startEnterTimerRef.current);
+    if (finishEnterTimerRef.current) window.clearTimeout(finishEnterTimerRef.current);
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplayedDeviceId(deviceId);
+      setTransitionPhase('idle');
+      return;
+    }
+
+    setTransitionPhase('exiting');
+
+    startEnterTimerRef.current = window.setTimeout(() => {
+      setDisplayedDeviceId(deviceId);
+      setTransitionPhase('entering');
+
+      finishEnterTimerRef.current = window.setTimeout(() => {
+        setTransitionPhase('idle');
+      }, ENTER_TRANSITION_MS);
+    }, EXIT_TRANSITION_MS);
+  }, [deviceId, targetDevice, displayedDeviceId]);
+
+  if (!targetDevice) {
     return (
       <div className={styles.devicePage}>
         <div className={styles.notFound}>
@@ -24,17 +70,31 @@ export function DevicePage() {
     );
   }
 
-  const isWidgetRequiredDevice = device.id === 'phone' || device.id === 'laptop';
-  const isWidgetMissing = isWidgetRequiredDevice && !widgetUrl.trim();
-  const finalUrl = isWidgetMissing ? '' : resolvedUrl || device.defaultUrl || '';
+  if (!displayedDevice) {
+    return <div className={styles.devicePage} />;
+  }
+
+  const isWidgetRequiredDevice =
+    displayedDevice.id === 'phone' || displayedDevice.id === 'laptop';
+  const isWidgetMissing = isWidgetRequiredDevice && !rawDeviceUrl.trim();
+  const finalUrl = isWidgetMissing ? '' : resolvedUrl || displayedDevice.defaultUrl || '';
+  const transitionClass =
+    transitionPhase === 'exiting'
+      ? styles.previewExit
+      : transitionPhase === 'entering'
+        ? styles.previewEnter
+        : styles.previewIdle;
 
   return (
     <div className={styles.devicePage}>
-      <DevicePreview
-        device={device}
-        url={finalUrl}
-        showWidgetRequired={isWidgetMissing}
-      />
+      <div className={`${styles.previewStage} ${transitionClass}`}>
+        <DevicePreview
+          device={displayedDevice}
+          url={finalUrl}
+          showWidgetRequired={isWidgetMissing}
+          transitionPhase={transitionPhase}
+        />
+      </div>
     </div>
   );
 }
