@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const PORT = 3210;
-const ALLOWED_AGENTS = new Set(['elevenlabs', 'google-native-audio']);
+const ALLOWED_AGENTS = new Set(['elevenlabs', 'gemini-live']);
 const desktopFilePath = path.join(os.homedir(), 'Desktop', 'rvtr-agent-option.txt');
 
 function parseVoiceAgentFromContent(content) {

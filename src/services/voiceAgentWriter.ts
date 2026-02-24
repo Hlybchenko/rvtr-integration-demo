@@ -1,7 +1,7 @@
 import type { VoiceAgent } from '@/stores/settingsStore';
 
 const WRITER_BASE_URL = 'http://127.0.0.1:3210';
-const VALID_AGENTS: VoiceAgent[] = ['elevenlabs', 'google-native-audio'];
+const VALID_AGENTS: VoiceAgent[] = ['elevenlabs', 'gemini-live'];
 
 function isVoiceAgent(value: unknown): value is VoiceAgent {
   return typeof value === 'string' && (VALID_AGENTS as string[]).includes(value);

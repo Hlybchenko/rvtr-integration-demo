@@ -5,7 +5,7 @@ const ENV_WIDGET_URL = import.meta.env.VITE_DEFAULT_WIDGET_URL || '';
 const ENV_HOLOBOX_URL = import.meta.env.VITE_DEFAULT_HOLOBOX_URL || '';
 
 export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox';
-export type VoiceAgent = 'elevenlabs' | 'google-native-audio';
+export type VoiceAgent = 'elevenlabs' | 'gemini-live';
 
 function getEnvDefaultUrl(deviceId: DeviceId): string {
   return deviceId === 'phone' || deviceId === 'laptop' ? ENV_WIDGET_URL : ENV_HOLOBOX_URL;

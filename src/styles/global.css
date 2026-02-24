@@ -28,10 +28,10 @@ body {
 body,
 #root {
   transition:
-    background-color 360ms ease,
-    color 360ms ease,
-    border-color 360ms ease,
-    box-shadow 360ms ease;
+    background-color var(--transition-slow),
+    color var(--transition-slow),
+    border-color var(--transition-slow),
+    box-shadow var(--transition-slow);
 }
 
 a {
@@ -52,7 +52,7 @@ input {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

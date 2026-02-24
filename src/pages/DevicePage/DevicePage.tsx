@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { devicesMap } from '@/config/devices';
-import { useResolvedUrl, useRawDeviceUrl } from '@/stores/settingsStore';
+import { useResolvedUrl } from '@/stores/settingsStore';
 import { DevicePreview } from '@/components/DevicePreview/DevicePreview';
 import styles from './DevicePage.module.css';
 
@@ -23,7 +23,6 @@ export function DevicePage() {
     (deviceId && devicesMap.has(deviceId) ? devicesMap.get(deviceId) : undefined);
 
   const resolvedUrl = useResolvedUrl(displayedDevice?.id ?? '');
-  const rawDeviceUrl = useRawDeviceUrl(displayedDevice?.id ?? '');
 
   useEffect(() => {
     return () => {
@@ -74,10 +73,7 @@ export function DevicePage() {
     return <div className={styles.devicePage} />;
   }
 
-  const isWidgetRequiredDevice =
-    displayedDevice.id === 'phone' || displayedDevice.id === 'laptop';
-  const isWidgetMissing = isWidgetRequiredDevice && !rawDeviceUrl.trim();
-  const finalUrl = isWidgetMissing ? '' : resolvedUrl || displayedDevice.defaultUrl || '';
+  const finalUrl = resolvedUrl || displayedDevice.defaultUrl || '';
   const transitionClass =
     transitionPhase === 'exiting'
       ? styles.previewExit
@@ -91,7 +87,6 @@ export function DevicePage() {
         <DevicePreview
           device={displayedDevice}
           url={finalUrl}
-          showWidgetRequired={isWidgetMissing}
           transitionPhase={transitionPhase}
         />
       </div>

@@ -6,7 +6,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--glass-bg);
+  background: var(--glass-highlight), var(--glass-bg);
   border-right: 1px solid var(--glass-border);
   backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
@@ -60,12 +60,14 @@
   text-decoration: none;
   transition:
     background var(--transition-fast),
-    color var(--transition-fast);
+    color var(--transition-fast),
+    border-color var(--transition-fast);
   border: 1px solid transparent;
 }
 
 .navLink:hover {
-  background: var(--panel-hover);
+  background: color-mix(in srgb, var(--panel-hover) 78%, transparent);
+  border-color: color-mix(in srgb, var(--border) 78%, transparent);
   color: var(--text);
 }
 

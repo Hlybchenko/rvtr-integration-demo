@@ -62,8 +62,8 @@
   align-items: center;
   justify-content: center;
   background: color-mix(in srgb, var(--glass-bg) 72%, transparent);
-  backdrop-filter: blur(12px) saturate(1.2);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.72)) saturate(1.2);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.72)) saturate(1.2);
   opacity: 1;
   transition: opacity 420ms ease-in-out;
   pointer-events: auto;
@@ -84,10 +84,10 @@
 }
 
 .loaderText {
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 600;
   letter-spacing: 0.2px;
-  color: color-mix(in srgb, var(--text-primary) 84%, transparent);
+  color: color-mix(in srgb, var(--text) 84%, transparent);
 }
 
 .spinner {
@@ -115,7 +115,7 @@
   justify-content: center;
   gap: 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--font-sm);
   text-align: center;
   padding: 16px;
 }

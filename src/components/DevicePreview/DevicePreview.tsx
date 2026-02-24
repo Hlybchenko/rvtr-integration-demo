@@ -17,7 +17,6 @@ interface DevicePreviewProps {
   device: DeviceTemplate;
   url: string;
   sandbox?: string;
-  showWidgetRequired?: boolean;
   transitionPhase?: 'idle' | 'exiting' | 'entering';
 }
 
@@ -33,7 +32,7 @@ const IFRAME_REVEAL_DELAY_MS = 1000;
  */
 export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
   function DevicePreview(
-    { device, url, sandbox, showWidgetRequired = false, transitionPhase = 'idle' },
+    { device, url, sandbox, transitionPhase = 'idle' },
     ref,
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -212,6 +211,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                 <iframe
                   ref={iframeRef}
                   className={`${styles.iframe} ${isIframeRevealed ? styles.iframeRevealed : styles.iframeMuted}`}
+                  data-rvtr-preview="true"
                   src={url}
                   title={`${device.name} preview`}
                   sandbox={resolvedSandbox}
@@ -221,17 +221,8 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                 />
               ) : !url && isGeometryReady ? (
                 <div className={styles.emptyScreen}>
-                  {showWidgetRequired ? (
-                    <>
-                      <div className={styles.spinner} />
-                      <span>Widget URL required</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className={styles.emptyIcon}>🔗</span>
-                      <span>Enter a widget URL above</span>
-                    </>
-                  )}
+                  <span className={styles.emptyIcon}>🔗</span>
+                  <span>Enter a widget URL in Settings</span>
                 </div>
               ) : null}
             </div>

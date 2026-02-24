@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
 import { useSettingsStore, type DeviceId, type VoiceAgent } from '@/stores/settingsStore';
@@ -8,6 +8,8 @@ import {
 } from '@/services/voiceAgentWriter';
 import styles from './OverviewPage.module.css';
 
+const VOICE_AGENT_SYNC_DEBOUNCE_MS = 180;
+
 const DEVICE_FIELDS: Array<{
   id: DeviceId;
   label: string;
@@ -16,22 +18,22 @@ const DEVICE_FIELDS: Array<{
   {
     id: 'phone',
     label: 'Phone',
-    placeholder: 'https://your-phone-widget.com/embed',
+    placeholder: 'https://your-phone-url.com',
   },
   {
     id: 'laptop',
     label: 'Laptop',
-    placeholder: 'https://your-laptop-widget.com/embed',
+    placeholder: 'https://your-laptop-url.com',
   },
   {
     id: 'kiosk',
     label: 'Info Kiosk',
-    placeholder: 'https://your-kiosk-widget.com/embed',
+    placeholder: 'https://your-kiosk-url.com',
   },
   {
     id: 'holobox',
     label: 'Holobox',
-    placeholder: 'https://your-holobox.com/embed',
+    placeholder: 'https://your-holobox-url.com',
   },
 ];
 
@@ -58,6 +60,9 @@ export function OverviewPage() {
   const [agentSyncError, setAgentSyncError] = useState<string | null>(null);
   const [isForceRewriting, setIsForceRewriting] = useState(false);
   const [forceRewriteMessage, setForceRewriteMessage] = useState<string | null>(null);
+  const lastSyncedVoiceAgentRef = useRef<VoiceAgent | null>(null);
+  const syncDebounceTimerRef = useRef<number | null>(null);
+  const syncRequestIdRef = useRef(0);
 
   const valuesByDevice: Record<DeviceId, string> = {
     phone: phoneUrl,
@@ -86,16 +91,40 @@ export function OverviewPage() {
   }, []);
 
   useEffect(() => {
-    void ensureVoiceAgentFileSync(voiceAgent)
-      .then((result) => {
-        setFileVoiceAgent(result.fileVoiceAgent);
-        setIsAgentSyncMatched(result.matched);
-        setAgentSyncError(null);
-      })
-      .catch((error) => {
-        setIsAgentSyncMatched(false);
-        setAgentSyncError(error instanceof Error ? error.message : String(error));
-      });
+    if (lastSyncedVoiceAgentRef.current === voiceAgent) return;
+    lastSyncedVoiceAgentRef.current = voiceAgent;
+
+    if (syncDebounceTimerRef.current) {
+      window.clearTimeout(syncDebounceTimerRef.current);
+      syncDebounceTimerRef.current = null;
+    }
+
+    const requestId = syncRequestIdRef.current + 1;
+    syncRequestIdRef.current = requestId;
+
+    syncDebounceTimerRef.current = window.setTimeout(() => {
+      void ensureVoiceAgentFileSync(voiceAgent)
+        .then((result) => {
+          if (syncRequestIdRef.current !== requestId) return;
+
+          setFileVoiceAgent(result.fileVoiceAgent);
+          setIsAgentSyncMatched(result.matched);
+          setAgentSyncError(null);
+        })
+        .catch((error) => {
+          if (syncRequestIdRef.current !== requestId) return;
+
+          setIsAgentSyncMatched(false);
+          setAgentSyncError(error instanceof Error ? error.message : String(error));
+        });
+    }, VOICE_AGENT_SYNC_DEBOUNCE_MS);
+
+    return () => {
+      if (syncDebounceTimerRef.current) {
+        window.clearTimeout(syncDebounceTimerRef.current);
+        syncDebounceTimerRef.current = null;
+      }
+    };
   }, [voiceAgent]);
 
   const handleForceRewrite = async () => {
@@ -214,11 +243,11 @@ export function OverviewPage() {
               <input
                 type="radio"
                 name="voice-agent"
-                value="google-native-audio"
-                checked={voiceAgent === 'google-native-audio'}
-                onChange={() => setVoiceAgent('google-native-audio')}
+                value="gemini-live"
+                checked={voiceAgent === 'gemini-live'}
+                onChange={() => setVoiceAgent('gemini-live')}
               />
-              <span>Google Native Audio</span>
+              <span>Gemini Live</span>
             </label>
           </div>
 
