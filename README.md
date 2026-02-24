@@ -36,3 +36,4 @@ Open [http://localhost:5173](http://localhost:5173).
 ### Security note
 
 `dev:unsafe` disables parts of browser security. Use only for local debugging.
+It also launches Chrome with `--unsafely-treat-insecure-origin-as-secure=http://localhost:5173`.
