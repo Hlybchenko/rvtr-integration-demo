@@ -35,6 +35,11 @@ const DEVICE_FIELDS: Array<{
     label: 'Holobox',
     placeholder: 'https://your-holobox-url.com',
   },
+  {
+    id: 'keba-kiosk',
+    label: 'Keba Kiosk',
+    placeholder: 'https://your-keba-kiosk-url.com',
+  },
 ];
 
 function isValidUrl(value: string): boolean {
@@ -52,6 +57,7 @@ export function OverviewPage() {
   const laptopUrl = useSettingsStore((s) => s.laptopUrl);
   const kioskUrl = useSettingsStore((s) => s.kioskUrl);
   const holoboxUrl = useSettingsStore((s) => s.holoboxUrl);
+  const kebaKioskUrl = useSettingsStore((s) => s.kebaKioskUrl);
   const voiceAgent = useSettingsStore((s) => s.voiceAgent);
   const setDeviceUrl = useSettingsStore((s) => s.setDeviceUrl);
   const setVoiceAgent = useSettingsStore((s) => s.setVoiceAgent);
@@ -69,6 +75,7 @@ export function OverviewPage() {
     laptop: laptopUrl,
     kiosk: kioskUrl,
     holobox: holoboxUrl,
+    'keba-kiosk': kebaKioskUrl,
   };
 
   const syncReasonTooltip = agentSyncError
@@ -292,7 +299,7 @@ export function OverviewPage() {
                 }}
                 disabled={isForceRewriting}
               >
-                {isForceRewriting ? 'Rewriting…' : 'Force rewrite now'}
+                {isForceRewriting ? 'Rewriting…' : 'Force rewrite'}
               </button>
               {forceRewriteMessage ? (
                 <span className={styles.syncActionMessage}>{forceRewriteMessage}</span>

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { devices } from '@/config/devices';
-import { useHealthCheck } from '@/hooks/useHealthCheck';
 import styles from './Sidebar.module.css';
 
 type ThemeMode = 'dark' | 'light';
@@ -24,10 +23,14 @@ const DEVICE_ICONS: Record<string, string> = {
   laptop: '💻',
   kiosk: '🖥️',
   holobox: '🔲',
+  'keba-kiosk': '🏧',
 };
 
-export function Sidebar() {
-  useHealthCheck();
+interface SidebarProps {
+  className?: string;
+}
+
+export function Sidebar({ className }: SidebarProps) {
   const [theme, setTheme] = useState<ThemeMode>('dark');
 
   useEffect(() => {
@@ -42,7 +45,10 @@ export function Sidebar() {
   };
 
   return (
-    <aside className={styles.sidebar} aria-label="Main navigation">
+    <aside
+      className={`${styles.sidebar} ${className ?? ''}`}
+      aria-label="Main navigation"
+    >
       {/* Logo */}
       <div className={styles.logo}>
         <div className={styles.logoText}>

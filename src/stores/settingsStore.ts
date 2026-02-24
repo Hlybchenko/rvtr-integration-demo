@@ -4,11 +4,18 @@ import { persist } from 'zustand/middleware';
 const ENV_WIDGET_URL = import.meta.env.VITE_DEFAULT_WIDGET_URL || '';
 const ENV_HOLOBOX_URL = import.meta.env.VITE_DEFAULT_HOLOBOX_URL || '';
 
-export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox';
+export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox' | 'keba-kiosk';
 export type VoiceAgent = 'elevenlabs' | 'gemini-live';
+type LegacyVoiceAgent = VoiceAgent | 'google-native-audio';
+
+function normalizeVoiceAgent(value: LegacyVoiceAgent | undefined): VoiceAgent {
+  if (value === 'google-native-audio') return 'gemini-live';
+  return value === 'gemini-live' || value === 'elevenlabs' ? value : 'elevenlabs';
+}
 
 function getEnvDefaultUrl(deviceId: DeviceId): string {
-  return deviceId === 'phone' || deviceId === 'laptop' ? ENV_WIDGET_URL : ENV_HOLOBOX_URL;
+  if (deviceId === 'phone' || deviceId === 'laptop') return ENV_WIDGET_URL;
+  return ENV_HOLOBOX_URL;
 }
 
 function isValidUrl(value: string): boolean {
@@ -30,6 +37,8 @@ interface SettingsState {
   kioskUrl: string;
   /** User-entered holobox URL */
   holoboxUrl: string;
+  /** User-entered keba-kiosk URL */
+  kebaKioskUrl: string;
   /** Selected voice agent provider */
   voiceAgent: VoiceAgent;
 
@@ -47,6 +56,7 @@ export const useSettingsStore = create<SettingsState>()(
       laptopUrl: '',
       kioskUrl: '',
       holoboxUrl: '',
+      kebaKioskUrl: '',
       voiceAgent: 'elevenlabs',
 
       setDeviceUrl: (deviceId, url) => {
@@ -54,6 +64,7 @@ export const useSettingsStore = create<SettingsState>()(
         if (deviceId === 'laptop') set({ laptopUrl: url });
         if (deviceId === 'kiosk') set({ kioskUrl: url });
         if (deviceId === 'holobox') set({ holoboxUrl: url });
+        if (deviceId === 'keba-kiosk') set({ kebaKioskUrl: url });
       },
 
       setVoiceAgent: (agent) => set({ voiceAgent: agent }),
@@ -67,14 +78,16 @@ export const useSettingsStore = create<SettingsState>()(
               ? state.laptopUrl
               : deviceId === 'kiosk'
                 ? state.kioskUrl
-                : state.holoboxUrl;
+                : deviceId === 'holobox'
+                  ? state.holoboxUrl
+                  : state.kebaKioskUrl;
 
         return isValidUrl(rawValue) ? rawValue : getEnvDefaultUrl(deviceId);
       },
     }),
     {
       name: 'rvtr-settings',
-      version: 3,
+      version: 5,
       migrate: (persistedState, version) => {
         const state = persistedState as
           | {
@@ -83,7 +96,8 @@ export const useSettingsStore = create<SettingsState>()(
               phoneUrl?: string;
               laptopUrl?: string;
               kioskUrl?: string;
-              voiceAgent?: VoiceAgent;
+              kebaKioskUrl?: string;
+              voiceAgent?: LegacyVoiceAgent;
             }
           | undefined;
 
@@ -93,6 +107,7 @@ export const useSettingsStore = create<SettingsState>()(
             laptopUrl: '',
             kioskUrl: '',
             holoboxUrl: '',
+            kebaKioskUrl: '',
             voiceAgent: 'elevenlabs' as VoiceAgent,
           };
         }
@@ -106,7 +121,8 @@ export const useSettingsStore = create<SettingsState>()(
             laptopUrl: state.laptopUrl ?? legacyWidgetUrl,
             kioskUrl: state.kioskUrl ?? legacyHoloboxUrl,
             holoboxUrl: state.holoboxUrl ?? legacyHoloboxUrl,
-            voiceAgent: state.voiceAgent ?? 'elevenlabs',
+            kebaKioskUrl: state.kebaKioskUrl ?? '',
+            voiceAgent: normalizeVoiceAgent(state.voiceAgent),
           };
         }
 
@@ -115,7 +131,8 @@ export const useSettingsStore = create<SettingsState>()(
           laptopUrl: state.laptopUrl ?? '',
           kioskUrl: state.kioskUrl ?? '',
           holoboxUrl: state.holoboxUrl ?? '',
-          voiceAgent: state.voiceAgent ?? 'elevenlabs',
+          kebaKioskUrl: state.kebaKioskUrl ?? '',
+          voiceAgent: normalizeVoiceAgent(state.voiceAgent),
         };
       },
     },
@@ -130,12 +147,14 @@ export function useResolvedUrl(deviceId: string): string {
   useSettingsStore((s) => s.laptopUrl);
   useSettingsStore((s) => s.kioskUrl);
   useSettingsStore((s) => s.holoboxUrl);
+  useSettingsStore((s) => s.kebaKioskUrl);
 
   if (
     deviceId !== 'phone' &&
     deviceId !== 'laptop' &&
     deviceId !== 'kiosk' &&
-    deviceId !== 'holobox'
+    deviceId !== 'holobox' &&
+    deviceId !== 'keba-kiosk'
   ) {
     return '';
   }

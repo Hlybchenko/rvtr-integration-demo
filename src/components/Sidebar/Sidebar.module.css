@@ -12,6 +12,16 @@
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
   box-shadow: var(--glass-shadow);
   z-index: 10;
+  transition: transform 300ms cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+
+/* ── Mobile: hidden off-screen by default ── */
+@media (max-width: 767px) {
+  .sidebar {
+    z-index: 20;
+    transform: translateX(-100%);
+    box-shadow: var(--shadow-lg);
+  }
 }
 
 .logo {
@@ -28,6 +38,21 @@
 
 .logoAccent {
   color: var(--accent);
+}
+
+@media (max-width: 767px) {
+  .logo {
+    display: flex;
+    align-items: center;
+    min-height: 68px;
+    padding: 14px 14px 14px 70px;
+  }
+
+  .logoText {
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
 }
 
 .nav {

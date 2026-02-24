@@ -5,6 +5,7 @@ import phoneFrame from '@/assets/devices/phone.png';
 import laptopFrame from '@/assets/devices/laptop.png';
 import kioskFrame from '@/assets/devices/kiosk.png';
 import holoboxFrame from '@/assets/devices/holobox.png';
+import kebaKioskFrame from '@/assets/devices/keba-Kiosk.png';
 
 /**
  * Device templates registry.
@@ -20,9 +21,9 @@ export const devices: DeviceTemplate[] = [
     id: 'phone',
     name: 'Phone',
     frameSrc: phoneFrame,
-    frameWidth: 500,
+    frameWidth: 427,
     frameHeight: 787,
-    screenRect: { x: 26, y: 80, w: 348, h: 660 / 1.4, r: 8 },
+    screenRect: { x: 44, y: 35, w: 336, h: 717, r: 8 },
     autoDetectScreen: true,
     screenRadius: 46,
     screenExpand: 5,
@@ -32,13 +33,13 @@ export const devices: DeviceTemplate[] = [
     id: 'laptop',
     name: 'Laptop',
     frameSrc: laptopFrame,
-    frameWidth: 1920,
-    frameHeight: 1080,
-    screenRect: { x: 142, y: 42, w: 916, h: 572, r: 4 },
+    frameWidth: 1286,
+    frameHeight: 811,
+    screenRect: { x: 139, y: 48, w: 1006, h: 656, r: 4 },
     autoDetectScreen: true,
     screenRadius: 16,
     screenExpandBottom: 5,
-    previewScale: 1.3,
+    previewScale: 1,
   },
   {
     id: 'kiosk',
@@ -46,19 +47,29 @@ export const devices: DeviceTemplate[] = [
     frameSrc: kioskFrame,
     frameWidth: 561,
     frameHeight: 1267,
-    screenRect: { x: 60, y: 70, w: 480, h: 720, r: 6 },
+    screenRect: { x: 100, y: 81, w: 351, h: 674, r: 6 },
     autoDetectScreen: true,
-    previewScale: 1.1,
+    previewScale: 1.04,
+  },
+  {
+    id: 'keba-kiosk',
+    name: 'Keba Kiosk',
+    frameSrc: kebaKioskFrame,
+    frameWidth: 422,
+    frameHeight: 792,
+    screenRect: { x: 78, y: 24, w: 268, h: 351, r: 4 },
+    autoDetectScreen: true,
+    previewScale: 1,
   },
   {
     id: 'holobox',
     name: 'Holobox',
     frameSrc: holoboxFrame,
-    frameWidth: 1600,
-    frameHeight: 1600,
-    screenRect: { x: 280, y: 170, w: 1440, h: 1630, r: 0 },
+    frameWidth: 922,
+    frameHeight: 1521,
+    screenRect: { x: 106, y: 122, w: 713, h: 1266, r: 0 },
     autoDetectScreen: true,
-    previewScale: 1.1,
+    previewScale: 1,
   },
 ];
 

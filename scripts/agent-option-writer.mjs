@@ -5,13 +5,23 @@ import path from 'node:path';
 
 const PORT = 3210;
 const ALLOWED_AGENTS = new Set(['elevenlabs', 'gemini-live']);
+const LEGACY_ALIASES = new Map([['google-native-audio', 'gemini-live']]);
 const desktopFilePath = path.join(os.homedir(), 'Desktop', 'rvtr-agent-option.txt');
+
+function normalizeVoiceAgent(value) {
+  if (typeof value !== 'string') return null;
+
+  if (LEGACY_ALIASES.has(value)) {
+    return LEGACY_ALIASES.get(value);
+  }
+
+  return ALLOWED_AGENTS.has(value) ? value : null;
+}
 
 function parseVoiceAgentFromContent(content) {
   const match = content.match(/^voice_agent=(.+)$/m);
   if (!match || !match[1]) return null;
-  const value = match[1].trim();
-  return ALLOWED_AGENTS.has(value) ? value : null;
+  return normalizeVoiceAgent(match[1].trim());
 }
 
 async function readVoiceAgentOption() {
@@ -75,9 +85,9 @@ const server = createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const body = JSON.parse(rawBody || '{}');
-        const voiceAgent = typeof body.voiceAgent === 'string' ? body.voiceAgent : '';
+        const voiceAgent = normalizeVoiceAgent(body.voiceAgent);
 
-        if (!ALLOWED_AGENTS.has(voiceAgent)) {
+        if (!voiceAgent) {
           sendJson(res, 400, { ok: false, error: 'Unsupported voiceAgent value' });
           return;
         }

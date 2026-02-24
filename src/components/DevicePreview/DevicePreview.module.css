@@ -66,7 +66,7 @@
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.72)) saturate(1.2);
   opacity: 1;
   transition: opacity 420ms ease-in-out;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .deviceBootHidden {
@@ -125,6 +125,11 @@
   opacity: 0.5;
 }
 
+.embedBlockedScreen {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 45%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .deviceBootOverlay {
     transition: none;
@@ -140,5 +145,12 @@
 
   .spinner {
     animation: none;
+  }
+}
+
+/* ── Mobile adjustments ── */
+@media (max-width: 767px) {
+  .container {
+    padding: 48px 8px 8px;
   }
 }

@@ -388,3 +388,14 @@
   opacity: 0.6;
   font-style: italic;
 }
+
+/* ── Mobile adjustments ── */
+@media (max-width: 767px) {
+  .settings {
+    padding: 56px 16px 24px;
+  }
+
+  .title {
+    font-size: 22px;
+  }
+}

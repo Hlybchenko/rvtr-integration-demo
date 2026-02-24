@@ -31,15 +31,13 @@ const IFRAME_REVEAL_DELAY_MS = 1000;
  * Scales responsively using object-fit: contain logic via ResizeObserver.
  */
 export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
-  function DevicePreview(
-    { device, url, sandbox, transitionPhase = 'idle' },
-    ref,
-  ) {
+  function DevicePreview({ device, url, sandbox, transitionPhase = 'idle' }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const frameRef = useRef<HTMLImageElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const iframeRevealTimerRef = useRef<number | null>(null);
     const [loading, setLoading] = useState(!!url);
+    const [isEmbedBlocked, setIsEmbedBlocked] = useState(false);
     const [frameLoaded, setFrameLoaded] = useState(false);
     const [isIframeRevealed, setIsIframeRevealed] = useState(true);
     const [size, setSize] = useState({ width: 0, height: 0 });
@@ -120,9 +118,42 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     // Reset loading state when url changes
     useEffect(() => {
       setLoading(!!url);
+      setIsEmbedBlocked(false);
     }, [url, device.id, device.frameSrc]);
 
     const handleIframeLoad = useCallback(() => {
+      const iframe = iframeRef.current;
+      let blocked = false;
+
+      if (iframe) {
+        try {
+          const href = iframe.contentWindow?.location.href ?? '';
+          const title = iframe.contentDocument?.title?.toLowerCase() ?? '';
+          const bodyText = iframe.contentDocument?.body?.innerText?.toLowerCase() ?? '';
+
+          if (href === 'about:blank' || href.startsWith('chrome-error://')) {
+            blocked = true;
+          }
+
+          if (
+            title.includes('refused to connect') ||
+            bodyText.includes('refused to connect') ||
+            bodyText.includes('x-frame-options') ||
+            bodyText.includes('frame-ancestors')
+          ) {
+            blocked = true;
+          }
+        } catch {
+          blocked = false;
+        }
+      }
+
+      setIsEmbedBlocked(blocked);
+      setLoading(false);
+    }, []);
+
+    const handleIframeError = useCallback(() => {
+      setIsEmbedBlocked(true);
       setLoading(false);
     }, []);
 
@@ -208,17 +239,25 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
           {screenStyle ? (
             <div className={styles.screen} style={screenStyle}>
               {shouldRenderIframe ? (
-                <iframe
-                  ref={iframeRef}
-                  className={`${styles.iframe} ${isIframeRevealed ? styles.iframeRevealed : styles.iframeMuted}`}
-                  data-rvtr-preview="true"
-                  src={url}
-                  title={`${device.name} preview`}
-                  sandbox={resolvedSandbox}
-                  loading="lazy"
-                  onLoad={handleIframeLoad}
-                  allow="autoplay; microphone; fullscreen"
-                />
+                <>
+                  <iframe
+                    ref={iframeRef}
+                    className={`${styles.iframe} ${isIframeRevealed ? styles.iframeRevealed : styles.iframeMuted}`}
+                    data-rvtr-preview="true"
+                    src={url}
+                    title={`${device.name} preview`}
+                    sandbox={resolvedSandbox}
+                    onLoad={handleIframeLoad}
+                    onError={handleIframeError}
+                    allow="autoplay; microphone; fullscreen"
+                  />
+                  {isEmbedBlocked ? (
+                    <div className={`${styles.emptyScreen} ${styles.embedBlockedScreen}`}>
+                      <span className={styles.emptyIcon}>⛔</span>
+                      <span>This URL does not allow iframe embedding</span>
+                    </div>
+                  ) : null}
+                </>
               ) : !url && isGeometryReady ? (
                 <div className={styles.emptyScreen}>
                   <span className={styles.emptyIcon}>🔗</span>
