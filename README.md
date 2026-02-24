@@ -1,6 +1,6 @@
 # RVTR Integration Demo
 
-A modern device-preview demo for AI assistant widgets across phone, laptop, info kiosk, and holobox form factors. Includes per-device URL settings, voice-agent sync to a local Desktop file, and static top-bar theme switching (Dark/Light).
+A modern device-preview demo for AI assistant widgets across phone, laptop, info kiosk, and holobox form factors.
 
 ## Quick Start
 
@@ -12,22 +12,16 @@ corepack enable
 yarn install
 
 # Start dev server
-yarn dev
+yarn dev        # safe mode
+# or
+yarn dev:unsafe # unsafe Chrome mode
+yarn stop:dev
+
 ```
 
 Open [http://localhost:5173](http://localhost:5173).
 
 `yarn dev` uses a fixed port (`5173`) and performs cleanup before start.
-
-## Current UI features
-
-- Static top bar with theme toggle (`Dark` / `Light`) persisted in local storage.
-- Sidebar navigation between device previews and settings.
-- Device preview loads with a centered minimal loader to avoid iframe flicker/jumping.
-- Settings include:
-  - Per-device URLs (with URL validity badges).
-  - Voice agent selection (`elevenlabs` / `google-native-audio`).
-  - File sync status, tooltip with sync reason, and `Force rewrite now` action.
 
 ## Dev Scripts (short guide)
 
