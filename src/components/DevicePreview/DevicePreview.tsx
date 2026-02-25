@@ -233,6 +233,25 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     const shouldRenderIframe = Boolean(url) && isGeometryReady;
     const showGlobalLoader = !isGeometryReady || (Boolean(url) && loading);
 
+    // Keep focus on the iframe – re-focus whenever it loses it
+    useEffect(() => {
+      const iframe = iframeRef.current;
+      if (!iframe || !url || isEmbedBlocked) return;
+
+      const refocus = () => {
+        requestAnimationFrame(() => {
+          try {
+            iframeRef.current?.focus();
+          } catch {
+            // cross-origin – safe to ignore
+          }
+        });
+      };
+
+      iframe.addEventListener('blur', refocus);
+      return () => iframe.removeEventListener('blur', refocus);
+    }, [url, isEmbedBlocked, isGeometryReady]);
+
     return (
       <div className={styles.container} ref={containerRef}>
         <div
