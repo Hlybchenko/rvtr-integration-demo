@@ -30,6 +30,11 @@
   transition: opacity 420ms ease-in-out;
 }
 
+/* Ensure iframe can receive keyboard focus outline */
+.iframe:focus {
+  outline: none;
+}
+
 .screen {
   position: absolute;
   z-index: 1;
@@ -87,7 +92,7 @@
   font-size: var(--font-xs);
   font-weight: 600;
   letter-spacing: 0.2px;
-  color: color-mix(in srgb, var(--text) 84%, transparent);
+  color: var(--accent);
 }
 
 .spinner {

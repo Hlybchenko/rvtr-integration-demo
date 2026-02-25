@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Widget Demo HyperScaling</title>
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+        width: 100%;
+        scrollbar-width: none;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        position: relative;
+        overflow: hidden;
+      }
+      ::-webkit-scrollbar {
+        display: none;
+      }
+
+      .background-iframe {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        z-index: 0;
+        -webkit-overflow-scrolling: touch;
+        overflow: auto;
+        /* padding-right: 20px; */
+      }
+
+      #ravatar-widget-container {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        z-index: 1;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      #ravatar-widget-container.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe class="background-iframe" src="energieag.html"></iframe>
+
+    <div id="ravatar-widget-container">
+      <script
+        async
+        src="https://cdn.rvtr.ai/projects/67c7207576b40edf01000072/widget.js"
+      ></script>
+    </div>
+  </body>
+</html>

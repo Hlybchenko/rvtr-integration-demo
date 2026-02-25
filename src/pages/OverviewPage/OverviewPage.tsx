@@ -157,14 +157,14 @@ export function OverviewPage() {
 
   return (
     <div className={styles.settings}>
-      <header className={styles.header}>
+      {/* <header className={styles.header}>
         <h1 className={styles.title}>
           <span className={styles.accent}>Settings</span>
         </h1>
         <p className={styles.subtitle}>
           Configure URL per device preview. Changes are saved automatically.
         </p>
-      </header>
+      </header> */}
 
       <div className={styles.form}>
         <section className={styles.settingsBlock}>

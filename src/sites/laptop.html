@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Widget Demo HyperScaling</title>
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+        width: 100%;
+        scrollbar-width: none;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        position: relative;
+        overflow: hidden;
+      }
+      ::-webkit-scrollbar {
+        display: none;
+      }
+
+      .background-iframe {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 1600px;
+        height: 1044px;
+        border: none;
+        z-index: 0;
+        transform-origin: top left;
+      }
+
+      #ravatar-widget-container {
+        position: relative;
+        z-index: 1;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      #ravatar-widget-container.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe class="background-iframe" src="energieag.html"></iframe>
+
+    <script>
+      function updateScale() {
+        var scaleX = window.innerWidth / 1600;
+        var scaleY = window.innerHeight / 1044;
+        var iframe = document.querySelector('.background-iframe');
+        iframe.style.transform = 'scale(' + scaleX + ', ' + scaleY + ')';
+      }
+      updateScale();
+      window.addEventListener('resize', updateScale);
+    </script>
+
+    <div id="ravatar-widget-container">
+      <script
+        async
+        src="https://cdn.rvtr.ai/projects/67c7207576b40edf01000072/widget.js"
+      ></script>
+    </div>
+  </body>
+</html>

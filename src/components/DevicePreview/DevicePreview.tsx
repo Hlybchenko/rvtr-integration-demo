@@ -150,11 +150,38 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
 
       setIsEmbedBlocked(blocked);
       setLoading(false);
+
+      // Auto-focus the iframe so keyboard events reach its content immediately
+      if (!blocked) {
+        requestAnimationFrame(() => {
+          try {
+            iframeRef.current?.focus();
+          } catch {
+            // cross-origin – safe to ignore
+          }
+        });
+      }
     }, []);
 
     const handleIframeError = useCallback(() => {
       setIsEmbedBlocked(true);
       setLoading(false);
+    }, []);
+
+    /**
+     * Ensure the iframe content-window receives keyboard focus.
+     * Use mousedown (fires before the browser's own focus logic) so the
+     * iframe gets focus even when a higher-z-index transparent layer sits
+     * on top of it.
+     */
+    const handleScreenMouseDown = useCallback(() => {
+      requestAnimationFrame(() => {
+        try {
+          iframeRef.current?.focus();
+        } catch {
+          // cross-origin focus may throw – safe to ignore
+        }
+      });
     }, []);
 
     // Auto-detect the screen cutout (inner transparent hole) in the PNG.
@@ -188,7 +215,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
             : 'r' in rect
               ? ((rect as typeof device.screenRect).r / sourceWidth) * size.width
               : 0,
-          zIndex: device.screenOnTop ? 3 : 1,
+          zIndex: device.screenOnTop ? 4 : undefined,
         }
       : undefined;
 
@@ -237,7 +264,11 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
           />
 
           {screenStyle ? (
-            <div className={styles.screen} style={screenStyle}>
+            <div
+              className={styles.screen}
+              style={screenStyle}
+              onMouseDown={handleScreenMouseDown}
+            >
               {shouldRenderIframe ? (
                 <>
                   <iframe
@@ -246,6 +277,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                     data-rvtr-preview="true"
                     src={url}
                     title={`${device.name} preview`}
+                    tabIndex={0}
                     sandbox={resolvedSandbox}
                     onLoad={handleIframeLoad}
                     onError={handleIframeError}

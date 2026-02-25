@@ -2,7 +2,7 @@
 .settings {
   display: flex;
   flex-direction: column;
-  padding: var(--space-4) 40px 40px;
+  padding: 40px 40px;
   gap: var(--space-6);
   max-width: 720px;
 }
