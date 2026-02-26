@@ -68,7 +68,7 @@ export const devices: DeviceTemplate[] = [
     frameSrc: holoboxFrame,
     frameWidth: 922,
     frameHeight: 1521,
-    screenRect: { x: 106, y: 122, w: 713, h: 1266, r: 0 },
+    screenRect: { x: 99, y: 112, w: 726, h: 1286, r: 0 },
     autoDetectScreen: true,
     previewScale: 1,
   },
