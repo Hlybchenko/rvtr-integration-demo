@@ -8,6 +8,16 @@ export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox' | 'keba-kiosk';
 export type VoiceAgent = 'elevenlabs' | 'gemini-live';
 type LegacyVoiceAgent = VoiceAgent | 'google-native-audio';
 
+/**
+ * Devices that require a configured & synced voice agent file
+ * before they can be previewed.
+ */
+export const VOICE_AGENT_DEPENDENT_DEVICES: ReadonlySet<DeviceId> = new Set([
+  'holobox',
+  'kiosk',
+  'keba-kiosk',
+]);
+
 function normalizeVoiceAgent(value: LegacyVoiceAgent | undefined): VoiceAgent {
   if (value === 'google-native-audio') return 'gemini-live';
   return value === 'gemini-live' || value === 'elevenlabs' ? value : 'elevenlabs';
@@ -41,9 +51,15 @@ interface SettingsState {
   kebaKioskUrl: string;
   /** Selected voice agent provider */
   voiceAgent: VoiceAgent;
+  /** Absolute path to the license file on the host machine */
+  licenseFilePath: string;
+  /** Absolute path to start2stream executable on the host machine */
+  start2streamPath: string;
 
   setDeviceUrl: (deviceId: DeviceId, url: string) => void;
   setVoiceAgent: (agent: VoiceAgent) => void;
+  setLicenseFilePath: (filePath: string) => void;
+  setStart2streamPath: (filePath: string) => void;
 
   /** Resolved URL for a device (user input → env fallback) */
   getDeviceUrl: (deviceId: DeviceId) => string;
@@ -58,6 +74,8 @@ export const useSettingsStore = create<SettingsState>()(
       holoboxUrl: '',
       kebaKioskUrl: '',
       voiceAgent: 'elevenlabs',
+      licenseFilePath: '',
+      start2streamPath: '',
 
       setDeviceUrl: (deviceId, url) => {
         if (deviceId === 'phone') set({ phoneUrl: url });
@@ -68,6 +86,10 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       setVoiceAgent: (agent) => set({ voiceAgent: agent }),
+
+      setLicenseFilePath: (filePath) => set({ licenseFilePath: filePath }),
+
+      setStart2streamPath: (filePath) => set({ start2streamPath: filePath }),
 
       getDeviceUrl: (deviceId) => {
         const state = get();
@@ -87,7 +109,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'rvtr-settings',
-      version: 5,
+      version: 7,
       migrate: (persistedState, version) => {
         const state = persistedState as
           | {
@@ -98,6 +120,8 @@ export const useSettingsStore = create<SettingsState>()(
               kioskUrl?: string;
               kebaKioskUrl?: string;
               voiceAgent?: LegacyVoiceAgent;
+              licenseFilePath?: string;
+              start2streamPath?: string;
             }
           | undefined;
 
@@ -109,6 +133,8 @@ export const useSettingsStore = create<SettingsState>()(
             holoboxUrl: '',
             kebaKioskUrl: '',
             voiceAgent: 'elevenlabs' as VoiceAgent,
+            licenseFilePath: '',
+            start2streamPath: '',
           };
         }
 
@@ -123,6 +149,8 @@ export const useSettingsStore = create<SettingsState>()(
             holoboxUrl: state.holoboxUrl ?? legacyHoloboxUrl,
             kebaKioskUrl: state.kebaKioskUrl ?? '',
             voiceAgent: normalizeVoiceAgent(state.voiceAgent),
+            licenseFilePath: state.licenseFilePath ?? '',
+            start2streamPath: state.start2streamPath ?? '',
           };
         }
 
@@ -133,21 +161,30 @@ export const useSettingsStore = create<SettingsState>()(
           holoboxUrl: state.holoboxUrl ?? '',
           kebaKioskUrl: state.kebaKioskUrl ?? '',
           voiceAgent: normalizeVoiceAgent(state.voiceAgent),
+          licenseFilePath: state.licenseFilePath ?? '',
+          start2streamPath: state.start2streamPath ?? '',
         };
       },
     },
   ),
 );
 
+/** Selector that returns the raw URL for a single device — single subscription */
+function selectRawUrl(deviceId: string) {
+  return (s: SettingsState): string => {
+    if (deviceId === 'phone') return s.phoneUrl;
+    if (deviceId === 'laptop') return s.laptopUrl;
+    if (deviceId === 'kiosk') return s.kioskUrl;
+    if (deviceId === 'holobox') return s.holoboxUrl;
+    if (deviceId === 'keba-kiosk') return s.kebaKioskUrl;
+    return '';
+  };
+}
+
 /** Get the resolved URL for a given device id */
 export function useResolvedUrl(deviceId: string): string {
+  const rawUrl = useSettingsStore(selectRawUrl(deviceId));
   const getDeviceUrl = useSettingsStore((s) => s.getDeviceUrl);
-  // Subscribe to raw values so the component re-renders on change
-  useSettingsStore((s) => s.phoneUrl);
-  useSettingsStore((s) => s.laptopUrl);
-  useSettingsStore((s) => s.kioskUrl);
-  useSettingsStore((s) => s.holoboxUrl);
-  useSettingsStore((s) => s.kebaKioskUrl);
 
   if (
     deviceId !== 'phone' &&
@@ -159,19 +196,11 @@ export function useResolvedUrl(deviceId: string): string {
     return '';
   }
 
-  return getDeviceUrl(deviceId);
+  // rawUrl subscription ensures re-render; getDeviceUrl applies env fallback
+  return isValidUrl(rawUrl) ? rawUrl : getDeviceUrl(deviceId as DeviceId);
 }
 
 /** Get raw (user-entered) URL for a device id without env fallback */
 export function useRawDeviceUrl(deviceId: string): string {
-  const phoneUrl = useSettingsStore((s) => s.phoneUrl);
-  const laptopUrl = useSettingsStore((s) => s.laptopUrl);
-  const kioskUrl = useSettingsStore((s) => s.kioskUrl);
-  const holoboxUrl = useSettingsStore((s) => s.holoboxUrl);
-
-  if (deviceId === 'phone') return phoneUrl;
-  if (deviceId === 'laptop') return laptopUrl;
-  if (deviceId === 'kiosk') return kioskUrl;
-  if (deviceId === 'holobox') return holoboxUrl;
-  return '';
+  return useSettingsStore(selectRawUrl(deviceId));
 }

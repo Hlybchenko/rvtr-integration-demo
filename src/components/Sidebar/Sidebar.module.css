@@ -116,6 +116,12 @@
   opacity: 1;
 }
 
+.navLinkDisabled {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: default;
+}
+
 .navBottom {
   margin-top: auto;
   padding: 12px 8px 8px;
