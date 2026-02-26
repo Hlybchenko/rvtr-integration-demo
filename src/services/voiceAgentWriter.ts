@@ -127,6 +127,11 @@ export async function browseForFile(): Promise<BrowseFileResult> {
     unknown
   >;
 
+  if (!response.ok) {
+    const msg = typeof record.error === 'string' ? record.error : `Browse failed (HTTP ${response.status})`;
+    return { cancelled: false, licenseFilePath: null, valid: false, errors: [msg] };
+  }
+
   if (record.cancelled === true) {
     return { cancelled: true, licenseFilePath: null, valid: false, errors: [] };
   }
@@ -331,6 +336,11 @@ export async function browseForExe(): Promise<BrowseExeResult> {
     string,
     unknown
   >;
+
+  if (!response.ok) {
+    const msg = typeof record.error === 'string' ? record.error : `Browse failed (HTTP ${response.status})`;
+    return { cancelled: false, start2streamPath: null, valid: false, errors: [msg] };
+  }
 
   if (record.cancelled === true) {
     return { cancelled: true, start2streamPath: null, valid: false, errors: [] };

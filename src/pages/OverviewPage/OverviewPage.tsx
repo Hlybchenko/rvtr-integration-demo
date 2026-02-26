@@ -300,8 +300,11 @@ export function OverviewPage() {
     try {
       const result = await browseForFile();
 
-      if (result.cancelled || !result.licenseFilePath) {
-        // User cancelled — do nothing
+      if (result.cancelled) return;
+
+      // Backend error — no path returned but not cancelled
+      if (!result.licenseFilePath) {
+        setFilePathError(result.errors.join('; ') || 'File picker failed — check backend logs');
         return;
       }
 
@@ -333,7 +336,14 @@ export function OverviewPage() {
         setFilePathSaved(false);
       }
     } catch (error) {
-      setFilePathError(error instanceof Error ? error.message : String(error));
+      const msg = error instanceof Error ? error.message : String(error);
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setFilePathError('Browse timed out — backend may be unresponsive');
+      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        setFilePathError('Cannot reach backend (http://127.0.0.1:3210). Is it running?');
+      } else {
+        setFilePathError(msg);
+      }
     } finally {
       setIsBrowsing(false);
     }
@@ -402,7 +412,12 @@ export function OverviewPage() {
     try {
       const result = await browseForExe();
 
-      if (result.cancelled || !result.start2streamPath) return;
+      if (result.cancelled) return;
+
+      if (!result.start2streamPath) {
+        setExePathError(result.errors.join('; ') || 'File picker failed — check backend logs');
+        return;
+      }
 
       setExePathInput(result.start2streamPath);
 
@@ -423,7 +438,14 @@ export function OverviewPage() {
         setExePathSaved(false);
       }
     } catch (error) {
-      setExePathError(error instanceof Error ? error.message : String(error));
+      const msg = error instanceof Error ? error.message : String(error);
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setExePathError('Browse timed out — backend may be unresponsive');
+      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        setExePathError('Cannot reach backend (http://127.0.0.1:3210). Is it running?');
+      } else {
+        setExePathError(msg);
+      }
     } finally {
       setIsExeBrowsing(false);
     }

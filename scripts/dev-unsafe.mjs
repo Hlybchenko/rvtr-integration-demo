@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 const FIXED_PORT = 5173;
+const WRITER_PORT = 3210;
 const WAIT_READY_ATTEMPTS = 80;
 const WAIT_READY_DELAY_MS = 250;
 
@@ -178,10 +179,16 @@ async function main() {
   const port = FIXED_PORT;
 
   stopPortListener(port);
+  stopPortListener(WRITER_PORT);
   await sleep(300);
 
   if (await isPortOpen(port)) {
     console.error(`Port ${port} is busy and could not be stopped automatically.`);
+    process.exit(1);
+  }
+
+  if (await isPortOpen(WRITER_PORT)) {
+    console.error(`Port ${WRITER_PORT} (agent-option-writer) is busy and could not be stopped automatically.`);
     process.exit(1);
   }
 
