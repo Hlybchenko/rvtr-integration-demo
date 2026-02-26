@@ -56,9 +56,11 @@ let start2streamProcess = null;
  */
 async function killStart2stream() {
   if (!start2streamProcess || start2streamProcess.exitCode !== null) {
+    console.log(`[start2stream] no running process to kill`);
     start2streamProcess = null;
     return;
   }
+  console.log(`[start2stream] killing pid=${start2streamProcess.pid}`);
 
   const pid = start2streamProcess.pid;
   if (!pid) return;
@@ -68,7 +70,7 @@ async function killStart2stream() {
       // Force kill if graceful didn't work
       try {
         if (os.platform() === 'win32') {
-          execFile('taskkill', ['/F', '/PID', String(pid)], () => resolve());
+          execFile('taskkill', ['/F', '/T', '/PID', String(pid)], () => resolve());
         } else {
           process.kill(pid, 'SIGKILL');
         }
@@ -83,7 +85,8 @@ async function killStart2stream() {
 
     try {
       if (os.platform() === 'win32') {
-        execFile('taskkill', ['/PID', String(pid)], () => {});
+        // /T = kill entire process tree (shell:true spawns cmd.exe → exe)
+        execFile('taskkill', ['/T', '/PID', String(pid)], () => {});
       } else {
         process.kill(pid, 'SIGTERM');
       }
@@ -95,33 +98,61 @@ async function killStart2stream() {
 }
 
 /**
- * Spawn start2stream executable. Runs detached so it survives if the writer
- * server is restarted. stdout/stderr are piped to our console for debugging.
+ * Spawn start2stream executable.
+ * Returns a Promise that resolves with the child process once it's confirmed
+ * started (or rejects if spawn fails immediately).
  */
 function spawnStart2stream(exePath) {
-  const cwd = path.dirname(exePath);
-  const child = spawn(exePath, [], {
-    cwd,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: false,
-    windowsHide: false,
-  });
+  return new Promise((resolve, reject) => {
+    const cwd = path.dirname(exePath);
+    const isWin = os.platform() === 'win32';
+    console.log(`[start2stream] spawning: ${exePath}  cwd=${cwd}`);
 
-  child.stdout?.on('data', (chunk) => {
-    process.stdout.write(`[start2stream] ${chunk}`);
-  });
-  child.stderr?.on('data', (chunk) => {
-    process.stderr.write(`[start2stream:err] ${chunk}`);
-  });
-  child.on('error', (err) => {
-    console.error(`[start2stream] process error: ${err.message}`);
-  });
-  child.on('exit', (code) => {
-    console.log(`[start2stream] exited with code ${code}`);
-    if (start2streamProcess === child) start2streamProcess = null;
-  });
+    // On Windows, use just the filename so cmd.exe resolves it from cwd.
+    // This ensures the exe starts with its own directory as the true CWD
+    // (important for DLL loading, config files, relative paths inside the exe).
+    const command = isWin ? path.basename(exePath) : exePath;
 
-  return child;
+    const child = spawn(command, [], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: false,
+      windowsHide: false,
+      shell: isWin,
+    });
+
+    let resolved = false;
+
+    child.stdout?.on('data', (chunk) => {
+      process.stdout.write(`[start2stream] ${chunk}`);
+    });
+    child.stderr?.on('data', (chunk) => {
+      process.stderr.write(`[start2stream:err] ${chunk}`);
+    });
+
+    child.on('error', (err) => {
+      console.error(`[start2stream] spawn error: ${err.message}`);
+      if (!resolved) {
+        resolved = true;
+        reject(err);
+      }
+    });
+
+    child.on('exit', (code, signal) => {
+      console.log(`[start2stream] exited with code=${code} signal=${signal}`);
+      if (start2streamProcess === child) start2streamProcess = null;
+    });
+
+    // If no error event fires within 500ms, consider the process started.
+    // The 'error' event fires synchronously for spawn failures (ENOENT etc.)
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        console.log(`[start2stream] started, pid=${child.pid}`);
+        resolve(child);
+      }
+    }, 500);
+  });
 }
 
 /**
@@ -361,6 +392,54 @@ function normalizeVoiceAgent(value) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// Native file picker — Windows helper (temp .ps1 file approach)
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a PowerShell script on Windows via a temp .ps1 file.
+ * Much more reliable than inline `-Command` because:
+ * - No quoting/escaping issues with special chars
+ * - `-ExecutionPolicy Bypass` works properly with `-File`
+ * - `-STA` ensures WinForms dialogs work (STA thread required)
+ */
+async function runPowerShellScript(scriptContent) {
+  const tmpDir = os.tmpdir();
+  const tmpFile = path.join(tmpDir, `rvtr-picker-${Date.now()}.ps1`);
+
+  await fs.writeFile(tmpFile, scriptContent, 'utf8');
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-STA', '-File', tmpFile],
+      { timeout: 120_000 },
+      async (error, stdout, stderr) => {
+        // Cleanup temp file
+        try { await fs.unlink(tmpFile); } catch { /* ignore */ }
+
+        if (stderr) {
+          console.error(`[file-picker] PowerShell stderr: ${stderr}`);
+        }
+
+        if (error) {
+          console.error(`[file-picker] PowerShell error: code=${error.code} killed=${error.killed} msg=${error.message}`);
+          if (error.killed || error.code === 1) {
+            resolve(null); // user cancelled or timeout
+          } else {
+            reject(new Error(`File picker failed: ${error.message}`));
+          }
+          return;
+        }
+
+        const filePath = stdout.trim();
+        console.log(`[file-picker] PowerShell returned: "${filePath}"`);
+        resolve(filePath || null);
+      },
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Native file picker dialog (macOS / Windows / Linux)
 // ---------------------------------------------------------------------------
 
@@ -369,92 +448,41 @@ function normalizeVoiceAgent(value) {
  * Returns `null` if user cancels.
  */
 function openNativeFilePicker() {
-  return new Promise((resolve, reject) => {
-    const platform = os.platform();
+  const platform = os.platform();
 
+  if (platform === 'win32') {
+    return runPowerShellScript(`
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+$form = New-Object System.Windows.Forms.Form
+$form.TopMost = $true
+$form.ShowInTaskbar = $false
+$form.StartPosition = 'Manual'
+$form.Location = New-Object System.Drawing.Point(-9999, -9999)
+$form.Size = New-Object System.Drawing.Size(1, 1)
+$form.Show()
+$form.Hide()
+
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Filter = "License files (*.lic;*.json;*.txt)|*.lic;*.json;*.txt|All files (*.*)|*.*"
+$dialog.Title = "Select license file"
+$result = $dialog.ShowDialog($form)
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $dialog.FileName
+}
+$form.Close()
+$form.Dispose()
+`);
+  }
+
+  return new Promise((resolve, reject) => {
     if (platform === 'darwin') {
-      // macOS: AppleScript file chooser
       execFile(
         'osascript',
         [
           '-e',
           'set chosenFile to choose file with prompt "Select license file" of type {"lic","json","txt"}\nreturn POSIX path of chosenFile',
-        ],
-        { timeout: 60_000 },
-        (error, stdout) => {
-          if (error) {
-            // User cancelled (exit code 1) or other error
-            if (error.code === 1 || error.killed) {
-              resolve(null);
-            } else {
-              reject(new Error(`File picker failed: ${error.message}`));
-            }
-            return;
-          }
-          const filePath = stdout.trim();
-          resolve(filePath || null);
-        },
-      );
-    } else if (platform === 'win32') {
-      // Windows: PowerShell file dialog
-      const psScript = `
-Add-Type -AssemblyName System.Windows.Forms
-$dialog = New-Object System.Windows.Forms.OpenFileDialog
-$dialog.Filter = "License files (*.lic;*.json;*.txt)|*.lic;*.json;*.txt|All files (*.*)|*.*"
-$dialog.Title = "Select license file"
-if ($dialog.ShowDialog() -eq 'OK') { Write-Output $dialog.FileName }
-      `.trim();
-
-      execFile(
-        'powershell',
-        ['-NoProfile', '-NonInteractive', '-Command', psScript],
-        { timeout: 60_000 },
-        (error, stdout) => {
-          if (error) {
-            if (error.killed) {
-              resolve(null);
-            } else {
-              reject(new Error(`File picker failed: ${error.message}`));
-            }
-            return;
-          }
-          const filePath = stdout.trim();
-          resolve(filePath || null);
-        },
-      );
-    } else {
-      // Linux: zenity / kdialog fallback
-      execFile(
-        'zenity',
-        ['--file-selection', '--title=Select license file', '--file-filter=*.lic *.json *.txt'],
-        { timeout: 60_000 },
-        (error, stdout) => {
-          if (error) {
-            resolve(null);
-            return;
-          }
-          const filePath = stdout.trim();
-          resolve(filePath || null);
-        },
-      );
-    }
-  });
-}
-
-/**
- * Opens a native OS file-picker for executable files.
- * Returns `null` if user cancels.
- */
-function openNativeExePicker() {
-  return new Promise((resolve, reject) => {
-    const platform = os.platform();
-
-    if (platform === 'darwin') {
-      execFile(
-        'osascript',
-        [
-          '-e',
-          'set chosenFile to choose file with prompt "Select start2stream executable"\nreturn POSIX path of chosenFile',
         ],
         { timeout: 60_000 },
         (error, stdout) => {
@@ -466,22 +494,66 @@ function openNativeExePicker() {
           resolve(stdout.trim() || null);
         },
       );
-    } else if (platform === 'win32') {
-      const psScript = `
+    } else {
+      // Linux: zenity fallback
+      execFile(
+        'zenity',
+        ['--file-selection', '--title=Select license file', '--file-filter=*.lic *.json *.txt'],
+        { timeout: 60_000 },
+        (error, stdout) => {
+          if (error) { resolve(null); return; }
+          resolve(stdout.trim() || null);
+        },
+      );
+    }
+  });
+}
+
+/**
+ * Opens a native OS file-picker for executable files.
+ * Returns `null` if user cancels.
+ */
+function openNativeExePicker() {
+  const platform = os.platform();
+
+  if (platform === 'win32') {
+    return runPowerShellScript(`
 Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+$form = New-Object System.Windows.Forms.Form
+$form.TopMost = $true
+$form.ShowInTaskbar = $false
+$form.StartPosition = 'Manual'
+$form.Location = New-Object System.Drawing.Point(-9999, -9999)
+$form.Size = New-Object System.Drawing.Size(1, 1)
+$form.Show()
+$form.Hide()
+
 $dialog = New-Object System.Windows.Forms.OpenFileDialog
 $dialog.Filter = "Executables (*.exe)|*.exe|All files (*.*)|*.*"
 $dialog.Title = "Select start2stream executable"
-if ($dialog.ShowDialog() -eq 'OK') { Write-Output $dialog.FileName }
-      `.trim();
+$result = $dialog.ShowDialog($form)
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $dialog.FileName
+}
+$form.Close()
+$form.Dispose()
+`);
+  }
 
+  return new Promise((resolve, reject) => {
+    if (platform === 'darwin') {
       execFile(
-        'powershell',
-        ['-NoProfile', '-NonInteractive', '-Command', psScript],
+        'osascript',
+        [
+          '-e',
+          'set chosenFile to choose file with prompt "Select start2stream executable"\nreturn POSIX path of chosenFile',
+        ],
         { timeout: 60_000 },
         (error, stdout) => {
           if (error) {
-            if (error.killed) resolve(null);
+            if (error.code === 1 || error.killed) resolve(null);
             else reject(new Error(`File picker failed: ${error.message}`));
             return;
           }
@@ -839,8 +911,11 @@ const server = createServer(async (req, res) => {
       }
 
       try {
+        console.log(`[process/restart] killing old process...`);
         await killStart2stream();
-        start2streamProcess = spawnStart2stream(exePath);
+        console.log(`[process/restart] spawning: ${exePath}`);
+        start2streamProcess = await spawnStart2stream(exePath);
+        console.log(`[process/restart] spawned pid=${start2streamProcess.pid}`);
 
         sendJson(res, 200, {
           ok: true,
@@ -848,6 +923,7 @@ const server = createServer(async (req, res) => {
           exePath,
         });
       } catch (error) {
+        console.error(`[process/restart] error: ${error instanceof Error ? error.message : error}`);
         sendJson(res, 500, {
           ok: false,
           error: error instanceof Error ? error.message : String(error),

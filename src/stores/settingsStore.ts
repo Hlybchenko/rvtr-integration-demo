@@ -8,15 +8,6 @@ export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox' | 'keba-kiosk';
 export type VoiceAgent = 'elevenlabs' | 'gemini-live';
 type LegacyVoiceAgent = VoiceAgent | 'google-native-audio';
 
-/**
- * Devices that require a configured & synced voice agent file
- * before they can be previewed.
- */
-export const VOICE_AGENT_DEPENDENT_DEVICES: ReadonlySet<DeviceId> = new Set([
-  'holobox',
-  'kiosk',
-  'keba-kiosk',
-]);
 
 function normalizeVoiceAgent(value: LegacyVoiceAgent | undefined): VoiceAgent {
   if (value === 'google-native-audio') return 'gemini-live';

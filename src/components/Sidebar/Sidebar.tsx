@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { devices } from '@/config/devices';
-import {
-  VOICE_AGENT_DEPENDENT_DEVICES,
-  type DeviceId,
-} from '@/stores/settingsStore';
-import { useVoiceAgentReady } from '@/hooks/useVoiceAgentReady';
 import styles from './Sidebar.module.css';
 
 type ThemeMode = 'dark' | 'light';
@@ -37,7 +32,6 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const [theme, setTheme] = useState<ThemeMode>('dark');
-  const voiceAgentReady = useVoiceAgentReady();
 
   useEffect(() => {
     const initial = resolveInitialTheme();
@@ -76,40 +70,20 @@ export function Sidebar({ className }: SidebarProps) {
         </NavLink>
 
         <span className={styles.navLabel}>Devices</span>
-        {devices.map((device) => {
-          const isDependent = VOICE_AGENT_DEPENDENT_DEVICES.has(device.id as DeviceId);
-          const isDisabled = isDependent && !voiceAgentReady;
-
-          if (isDisabled) {
-            return (
-              <span
-                key={device.id}
-                className={`${styles.navLink} ${styles.navLinkDisabled}`}
-                title="Configure Voice Agent first"
-              >
-                <span className={styles.navIcon}>
-                  {DEVICE_ICONS[device.id] || '📦'}
-                </span>
-                {device.name}
-              </span>
-            );
-          }
-
-          return (
-            <NavLink
-              key={device.id}
-              to={`/${device.id}`}
-              className={({ isActive }) =>
-                `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
-              }
-            >
-              <span className={styles.navIcon}>
-                {DEVICE_ICONS[device.id] || '📦'}
-              </span>
-              {device.name}
-            </NavLink>
-          );
-        })}
+        {devices.map((device) => (
+          <NavLink
+            key={device.id}
+            to={`/${device.id}`}
+            className={({ isActive }) =>
+              `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+            }
+          >
+            <span className={styles.navIcon}>
+              {DEVICE_ICONS[device.id] || '📦'}
+            </span>
+            {device.name}
+          </NavLink>
+        ))}
 
         <div className={styles.navBottom}>
           <div className={styles.themeRow}>
