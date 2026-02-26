@@ -37,10 +37,15 @@ async function readConfig() {
   }
 }
 
+let _configQueue = Promise.resolve();
+
 async function writeConfig(cfg) {
-  const existing = (await readConfig()) || {};
-  const merged = { ...existing, ...cfg };
-  await fs.writeFile(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf8');
+  _configQueue = _configQueue.then(async () => {
+    const existing = (await readConfig()) || {};
+    const merged = { ...existing, ...cfg };
+    await fs.writeFile(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf8');
+  });
+  return _configQueue;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,49 +55,54 @@ async function writeConfig(cfg) {
 /** @type {import('node:child_process').ChildProcess | null} */
 let start2streamProcess = null;
 
+/** Full path to taskkill.exe — avoids ENOENT if PATH is incomplete */
+function getTaskkillPath() {
+  const systemRoot = process.env.SystemRoot || process.env.windir || 'C:\\Windows';
+  return path.join(systemRoot, 'System32', 'taskkill.exe');
+}
+
 /**
  * Kill the current start2stream process if running.
  * Cross-platform: SIGTERM on POSIX, taskkill on Windows.
  */
 async function killStart2stream() {
   if (!start2streamProcess || start2streamProcess.exitCode !== null) {
-    console.log(`[start2stream] no running process to kill`);
     start2streamProcess = null;
     return;
   }
-  console.log(`[start2stream] killing pid=${start2streamProcess.pid}`);
 
   const pid = start2streamProcess.pid;
   if (!pid) return;
 
+  const isWin = os.platform() === 'win32';
+  const taskkill = isWin ? getTaskkillPath() : null;
+
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      // Force kill if graceful didn't work
+    let done = false;
+    const finish = () => { if (!done) { done = true; clearTimeout(forceTimer); resolve(); } };
+
+    const forceTimer = setTimeout(() => {
       try {
-        if (os.platform() === 'win32') {
-          execFile('taskkill', ['/F', '/T', '/PID', String(pid)], () => resolve());
-        } else {
-          process.kill(pid, 'SIGKILL');
+        if (isWin) {
+          execFile(taskkill, ['/F', '/T', '/PID', String(pid)], finish);
+          return; // let callback call finish
         }
+        process.kill(pid, 'SIGKILL');
       } catch { /* already dead */ }
-      resolve();
+      finish();
     }, 3000);
 
-    start2streamProcess.once('exit', () => {
-      clearTimeout(timeout);
-      resolve();
-    });
+    start2streamProcess.once('exit', finish);
 
     try {
-      if (os.platform() === 'win32') {
+      if (isWin) {
         // /T = kill entire process tree (shell:true spawns cmd.exe → exe)
-        execFile('taskkill', ['/T', '/PID', String(pid)], () => {});
+        execFile(taskkill, ['/T', '/PID', String(pid)], () => {});
       } else {
         process.kill(pid, 'SIGTERM');
       }
     } catch {
-      clearTimeout(timeout);
-      resolve();
+      finish();
     }
   });
 }
@@ -106,7 +116,6 @@ function spawnStart2stream(exePath) {
   return new Promise((resolve, reject) => {
     const cwd = path.dirname(exePath);
     const isWin = os.platform() === 'win32';
-    console.log(`[start2stream] spawning: ${exePath}  cwd=${cwd}`);
 
     // On Windows, use just the filename so cmd.exe resolves it from cwd.
     // This ensures the exe starts with its own directory as the true CWD
@@ -123,15 +132,12 @@ function spawnStart2stream(exePath) {
 
     let resolved = false;
 
-    child.stdout?.on('data', (chunk) => {
-      process.stdout.write(`[start2stream] ${chunk}`);
-    });
     child.stderr?.on('data', (chunk) => {
       process.stderr.write(`[start2stream:err] ${chunk}`);
     });
 
     child.on('error', (err) => {
-      console.error(`[start2stream] spawn error: ${err.message}`);
+      console.error(`[start2stream] error: ${err.message}`);
       if (!resolved) {
         resolved = true;
         reject(err);
@@ -139,7 +145,7 @@ function spawnStart2stream(exePath) {
     });
 
     child.on('exit', (code, signal) => {
-      console.log(`[start2stream] exited with code=${code} signal=${signal}`);
+      if (code !== 0) console.error(`[start2stream] exited code=${code} signal=${signal}`);
       if (start2streamProcess === child) start2streamProcess = null;
     });
 
@@ -148,7 +154,6 @@ function spawnStart2stream(exePath) {
     setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.log(`[start2stream] started, pid=${child.pid}`);
         resolve(child);
       }
     }, 500);
@@ -396,23 +401,32 @@ function normalizeVoiceAgent(value) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve full path to Windows PowerShell 5.1 (ships with every Windows 10/11).
+ * Using full path avoids issues where powershell.exe is not on PATH in some
+ * Node.js child process environments.
+ */
+function getWindowsPowerShellPath() {
+  const systemRoot = process.env.SystemRoot || process.env.windir || 'C:\\Windows';
+  return path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+}
+
+/**
  * Run a PowerShell script on Windows via a temp .ps1 file.
- * Much more reliable than inline `-Command` because:
- * - No quoting/escaping issues with special chars
- * - `-ExecutionPolicy Bypass` works properly with `-File`
- * - `-STA` ensures WinForms dialogs work (STA thread required)
+ * Uses -STA (required for GUI dialogs) and -ExecutionPolicy Bypass.
+ * NOTE: -NonInteractive is intentionally omitted — it can block GUI dialogs.
  */
 async function runPowerShellScript(scriptContent) {
   const tmpDir = os.tmpdir();
   const tmpFile = path.join(tmpDir, `rvtr-picker-${Date.now()}.ps1`);
+  const psExe = getWindowsPowerShellPath();
 
   await fs.writeFile(tmpFile, scriptContent, 'utf8');
 
   return new Promise((resolve, reject) => {
     execFile(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-STA', '-File', tmpFile],
-      { timeout: 120_000 },
+      psExe,
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', tmpFile],
+      { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 },
       async (error, stdout, stderr) => {
         // Cleanup temp file
         try { await fs.unlink(tmpFile); } catch { /* ignore */ }
@@ -431,9 +445,7 @@ async function runPowerShellScript(scriptContent) {
           return;
         }
 
-        const filePath = stdout.trim();
-        console.log(`[file-picker] PowerShell returned: "${filePath}"`);
-        resolve(filePath || null);
+        resolve(stdout.trim() || null);
       },
     );
   });
@@ -451,28 +463,18 @@ function openNativeFilePicker() {
   const platform = os.platform();
 
   if (platform === 'win32') {
+    // Use WPF Microsoft.Win32.OpenFileDialog — better focus handling on Win11
+    // than WinForms. PresentationFramework provides the dialog, -STA is required.
     return runPowerShellScript(`
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.Application]::EnableVisualStyles()
+Add-Type -AssemblyName PresentationFramework
 
-$form = New-Object System.Windows.Forms.Form
-$form.TopMost = $true
-$form.ShowInTaskbar = $false
-$form.StartPosition = 'Manual'
-$form.Location = New-Object System.Drawing.Point(-9999, -9999)
-$form.Size = New-Object System.Drawing.Size(1, 1)
-$form.Show()
-$form.Hide()
-
-$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog = New-Object Microsoft.Win32.OpenFileDialog
 $dialog.Filter = "License files (*.lic;*.json;*.txt)|*.lic;*.json;*.txt|All files (*.*)|*.*"
 $dialog.Title = "Select license file"
-$result = $dialog.ShowDialog($form)
-if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+$result = $dialog.ShowDialog()
+if ($result) {
     Write-Output $dialog.FileName
 }
-$form.Close()
-$form.Dispose()
 `);
   }
 
@@ -518,27 +520,15 @@ function openNativeExePicker() {
 
   if (platform === 'win32') {
     return runPowerShellScript(`
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.Application]::EnableVisualStyles()
+Add-Type -AssemblyName PresentationFramework
 
-$form = New-Object System.Windows.Forms.Form
-$form.TopMost = $true
-$form.ShowInTaskbar = $false
-$form.StartPosition = 'Manual'
-$form.Location = New-Object System.Drawing.Point(-9999, -9999)
-$form.Size = New-Object System.Drawing.Size(1, 1)
-$form.Show()
-$form.Hide()
-
-$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog = New-Object Microsoft.Win32.OpenFileDialog
 $dialog.Filter = "Executables (*.exe)|*.exe|All files (*.*)|*.*"
 $dialog.Title = "Select start2stream executable"
-$result = $dialog.ShowDialog($form)
-if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+$result = $dialog.ShowDialog()
+if ($result) {
     Write-Output $dialog.FileName
 }
-$form.Close()
-$form.Dispose()
 `);
   }
 
@@ -911,11 +901,8 @@ const server = createServer(async (req, res) => {
       }
 
       try {
-        console.log(`[process/restart] killing old process...`);
         await killStart2stream();
-        console.log(`[process/restart] spawning: ${exePath}`);
         start2streamProcess = await spawnStart2stream(exePath);
-        console.log(`[process/restart] spawned pid=${start2streamProcess.pid}`);
 
         sendJson(res, 200, {
           ok: true,
@@ -923,7 +910,7 @@ const server = createServer(async (req, res) => {
           exePath,
         });
       } catch (error) {
-        console.error(`[process/restart] error: ${error instanceof Error ? error.message : error}`);
+        console.error(`[process/restart] ${error instanceof Error ? error.message : error}`);
         sendJson(res, 500, {
           ok: false,
           error: error instanceof Error ? error.message : String(error),
@@ -965,6 +952,8 @@ server.listen(PORT, '127.0.0.1', () => {
 async function shutdown() {
   await killStart2stream();
   server.close(() => process.exit(0));
+  // Force exit if server.close hangs (e.g. browse request waiting for dialog)
+  setTimeout(() => process.exit(1), 5_000).unref();
 }
 
 process.on('SIGINT', shutdown);
