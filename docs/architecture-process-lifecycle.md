@@ -123,7 +123,7 @@ useEffect(() => {
 
 | Risk                           | Mitigation                                                                                  |
 | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| Orphaned process on app crash  | Backend should track PID and kill on next start, or implement process health monitoring      |
+| Orphaned process on app crash  | Backend should track PID and kill on next start, or implement process health monitoring     |
 | Process not starting (ENOENT)  | Error logged to console; UI stays on page but process won't run                             |
 | Backend unreachable            | `fetchWithTimeout` (5s) throws, caught and logged; UI shows backend error on OverviewPage   |
 | Multiple tabs open same device | Backend allows only one process at a time; second start kills first                         |
