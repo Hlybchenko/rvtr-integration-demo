@@ -2,8 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { render, cleanup, screen } from '@testing-library/react';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 // Mock voiceAgentWriter before importing DevicePage
@@ -18,23 +18,23 @@ vi.mock('@/components/DevicePreview/DevicePreview', () => ({
 }));
 
 const { startDeviceProcess, stopProcess } = await import('@/services/voiceAgentWriter');
+const { DevicePage } = await import('./DevicePage');
 
 const mockedStart = vi.mocked(startDeviceProcess);
 const mockedStop = vi.mocked(stopProcess);
 
-// Helper: render DevicePage with a given deviceId route
+/** Render DevicePage inside a data router (required for useBlocker). */
 function renderDevicePage(deviceId: string) {
-  return render(
-    <MemoryRouter initialEntries={[`/${deviceId}`]}>
-      <Routes>
-        <Route path="/:deviceId" element={<DevicePage />} />
-      </Routes>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      { path: '/:deviceId', element: <DevicePage /> },
+      { path: '/', element: <div data-testid="settings-page">Settings</div> },
+    ],
+    { initialEntries: [`/${deviceId}`] },
   );
-}
 
-// Import after mocks
-const { DevicePage } = await import('./DevicePage');
+  return { router, ...render(<RouterProvider router={router} />) };
+}
 
 beforeEach(() => {
   mockedStart.mockClear();
@@ -44,14 +44,12 @@ beforeEach(() => {
 
 describe('DevicePage process lifecycle', () => {
   it('calls startDeviceProcess for a stream device with exePath', async () => {
-    // Set exe path in store
     useSettingsStore.setState({
       deviceExePaths: { holobox: '/path/holobox.bat', 'keba-kiosk': '', kiosk: '' },
     });
 
     renderDevicePage('holobox');
 
-    // Wait for async effect
     await vi.waitFor(() => {
       expect(mockedStart).toHaveBeenCalledTimes(1);
     });
@@ -62,7 +60,6 @@ describe('DevicePage process lifecycle', () => {
   it('does NOT call startDeviceProcess for non-stream device', async () => {
     renderDevicePage('phone');
 
-    // Give effects time to fire
     await new Promise((r) => setTimeout(r, 50));
 
     expect(mockedStart).not.toHaveBeenCalled();
@@ -80,21 +77,28 @@ describe('DevicePage process lifecycle', () => {
     expect(mockedStart).not.toHaveBeenCalled();
   });
 
-  it('calls stopProcess on unmount', async () => {
+  it('calls stopProcess when navigating away from stream device', async () => {
     useSettingsStore.setState({
       deviceExePaths: { holobox: '/path/holobox.bat', 'keba-kiosk': '', kiosk: '' },
     });
 
-    const { unmount } = renderDevicePage('holobox');
+    const { router } = renderDevicePage('holobox');
 
+    // Wait for start to fire
     await vi.waitFor(() => {
       expect(mockedStart).toHaveBeenCalledTimes(1);
     });
 
-    unmount();
+    // Navigate away — triggers the blocker which calls stopProcess
+    router.navigate('/');
 
     await vi.waitFor(() => {
       expect(mockedStop).toHaveBeenCalledTimes(1);
+    });
+
+    // After stop completes, navigation proceeds to settings page
+    await vi.waitFor(() => {
+      expect(screen.queryByTestId('settings-page')).not.toBeNull();
     });
   });
 });

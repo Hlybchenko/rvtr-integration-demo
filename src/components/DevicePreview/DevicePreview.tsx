@@ -115,8 +115,18 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       return () => ro.disconnect();
     }, [computeSize]);
 
-    // Reset loading state when url changes
+    // Reset loading state when url or device changes.
+    // Blank out the old iframe first to sever any active connections
+    // (WebSocket, media streams) before the new src is applied.
     useEffect(() => {
+      const iframe = iframeRef.current;
+      if (iframe) {
+        try {
+          iframe.src = 'about:blank';
+        } catch {
+          // cross-origin — safe to ignore
+        }
+      }
       setLoading(!!url);
       setIsEmbedBlocked(false);
     }, [url, device.id, device.frameSrc]);
@@ -232,6 +242,23 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     const isGeometryReady = frameLoaded && !!rect && size.width > 0 && size.height > 0;
     const shouldRenderIframe = Boolean(url) && isGeometryReady;
     const showGlobalLoader = !isGeometryReady || (Boolean(url) && loading);
+
+    // Tear down iframe connections on unmount.
+    // Setting src to "about:blank" forces the browser to close any active
+    // WebSocket, HTTP, or media connections inside the iframe immediately,
+    // rather than waiting for GC or TCP keepalive timeout.
+    useEffect(() => {
+      const iframe = iframeRef.current;
+      return () => {
+        if (iframe) {
+          try {
+            iframe.src = 'about:blank';
+          } catch {
+            // cross-origin — safe to ignore
+          }
+        }
+      };
+    }, []);
 
     // Keep focus on the iframe – re-focus whenever it loses it
     useEffect(() => {

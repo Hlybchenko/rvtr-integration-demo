@@ -17,7 +17,6 @@ import {
   setDeviceExePath,
   browseForExe,
   restartStart2stream,
-  getProcessStatus,
 } from '@/services/voiceAgentWriter';
 import styles from './OverviewPage.module.css';
 
@@ -27,19 +26,20 @@ const IS_WINDOWS =
     (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ===
       'Windows');
 
-const STREAM_DEVICE_LABELS: Record<StreamDeviceId, string> = {
-  holobox: 'Holobox',
-  'keba-kiosk': 'Keba Kiosk',
-  kiosk: 'Info Kiosk',
-};
-
-const DEVICE_FIELDS: Array<{
+interface DeviceField {
   id: DeviceId;
   label: string;
   placeholder: string;
-}> = [
+}
+
+/** Widget devices — left column, URL-only */
+const WIDGET_DEVICES: DeviceField[] = [
   { id: 'phone', label: 'Phone', placeholder: 'https://your-phone-url.com' },
   { id: 'laptop', label: 'Laptop', placeholder: 'https://your-laptop-url.com' },
+];
+
+/** Stream devices — right column, URL + executable */
+const STREAM_DEVICES: DeviceField[] = [
   { id: 'kiosk', label: 'Info Kiosk', placeholder: 'https://your-kiosk-url.com' },
   {
     id: 'keba-kiosk',
@@ -134,10 +134,6 @@ export function OverviewPage() {
   const exeStatesRef = useRef(exeStates);
   exeStatesRef.current = exeStates;
 
-  // -- process status state --
-  const [processRunning, setProcessRunning] = useState<boolean | null>(null);
-  const [processDeviceId, setProcessDeviceId] = useState<string | null>(null);
-
   // -- voice agent state --
   /** Local voice agent selection — only written to file on Apply */
   const [pendingVoiceAgent, setPendingVoiceAgent] = useState<VoiceAgent>(voiceAgent);
@@ -157,19 +153,35 @@ export function OverviewPage() {
     (id) => exeStates[id].saved && !exeStates[id].error,
   );
 
+  // Block-level validation for Widget (Phone + Laptop)
+  const widgetHasError = WIDGET_DEVICES.some((d) => {
+    const v = valuesByDevice[d.id];
+    return v.trim().length > 0 && !isValidUrl(v);
+  });
+  const widgetAllGood = WIDGET_DEVICES.every((d) => {
+    const v = valuesByDevice[d.id];
+    return v.trim().length > 0 && isValidUrl(v);
+  });
+
+  // Block-level validation for Streaming wrapper
+  const streamHasError = STREAM_DEVICES.some((d) => {
+    const sid = d.id as StreamDeviceId;
+    const v = valuesByDevice[d.id];
+    return (v.trim().length > 0 && !isValidUrl(v)) || !!exeStates[sid].error;
+  });
+  const streamAllGood = STREAM_DEVICES.every((d) => {
+    const sid = d.id as StreamDeviceId;
+    const v = valuesByDevice[d.id];
+    return v.trim().length > 0 && isValidUrl(v) && exeStates[sid].saved && !exeStates[sid].error;
+  });
+
   /** Restart the currently running process (if any) */
   const triggerRestart = useCallback(async () => {
     if (!hasAnyExeConfigured) return;
     try {
-      const result = await restartStart2stream();
-      if (result.ok) {
-        setProcessRunning(true);
-        setProcessDeviceId(result.deviceId ?? null);
-      } else {
-        setProcessRunning(false);
-      }
+      await restartStart2stream();
     } catch {
-      setProcessRunning(false);
+      // Best-effort restart — failure is non-critical
     }
   }, [hasAnyExeConfigured]);
 
@@ -263,16 +275,6 @@ export function OverviewPage() {
         }
 
         if (cancelled) return;
-
-        // Check process status
-        try {
-          const status = await getProcessStatus();
-          if (cancelled) return;
-          setProcessRunning(status.running);
-          setProcessDeviceId(status.deviceId);
-        } catch {
-          if (!cancelled) setProcessRunning(null);
-        }
       } catch (err) {
         if (cancelled) return;
         setBackendError(
@@ -286,30 +288,6 @@ export function OverviewPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // -- Poll process status (health-check) --
-  // Why: the process can crash or be killed externally. Without polling,
-  // the UI would show "Running" forever after the initial status check.
-  // The poll only runs when at least one device has a configured exe path.
-  // On error (backend down), we silently keep the last known status to
-  // avoid UI flicker during brief network hiccups.
-  useEffect(() => {
-    if (!hasAnyExeConfigured) return;
-
-    const POLL_INTERVAL_MS = 5_000;
-    const timer = setInterval(() => {
-      void getProcessStatus()
-        .then((status) => {
-          setProcessRunning(status.running);
-          setProcessDeviceId(status.deviceId);
-        })
-        .catch(() => {
-          // Backend unreachable — keep last known status to avoid flicker
-        });
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(timer);
-  }, [hasAnyExeConfigured]);
 
   // -- sync pendingVoiceAgent from file on mount (read-only, no restart) --
   useEffect(() => {
@@ -332,6 +310,41 @@ export function OverviewPage() {
   }, [isFileConfigured]);
 
   const hasPendingAgentChange = pendingVoiceAgent !== voiceAgent;
+
+  // -- debounced auto-save for license file path --
+  useEffect(() => {
+    const trimmed = filePathInput.trim();
+    if (!trimmed || filePathSaved || isFilePathSaving || isBrowsing || filePathError) return;
+
+    const timer = setTimeout(() => {
+      void (async () => {
+        setIsFilePathSaving(true);
+        setFilePathError(null);
+        setFilePathResolvedPath(null);
+
+        try {
+          const result = await setWriterFilePath(trimmed);
+          if (!result.ok) {
+            setFilePathError(result.error ?? 'Path not found or not readable');
+            setFilePathResolvedPath(result.resolvedPath ?? null);
+            setFilePathSaved(false);
+          } else {
+            setLicenseFilePath(result.resolvedPath ?? trimmed);
+            setFilePathResolvedPath(result.resolvedPath ?? null);
+            setFilePathSaved(true);
+            setFilePathError(null);
+          }
+        } catch (error) {
+          setFilePathError(error instanceof Error ? error.message : String(error));
+          setFilePathSaved(false);
+        } finally {
+          setIsFilePathSaving(false);
+        }
+      })();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [filePathInput, filePathSaved, isFilePathSaving, isBrowsing, filePathError, setLicenseFilePath]);
 
   // -- handlers --
 
@@ -360,39 +373,6 @@ export function OverviewPage() {
       setIsApplying(false);
     }
   }, [pendingVoiceAgent, isFileConfigured, setVoiceAgent, triggerRestart]);
-
-  const handleSaveFilePath = useCallback(async () => {
-    const trimmed = filePathInput.trim();
-    if (!trimmed) {
-      setFilePathError('File path is required');
-      return;
-    }
-
-    setIsFilePathSaving(true);
-    setFilePathError(null);
-    setFilePathResolvedPath(null);
-
-    try {
-      const result = await setWriterFilePath(trimmed);
-
-      if (!result.ok) {
-        setFilePathError(result.error ?? 'Path not found or not readable');
-        setFilePathResolvedPath(result.resolvedPath ?? null);
-        setFilePathSaved(false);
-        return;
-      }
-
-      setLicenseFilePath(result.resolvedPath ?? trimmed);
-      setFilePathResolvedPath(result.resolvedPath ?? null);
-      setFilePathSaved(true);
-      setFilePathError(null);
-    } catch (error) {
-      setFilePathError(error instanceof Error ? error.message : String(error));
-      setFilePathSaved(false);
-    } finally {
-      setIsFilePathSaving(false);
-    }
-  }, [filePathInput, setLicenseFilePath]);
 
   const handleBrowse = useCallback(async () => {
     setIsBrowsing(true);
@@ -548,6 +528,25 @@ export function OverviewPage() {
     [updateExeState, setDeviceExePathStore],
   );
 
+  // -- debounced auto-save for exe paths --
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    for (const did of STREAM_DEVICE_IDS) {
+      const st = exeStates[did];
+      const trimmed = st.input.trim();
+      if (!trimmed || st.saved || st.saving || st.browsing || st.error) continue;
+
+      timers.push(
+        setTimeout(() => {
+          void handleSaveExePath(did);
+        }, 400),
+      );
+    }
+
+    return () => timers.forEach(clearTimeout);
+  }, [exeStates, handleSaveExePath]);
+
   return (
     <div className={styles.settings}>
       {backendError && (
@@ -557,8 +556,18 @@ export function OverviewPage() {
       )}
 
       <div className={styles.form}>
+        {/* ── Left column: Voice Agent + Widget ── */}
+        <div className={styles.column}>
         {/* ── Voice Agent (must be configured first) ── */}
-        <section className={styles.settingsBlock}>
+        <section
+          className={`${styles.settingsBlock} ${
+            filePathError
+              ? styles.settingsBlockError
+              : isFileConfigured
+                ? styles.settingsBlockValid
+                : ''
+          }`}
+        >
           <h2 className={styles.settingsBlockTitle}>Voice Agent</h2>
 
           {/* File path input */}
@@ -605,16 +614,6 @@ export function OverviewPage() {
                 disabled={isBrowsing || isFilePathSaving}
               >
                 {isBrowsing ? 'Browsing...' : 'Browse'}
-              </button>
-              <button
-                type="button"
-                className={styles.filePathAction}
-                onClick={() => {
-                  void handleSaveFilePath();
-                }}
-                disabled={isFilePathSaving || isBrowsing || !filePathInput.trim()}
-              >
-                {isFilePathSaving ? 'Saving...' : 'Save'}
               </button>
             </div>
 
@@ -664,158 +663,219 @@ export function OverviewPage() {
               <span>Gemini Live</span>
             </label>
 
-            <button
-              type="button"
-              className={styles.filePathAction}
-              onClick={() => {
-                void handleApplyAgent();
-              }}
-              disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
-            >
-              {isApplying ? 'Applying...' : 'Apply'}
-            </button>
           </div>
+
+          <button
+            type="button"
+            className={styles.applyButton}
+            onClick={() => {
+              void handleApplyAgent();
+            }}
+            disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
+          >
+            {isApplying ? 'Applying...' : 'Apply'}
+          </button>
 
           {applyError && <p className={styles.filePathValidationError}>{applyError}</p>}
         </section>
 
-        {/* ── Device Executables ── */}
-        <section className={styles.settingsBlock}>
-          <h2 className={styles.settingsBlockTitle}>Device Executables</h2>
+        {/* ── Widget: Phone + Laptop (URL-only) ── */}
+        <section
+          className={`${styles.settingsBlock} ${
+            widgetHasError
+              ? styles.settingsBlockError
+              : widgetAllGood
+                ? styles.settingsBlockValid
+                : ''
+          }`}
+        >
+          <h2 className={styles.settingsBlockTitle}>Widget</h2>
 
-          {STREAM_DEVICE_IDS.map((did) => {
-            const st = exeStates[did];
+          {WIDGET_DEVICES.map((field) => {
+            const urlValue = valuesByDevice[field.id];
+            const hasUrl = urlValue.trim().length > 0;
+            const urlValid = !hasUrl || isValidUrl(urlValue);
+            const hasError = hasUrl && !urlValid;
+            const allGood = hasUrl && urlValid;
+
             return (
-              <div key={did} className={styles.field}>
-                <div className={styles.fieldHeader}>
-                  <label className={styles.label} htmlFor={`exe-path-${did}`}>
-                    {STREAM_DEVICE_LABELS[did]}
-                  </label>
-                  {st.saved && !st.error && (
-                    <span className={`${styles.badge} ${styles.badgeValid}`}>
-                      ✓ Configured
-                    </span>
-                  )}
-                  {st.error && (
-                    <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                      ✗ Invalid
-                    </span>
-                  )}
-                </div>
+              <div
+                key={field.id}
+                className={`${styles.deviceCard} ${
+                  hasError
+                    ? styles.deviceCardError
+                    : allGood
+                      ? styles.deviceCardValid
+                      : ''
+                }`}
+              >
+                <h3 className={styles.deviceCardTitle}>{field.label}</h3>
 
-                <div className={styles.filePathRow}>
+                <div className={styles.field}>
+                  <div className={styles.fieldHeader}>
+                    <label className={styles.label} htmlFor={`${field.id}-url`}>
+                      URL
+                    </label>
+                    {hasUrl && (
+                      <span
+                        className={`${styles.badge} ${urlValid ? styles.badgeValid : styles.badgeInvalid}`}
+                      >
+                        {urlValid ? '✓ Valid' : '✗ Invalid URL'}
+                      </span>
+                    )}
+                  </div>
                   <input
-                    id={`exe-path-${did}`}
-                    className={`${styles.input} ${st.error ? styles.inputError : ''}`}
-                    type="text"
-                    placeholder={
-                      IS_WINDOWS ? `C:\\Path\\To\\${did}.bat` : `/path/to/${did}.bat`
-                    }
-                    value={st.input}
-                    onChange={(e) => {
-                      updateExeState(did, {
-                        input: e.target.value,
-                        saved: false,
-                        error: null,
-                      });
-                    }}
+                    id={`${field.id}-url`}
+                    className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
+                    type="url"
+                    placeholder={field.placeholder}
+                    value={urlValue}
+                    onChange={(e) => setDeviceUrl(field.id, e.target.value)}
                     spellCheck={false}
-                    autoComplete="off"
+                    autoComplete="url"
                   />
-                  <button
-                    type="button"
-                    className={styles.filePathAction}
-                    onClick={() => {
-                      void handleBrowseExe(did);
-                    }}
-                    disabled={st.browsing || st.saving}
-                  >
-                    {st.browsing ? 'Browsing...' : 'Browse'}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.filePathAction}
-                    onClick={() => {
-                      void handleSaveExePath(did);
-                    }}
-                    disabled={st.saving || st.browsing || !st.input.trim()}
-                  >
-                    {st.saving ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-
-                <div className={styles.filePathValidation}>
-                  {st.error && (
-                    <span className={styles.filePathValidationError}>{st.error}</span>
-                  )}
-                  {st.resolvedPath && !st.error && (
-                    <span className={styles.filePathResolvedPath}>{st.resolvedPath}</span>
-                  )}
                 </div>
               </div>
             );
           })}
-
-          {/* Process status (read-only, managed by DevicePage) */}
-          {hasAnyExeConfigured && (
-            <div className={styles.syncStatusBox}>
-              <div className={styles.syncStatusRow}>
-                <span className={styles.syncStatusLabel}>Process</span>
-                {processRunning === null ? (
-                  <span className={styles.syncStatusNeutral}>Checking…</span>
-                ) : processRunning ? (
-                  <span className={styles.syncStatusOk}>
-                    Running{processDeviceId ? ` (${processDeviceId})` : ''}
-                  </span>
-                ) : (
-                  <span className={styles.syncStatusNeutral}>Not running</span>
-                )}
-              </div>
-
-              <p className={styles.hint}>
-                Processes start when you open a device page.
-              </p>
-            </div>
-          )}
         </section>
+        </div>
 
-        {/* ── Device URLs ── */}
-        <section className={styles.settingsBlock}>
-          <h2 className={styles.settingsBlockTitle}>Device URLs</h2>
+        {/* ── Right column: Streaming ── */}
+        <div className={styles.column}>
+          <section
+            className={`${styles.settingsBlock} ${
+              streamHasError
+                ? styles.settingsBlockError
+                : streamAllGood
+                  ? styles.settingsBlockValid
+                  : ''
+            }`}
+          >
+            <h2 className={styles.settingsBlockTitle}>Streaming</h2>
 
-          {DEVICE_FIELDS.map((field) => {
-            const value = valuesByDevice[field.id];
-            const hasValue = value.trim().length > 0;
-            const isValid = !hasValue || isValidUrl(value);
+            {STREAM_DEVICES.map((field) => {
+              const streamId = field.id as StreamDeviceId;
+              const exeSt = exeStates[streamId];
+              const urlValue = valuesByDevice[field.id];
+              const hasUrl = urlValue.trim().length > 0;
+              const urlValid = !hasUrl || isValidUrl(urlValue);
 
-            return (
-              <div key={field.id} className={styles.field}>
-                <div className={styles.fieldHeader}>
-                  <label className={styles.label} htmlFor={`${field.id}-url`}>
-                    {field.label}
-                  </label>
-                  {hasValue && (
-                    <span
-                      className={`${styles.badge} ${isValid ? styles.badgeValid : styles.badgeInvalid}`}
-                    >
-                      {isValid ? '✓ Valid' : '✗ Invalid URL'}
-                    </span>
-                  )}
+              const hasError = (hasUrl && !urlValid) || !!exeSt.error;
+              const allGood =
+                hasUrl && urlValid && exeSt.saved && !exeSt.error;
+
+              return (
+                <div
+                  key={field.id}
+                  className={`${styles.deviceCard} ${
+                    hasError
+                      ? styles.deviceCardError
+                      : allGood
+                        ? styles.deviceCardValid
+                        : ''
+                  }`}
+                >
+                  <h3 className={styles.deviceCardTitle}>{field.label}</h3>
+
+                  {/* URL */}
+                  <div className={styles.field}>
+                    <div className={styles.fieldHeader}>
+                      <label className={styles.label} htmlFor={`${field.id}-url`}>
+                        URL
+                      </label>
+                      {hasUrl && (
+                        <span
+                          className={`${styles.badge} ${urlValid ? styles.badgeValid : styles.badgeInvalid}`}
+                        >
+                          {urlValid ? '✓ Valid' : '✗ Invalid URL'}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      id={`${field.id}-url`}
+                      className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
+                      type="url"
+                      placeholder={field.placeholder}
+                      value={urlValue}
+                      onChange={(e) => setDeviceUrl(field.id, e.target.value)}
+                      spellCheck={false}
+                      autoComplete="url"
+                    />
+                  </div>
+
+                  {/* Executable */}
+                  <div className={styles.field}>
+                    <div className={styles.fieldHeader}>
+                      <label
+                        className={styles.label}
+                        htmlFor={`exe-path-${streamId}`}
+                      >
+                        Executable
+                      </label>
+                      {exeSt.saved && !exeSt.error && (
+                        <span className={`${styles.badge} ${styles.badgeValid}`}>
+                          ✓ Configured
+                        </span>
+                      )}
+                      {exeSt.error && (
+                        <span className={`${styles.badge} ${styles.badgeInvalid}`}>
+                          ✗ Invalid
+                        </span>
+                      )}
+                    </div>
+
+                    <div className={styles.filePathRow}>
+                      <input
+                        id={`exe-path-${streamId}`}
+                        className={`${styles.input} ${exeSt.error ? styles.inputError : ''}`}
+                        type="text"
+                        placeholder={
+                          IS_WINDOWS
+                            ? `C:\\Path\\To\\${streamId}.bat`
+                            : `/path/to/${streamId}.bat`
+                        }
+                        value={exeSt.input}
+                        onChange={(e) => {
+                          updateExeState(streamId, {
+                            input: e.target.value,
+                            saved: false,
+                            error: null,
+                          });
+                        }}
+                        spellCheck={false}
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        className={styles.filePathAction}
+                        onClick={() => {
+                          void handleBrowseExe(streamId);
+                        }}
+                        disabled={exeSt.browsing || exeSt.saving}
+                      >
+                        {exeSt.browsing ? 'Browsing...' : 'Browse'}
+                      </button>
+                    </div>
+
+                    <div className={styles.filePathValidation}>
+                      {exeSt.error && (
+                        <span className={styles.filePathValidationError}>
+                          {exeSt.error}
+                        </span>
+                      )}
+                      {exeSt.resolvedPath && !exeSt.error && (
+                        <span className={styles.filePathResolvedPath}>
+                          {exeSt.resolvedPath}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <input
-                  id={`${field.id}-url`}
-                  className={`${styles.input} ${hasValue && !isValid ? styles.inputError : ''}`}
-                  type="url"
-                  placeholder={field.placeholder}
-                  value={value}
-                  onChange={(e) => setDeviceUrl(field.id, e.target.value)}
-                  spellCheck={false}
-                  autoComplete="url"
-                />
-              </div>
-            );
-          })}
-        </section>
+              );
+            })}
+          </section>
+        </div>
       </div>
     </div>
   );

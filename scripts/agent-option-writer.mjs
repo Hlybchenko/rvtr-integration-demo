@@ -194,8 +194,8 @@ async function validateExecutable(filePath) {
   // On Windows, check extension
   if (os.platform() === 'win32') {
     const ext = path.extname(filePath).toLowerCase();
-    if (!['.exe', '.bat', '.cmd', '.ps1'].includes(ext)) {
-      errors.push(`Unexpected file extension "${ext}" (expected .exe, .bat, .cmd, .ps1)`);
+    if (!['.bat', '.cmd', '.ps1', '.exe'].includes(ext)) {
+      errors.push(`Unexpected file extension "${ext}" (expected .bat, .cmd, .ps1, .exe)`);
     }
   } else {
     // On POSIX, check executable permission
@@ -471,8 +471,8 @@ function openNativeExePicker() {
 Add-Type -AssemblyName PresentationFramework
 
 $dialog = New-Object Microsoft.Win32.OpenFileDialog
-$dialog.Filter = "Executables (*.exe)|*.exe|All files (*.*)|*.*"
-$dialog.Title = "Select start2stream executable"
+$dialog.Filter = "Batch files (*.bat)|*.bat|All files (*.*)|*.*"
+$dialog.Title = "Select start2stream batch file"
 $result = $dialog.ShowDialog()
 if ($result) {
     Write-Output $dialog.FileName
@@ -486,7 +486,7 @@ if ($result) {
         'osascript',
         [
           '-e',
-          'set chosenFile to choose file with prompt "Select start2stream executable"\nreturn POSIX path of chosenFile',
+          'set chosenFile to choose file with prompt "Select start2stream batch file"\nreturn POSIX path of chosenFile',
         ],
         { timeout: 60_000 },
         (error, stdout) => {
@@ -501,7 +501,7 @@ if ($result) {
     } else {
       execFile(
         'zenity',
-        ['--file-selection', '--title=Select start2stream executable'],
+        ['--file-selection', '--title=Select start2stream batch file'],
         { timeout: 60_000 },
         (error, stdout) => {
           if (error) { resolve(null); return; }

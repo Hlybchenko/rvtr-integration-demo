@@ -4,7 +4,7 @@
   flex-direction: column;
   padding: 40px 40px;
   gap: var(--space-6);
-  max-width: 720px;
+  max-width: 1100px;
 }
 
 /* Header */
@@ -30,11 +30,54 @@
   line-height: 1.6;
 }
 
-/* Form */
+/* Form — 2-column grid layout */
 .form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+.column {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+}
+
+/* Stretch last block to fill remaining column height */
+.column > .settingsBlock:last-child {
+  flex: 1;
+}
+
+/* Nested device card inside a group block */
+.deviceCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--glass-bg) 60%, transparent);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--transition-normal),
+    box-shadow var(--transition-normal);
+}
+
+.deviceCardValid {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--glass-border));
+  box-shadow: 0 0 4px color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.deviceCardError {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--glass-border));
+  box-shadow: 0 0 5px color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.deviceCardTitle {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .settingsBlock {
@@ -58,11 +101,26 @@
   border-color: color-mix(in srgb, var(--glass-border) 80%, var(--accent));
 }
 
+.settingsBlockValid {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--glass-border));
+  box-shadow:
+    var(--glass-shadow),
+    0 0 6px color-mix(in srgb, var(--success) 18%, transparent);
+}
+
+.settingsBlockError {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--glass-border));
+  box-shadow:
+    var(--glass-shadow),
+    0 0 8px color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
 .settingsBlockTitle {
   margin: 0;
-  font-size: var(--font-md);
+  font-size: var(--font-lg, 18px);
   font-weight: 700;
   color: var(--text-primary);
+  text-align: center;
 }
 
 .voiceAgentStatusIcon {
@@ -96,12 +154,12 @@
 }
 
 .label {
-  font-size: var(--font-md);
-  font-weight: 600;
+  font-size: var(--font-sm);
+  font-weight: 500;
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .labelIcon {
@@ -194,121 +252,6 @@
   accent-color: var(--accent);
 }
 
-.syncStatusBox {
-  margin-top: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.syncStatusRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.syncStatusLabel {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-}
-
-.syncStatusValue {
-  font-size: var(--font-sm);
-  color: var(--text-primary);
-}
-
-.syncStatusValueWithTooltip {
-  cursor: help;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 2px;
-}
-
-.syncStatusNeutral {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-}
-
-.syncStatusOk {
-  font-size: var(--font-sm);
-  color: var(--success);
-}
-
-.syncStatusError {
-  font-size: var(--font-sm);
-  color: var(--danger);
-}
-
-.syncStatusErrorText {
-  margin: 0;
-  font-size: var(--font-sm);
-  color: var(--danger);
-  line-height: 1.4;
-}
-
-.syncActions {
-  margin-top: 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.forceRewriteButton {
-  appearance: none;
-  width: 190px;
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--text-primary);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  font-size: var(--font-sm);
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast),
-    opacity var(--transition-fast);
-}
-
-.forceRewriteButton:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-
-:global(:root[data-theme='light']) .forceRewriteButton {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  color: var(--text);
-}
-
-:global(:root[data-theme='light']) .forceRewriteButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
-}
-
-.forceRewriteButton:disabled {
-  opacity: 0.65;
-  cursor: default;
-}
-
-.syncActionMessage {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
 /* Hint */
 .hint {
   font-size: var(--font-sm);
@@ -389,6 +332,41 @@
   font-style: italic;
 }
 
+/* Apply agent button — compact, centered, accent when active */
+.applyButton {
+  appearance: none;
+  align-self: center;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+  color: var(--accent);
+  border-radius: var(--radius-md);
+  padding: 4px 28px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.applyButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+}
+
+.applyButton:disabled {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* File path row */
 .filePathRow {
   display: flex;
@@ -439,6 +417,7 @@
   flex-direction: column;
   gap: 4px;
   padding: 0 2px;
+  min-height: 1.4em;
 }
 
 .filePathValidationOk {
@@ -473,6 +452,13 @@
   background: var(--danger-soft);
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: var(--radius-md);
+}
+
+/* ── Responsive: collapse to 1 column ── */
+@media (max-width: 860px) {
+  .form {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Mobile adjustments ── */

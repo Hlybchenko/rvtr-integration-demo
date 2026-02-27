@@ -9,7 +9,7 @@ export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox' | 'keba-kiosk';
 export type StreamDeviceId = 'holobox' | 'keba-kiosk' | 'kiosk';
 export type VoiceAgent = 'elevenlabs' | 'gemini-live';
 
-export const STREAM_DEVICE_IDS: StreamDeviceId[] = ['holobox', 'keba-kiosk', 'kiosk'];
+export const STREAM_DEVICE_IDS: StreamDeviceId[] = ['kiosk', 'keba-kiosk', 'holobox'];
 
 export function isStreamDevice(id: string): id is StreamDeviceId {
   return (STREAM_DEVICE_IDS as string[]).includes(id);

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, Link, useBlocker } from 'react-router';
 import { devicesMap } from '@/config/devices';
 import { useResolvedUrl, useSettingsStore, isStreamDevice } from '@/stores/settingsStore';
 import { startDeviceProcess, stopProcess } from '@/services/voiceAgentWriter';
@@ -16,6 +16,7 @@ export function DevicePage() {
   const targetDevice = deviceId ? devicesMap.get(deviceId) : undefined;
   const [displayedDeviceId, setDisplayedDeviceId] = useState(deviceId ?? '');
   const [transitionPhase, setTransitionPhase] = useState<TransitionPhase>('idle');
+  const [isStopping, setIsStopping] = useState(false);
   const startEnterTimerRef = useRef<number | null>(null);
   const finishEnterTimerRef = useRef<number | null>(null);
 
@@ -33,7 +34,7 @@ export function DevicePage() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Process lifecycle: start on mount, stop on unmount
+  // Process lifecycle: start on mount, stop via navigation blocker
   //
   // Only stream devices (holobox, keba-kiosk, kiosk) need a native process.
   // Non-stream devices (phone, laptop) skip this entirely.
@@ -48,34 +49,61 @@ export function DevicePage() {
     streamDeviceId ? s.deviceExePaths[streamDeviceId] : '',
   );
 
-  // Sequence counter: prevents race conditions during rapid device switches.
-  //
-  // Problem without it:
-  //   1. Navigate to /device/holobox → start(holobox), seq=1
-  //   2. Quickly navigate to /device/kiosk → start(kiosk), seq=2
-  //   3. Cleanup for holobox fires → stop() → kills kiosk's process!
-  //
-  // Solution: each effect captures its own `seq`. On cleanup, only stop
-  // if processSeqRef.current still matches — meaning no newer start happened.
-  const processSeqRef = useRef(0);
+  // Track whether a process was started so the blocker knows if stop is needed.
+  const processActiveRef = useRef(false);
 
   useEffect(() => {
-    if (!streamDeviceId || !exePath) return;
+    if (!streamDeviceId || !exePath) {
+      processActiveRef.current = false;
+      return;
+    }
 
-    const seq = ++processSeqRef.current;
+    processActiveRef.current = true;
 
     void startDeviceProcess(streamDeviceId, exePath).catch((err) => {
       console.error(`[DevicePage] Failed to start process for ${streamDeviceId}:`, err);
+      processActiveRef.current = false;
     });
 
-    return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: seq guard reads latest ref value
-      if (processSeqRef.current !== seq) return;
-      void stopProcess().catch((err) => {
-        console.error(`[DevicePage] Failed to stop process:`, err);
-      });
-    };
+    // No cleanup here — stop is handled by the navigation blocker below.
+    // This ensures we await the stop before the route actually changes.
   }, [streamDeviceId, exePath]);
+
+  // ---------------------------------------------------------------------------
+  // Navigation blocker: stop the process synchronously before leaving.
+  //
+  // When the user navigates away from a stream device page, we block the
+  // navigation, call stopProcess(), show a loader, then proceed once done.
+  // This guarantees the backend process and iframe connections are fully
+  // torn down before the next page mounts.
+  // ---------------------------------------------------------------------------
+  const shouldBlock = useCallback(
+    ({ currentLocation, nextLocation }: { currentLocation: { pathname: string }; nextLocation: { pathname: string } }) => {
+      return (
+        processActiveRef.current &&
+        currentLocation.pathname !== nextLocation.pathname
+      );
+    },
+    [],
+  );
+
+  const blocker = useBlocker(shouldBlock);
+
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return;
+
+    setIsStopping(true);
+
+    void stopProcess()
+      .catch((err) => {
+        console.error('[DevicePage] Failed to stop process on navigation:', err);
+      })
+      .finally(() => {
+        processActiveRef.current = false;
+        setIsStopping(false);
+        blocker.proceed();
+      });
+  }, [blocker]);
 
   useEffect(() => {
     if (!deviceId || !targetDevice || displayedDeviceId === deviceId) return;
@@ -100,6 +128,18 @@ export function DevicePage() {
       }, ENTER_TRANSITION_MS);
     }, EXIT_TRANSITION_MS);
   }, [deviceId, targetDevice, displayedDeviceId]);
+
+  // Stopping overlay — shown while awaiting process stop before navigation
+  if (isStopping) {
+    return (
+      <div className={styles.devicePage}>
+        <div className={styles.stoppingOverlay}>
+          <div className={styles.spinner} />
+          <span className={styles.stoppingText}>Stopping process…</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!targetDevice) {
     return (
