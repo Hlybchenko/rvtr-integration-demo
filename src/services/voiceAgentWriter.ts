@@ -378,6 +378,7 @@ export async function browseForExe(): Promise<BrowseExeResult> {
 export interface ProcessRestartResult {
   ok: boolean;
   pid?: number;
+  deviceId?: string;
   error?: string;
 }
 
@@ -404,6 +405,7 @@ export async function restartStart2stream(): Promise<ProcessRestartResult> {
   return {
     ok: true,
     pid: typeof record.pid === 'number' ? record.pid : undefined,
+    deviceId: typeof record.deviceId === 'string' ? record.deviceId : undefined,
   };
 }
 

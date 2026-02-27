@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
 import {
@@ -59,6 +59,26 @@ function isValidUrl(value: string): boolean {
   }
 }
 
+interface ExeFieldState {
+  input: string;
+  saving: boolean;
+  browsing: boolean;
+  saved: boolean;
+  error: string | null;
+  resolvedPath: string | null;
+}
+
+function initExeState(path: string): ExeFieldState {
+  return {
+    input: path,
+    saving: false,
+    browsing: false,
+    saved: !!path,
+    error: null,
+    resolvedPath: path || null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -89,24 +109,6 @@ export function OverviewPage() {
   const [filePathResolvedPath, setFilePathResolvedPath] = useState<string | null>(null);
 
   // -- per-device exe path state --
-  type ExeFieldState = {
-    input: string;
-    saving: boolean;
-    browsing: boolean;
-    saved: boolean;
-    error: string | null;
-    resolvedPath: string | null;
-  };
-
-  const initExeState = (path: string): ExeFieldState => ({
-    input: path,
-    saving: false,
-    browsing: false,
-    saved: !!path,
-    error: null,
-    resolvedPath: path || null,
-  });
-
   const [exeStates, setExeStates] = useState<Record<StreamDeviceId, ExeFieldState>>(() => ({
     holobox: initExeState(deviceExePaths.holobox),
     'keba-kiosk': initExeState(deviceExePaths['keba-kiosk']),
@@ -122,6 +124,12 @@ export function OverviewPage() {
     },
     [],
   );
+
+  // Keep a ref to always have fresh exeStates in callbacks without
+  // adding exeStates to dependency arrays (avoids re-creating handlers
+  // on every keystroke).
+  const exeStatesRef = useRef(exeStates);
+  exeStatesRef.current = exeStates;
 
   // -- process status state --
   const [processRunning, setProcessRunning] = useState<boolean | null>(null);
@@ -153,7 +161,7 @@ export function OverviewPage() {
       const result = await restartStart2stream();
       if (result.ok) {
         setProcessRunning(true);
-        setProcessDeviceId(result.pid ? null : null);
+        setProcessDeviceId(result.deviceId ?? null);
       } else {
         setProcessRunning(false);
       }
@@ -173,22 +181,26 @@ export function OverviewPage() {
 
   // -- init: sync file path from backend config, then auto-validate --
   useEffect(() => {
+    let cancelled = false;
+
     void (async () => {
       try {
         const cfg = await getWriterConfig();
+        if (cancelled) return;
         setBackendError(null);
 
         // Backend has a saved path — use it as source of truth
-        const backendPath = cfg.licenseFilePath || '';
-        const effectivePath = backendPath || licenseFilePath;
+        const backendLicensePath = cfg.licenseFilePath || '';
+        const effectiveLicensePath = backendLicensePath || licenseFilePath;
 
-        if (effectivePath) {
-          setFilePathInput(effectivePath);
-          setFilePathResolvedPath(effectivePath);
+        if (effectiveLicensePath) {
+          setFilePathInput(effectiveLicensePath);
+          setFilePathResolvedPath(effectiveLicensePath);
 
-          if (!backendPath && licenseFilePath) {
+          if (!backendLicensePath && licenseFilePath) {
             // Zustand has a path but backend doesn't — push it to backend
             const result = await setWriterFilePath(licenseFilePath);
+            if (cancelled) return;
             if (result.ok) {
               setLicenseFilePath(result.resolvedPath ?? licenseFilePath);
               setFilePathSaved(true);
@@ -197,27 +209,29 @@ export function OverviewPage() {
               setFilePathSaved(false);
             }
           } else {
-            setLicenseFilePath(backendPath);
+            setLicenseFilePath(backendLicensePath);
             setFilePathSaved(true);
           }
         }
 
         // Sync per-device exe paths
         for (const did of STREAM_DEVICE_IDS) {
-          const backendPath = cfg.deviceExePaths[did] || '';
+          if (cancelled) return;
+          const backendExePath = cfg.deviceExePaths[did] || '';
           const storePath = deviceExePaths[did] || '';
-          const effectivePath = backendPath || storePath;
+          const effectiveExePath = backendExePath || storePath;
 
-          if (effectivePath) {
+          if (effectiveExePath) {
             updateExeState(did, {
-              input: effectivePath,
-              resolvedPath: effectivePath,
+              input: effectiveExePath,
+              resolvedPath: effectiveExePath,
               saved: true,
             });
 
-            if (!backendPath && storePath) {
+            if (!backendExePath && storePath) {
               // Zustand has a path but backend doesn't — push it
               const result = await setDeviceExePath(did, storePath);
+              if (cancelled) return;
               if (result.ok) {
                 setDeviceExePathStore(did, result.resolvedPath ?? storePath);
               } else {
@@ -226,28 +240,53 @@ export function OverviewPage() {
                   saved: false,
                 });
               }
-            } else if (backendPath) {
-              setDeviceExePathStore(did, backendPath);
+            } else if (backendExePath) {
+              setDeviceExePathStore(did, backendExePath);
             }
           }
         }
 
+        if (cancelled) return;
+
         // Check process status
         try {
           const status = await getProcessStatus();
+          if (cancelled) return;
           setProcessRunning(status.running);
           setProcessDeviceId(status.deviceId);
         } catch {
-          setProcessRunning(null);
+          if (!cancelled) setProcessRunning(null);
         }
       } catch (err) {
+        if (cancelled) return;
         setBackendError(
           `Backend unavailable (http://127.0.0.1:3210). Is agent-option-writer running? ${err instanceof Error ? err.message : ''}`,
         );
       }
     })();
+
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // -- poll process status while any exe is configured --
+  useEffect(() => {
+    if (!hasAnyExeConfigured) return;
+
+    const POLL_INTERVAL_MS = 5_000;
+    const timer = setInterval(() => {
+      void getProcessStatus()
+        .then((status) => {
+          setProcessRunning(status.running);
+          setProcessDeviceId(status.deviceId);
+        })
+        .catch(() => {
+          // Backend unreachable — don't clear status to avoid flicker
+        });
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [hasAnyExeConfigured]);
 
   // -- sync pendingVoiceAgent from file on mount (read-only, no restart) --
   useEffect(() => {
@@ -375,7 +414,7 @@ export function OverviewPage() {
   }, [setLicenseFilePath]);
 
   const handleSaveExePath = useCallback(async (deviceId: StreamDeviceId) => {
-    const trimmed = exeStates[deviceId].input.trim();
+    const trimmed = exeStatesRef.current[deviceId].input.trim();
     if (!trimmed) {
       updateExeState(deviceId, { error: 'Executable path is required' });
       return;
@@ -410,7 +449,7 @@ export function OverviewPage() {
         saving: false,
       });
     }
-  }, [exeStates, updateExeState, setDeviceExePathStore]);
+  }, [updateExeState, setDeviceExePathStore]);
 
   const handleBrowseExe = useCallback(async (deviceId: StreamDeviceId) => {
     updateExeState(deviceId, { browsing: true, error: null });
