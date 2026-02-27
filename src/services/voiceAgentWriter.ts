@@ -66,7 +66,8 @@ export async function getWriterConfig(): Promise<WriterConfig> {
   const r = record as Record<string, unknown> | null;
   const rawPaths = r?.deviceExePaths as Record<string, string> | undefined;
   // Legacy fallback: if backend still has old single start2streamPath
-  const legacyPath = r && typeof r.start2streamPath === 'string' ? r.start2streamPath : '';
+  const legacyPath =
+    r && typeof r.start2streamPath === 'string' ? r.start2streamPath : '';
 
   const deviceExePaths: Record<StreamDeviceId, string> = {
     holobox: rawPaths?.holobox ?? legacyPath,
@@ -75,8 +76,7 @@ export async function getWriterConfig(): Promise<WriterConfig> {
   };
 
   return {
-    licenseFilePath:
-      r && typeof r.licenseFilePath === 'string' ? r.licenseFilePath : '',
+    licenseFilePath: r && typeof r.licenseFilePath === 'string' ? r.licenseFilePath : '',
     deviceExePaths,
   };
 }
@@ -100,7 +100,8 @@ export async function setWriterFilePath(
     return {
       ok: false,
       error: typeof record.error === 'string' ? record.error : 'Failed to set file path',
-      resolvedPath: typeof record.resolvedPath === 'string' ? record.resolvedPath : undefined,
+      resolvedPath:
+        typeof record.resolvedPath === 'string' ? record.resolvedPath : undefined,
     };
   }
 
@@ -136,7 +137,10 @@ export async function browseForFile(): Promise<BrowseFileResult> {
   >;
 
   if (!response.ok) {
-    const msg = typeof record.error === 'string' ? record.error : `Browse failed (HTTP ${response.status})`;
+    const msg =
+      typeof record.error === 'string'
+        ? record.error
+        : `Browse failed (HTTP ${response.status})`;
     return { cancelled: false, licenseFilePath: null, valid: false, errors: [msg] };
   }
 
@@ -149,9 +153,7 @@ export async function browseForFile(): Promise<BrowseFileResult> {
     licenseFilePath:
       typeof record.licenseFilePath === 'string' ? record.licenseFilePath : null,
     valid: record.valid === true,
-    errors: Array.isArray(record.errors)
-      ? (record.errors as unknown[]).map(String)
-      : [],
+    errors: Array.isArray(record.errors) ? (record.errors as unknown[]).map(String) : [],
   };
 }
 
@@ -183,7 +185,8 @@ export async function validateFilePath(
       : typeof record.error === 'string'
         ? [record.error]
         : [],
-    resolvedPath: typeof record.resolvedPath === 'string' ? record.resolvedPath : undefined,
+    resolvedPath:
+      typeof record.resolvedPath === 'string' ? record.resolvedPath : undefined,
   };
 }
 
@@ -316,14 +319,14 @@ export async function setDeviceExePath(
     return {
       ok: false,
       error: typeof record.error === 'string' ? record.error : 'Failed to set exe path',
-      resolvedPath: typeof record.resolvedPath === 'string' ? record.resolvedPath : undefined,
+      resolvedPath:
+        typeof record.resolvedPath === 'string' ? record.resolvedPath : undefined,
     };
   }
 
   return {
     ok: true,
-    resolvedPath:
-      typeof record.exePath === 'string' ? record.exePath : undefined,
+    resolvedPath: typeof record.exePath === 'string' ? record.exePath : undefined,
   };
 }
 
@@ -352,7 +355,10 @@ export async function browseForExe(): Promise<BrowseExeResult> {
   >;
 
   if (!response.ok) {
-    const msg = typeof record.error === 'string' ? record.error : `Browse failed (HTTP ${response.status})`;
+    const msg =
+      typeof record.error === 'string'
+        ? record.error
+        : `Browse failed (HTTP ${response.status})`;
     return { cancelled: false, exePath: null, valid: false, errors: [msg] };
   }
 
@@ -362,12 +368,9 @@ export async function browseForExe(): Promise<BrowseExeResult> {
 
   return {
     cancelled: false,
-    exePath:
-      typeof record.exePath === 'string' ? record.exePath : null,
+    exePath: typeof record.exePath === 'string' ? record.exePath : null,
     valid: record.valid === true,
-    errors: Array.isArray(record.errors)
-      ? (record.errors as unknown[]).map(String)
-      : [],
+    errors: Array.isArray(record.errors) ? (record.errors as unknown[]).map(String) : [],
   };
 }
 
@@ -398,7 +401,8 @@ export async function restartStart2stream(): Promise<ProcessRestartResult> {
   if (!response.ok) {
     return {
       ok: false,
-      error: typeof record.error === 'string' ? record.error : 'Failed to restart process',
+      error:
+        typeof record.error === 'string' ? record.error : 'Failed to restart process',
     };
   }
 

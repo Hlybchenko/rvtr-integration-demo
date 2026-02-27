@@ -3,9 +3,7 @@ import { useCallback, useMemo } from 'react';
 
 const PARAM_KEY = 'url';
 const DEFAULT_WIDGET_URL = import.meta.env.VITE_DEFAULT_WIDGET_URL || '';
-const DEFAULT_HOLOBOX_URL =
-  import.meta.env.VITE_DEFAULT_HOLOBOX_URL ||
-  '';
+const DEFAULT_HOLOBOX_URL = import.meta.env.VITE_DEFAULT_HOLOBOX_URL || '';
 
 /**
  * Sync iframe URL with ?url= query parameter.

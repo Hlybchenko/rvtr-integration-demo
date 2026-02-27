@@ -17,9 +17,7 @@ vi.mock('@/components/DevicePreview/DevicePreview', () => ({
   DevicePreview: () => <div data-testid="device-preview" />,
 }));
 
-const { startDeviceProcess, stopProcess } = await import(
-  '@/services/voiceAgentWriter'
-);
+const { startDeviceProcess, stopProcess } = await import('@/services/voiceAgentWriter');
 
 const mockedStart = vi.mocked(startDeviceProcess);
 const mockedStop = vi.mocked(stopProcess);

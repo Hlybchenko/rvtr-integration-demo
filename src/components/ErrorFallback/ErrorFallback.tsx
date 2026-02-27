@@ -10,7 +10,7 @@ export function ErrorFallback() {
     : 'Something went wrong';
 
   const detail = isRouteErrorResponse(error)
-    ? error.data?.message ?? 'Page not found'
+    ? (error.data?.message ?? 'Page not found')
     : error instanceof Error
       ? error.message
       : String(error);

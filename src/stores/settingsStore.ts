@@ -16,7 +16,6 @@ export function isStreamDevice(id: string): id is StreamDeviceId {
 }
 type LegacyVoiceAgent = VoiceAgent | 'google-native-audio';
 
-
 /** @internal Exported for unit tests only */
 export function normalizeVoiceAgent(value: LegacyVoiceAgent | undefined): VoiceAgent {
   if (value === 'google-native-audio') return 'gemini-live';
@@ -69,7 +68,14 @@ interface SettingsState {
 export function migrateSettingsState(
   persistedState: unknown,
   version: number,
-): Omit<SettingsState, 'setDeviceUrl' | 'setVoiceAgent' | 'setLicenseFilePath' | 'setDeviceExePath' | 'getDeviceUrl'> {
+): Omit<
+  SettingsState,
+  | 'setDeviceUrl'
+  | 'setVoiceAgent'
+  | 'setLicenseFilePath'
+  | 'setDeviceExePath'
+  | 'getDeviceUrl'
+> {
   const state = persistedState as
     | {
         widgetUrl?: string;
@@ -106,20 +112,19 @@ export function migrateSettingsState(
   }
 
   // Migrate legacy single start2streamPath → deviceExePaths (v7 → v8)
-  const migratedExePaths: Record<StreamDeviceId, string> =
-    state.deviceExePaths
+  const migratedExePaths: Record<StreamDeviceId, string> = state.deviceExePaths
+    ? {
+        holobox: state.deviceExePaths.holobox ?? '',
+        'keba-kiosk': state.deviceExePaths['keba-kiosk'] ?? '',
+        kiosk: state.deviceExePaths.kiosk ?? '',
+      }
+    : state.start2streamPath
       ? {
-          holobox: state.deviceExePaths.holobox ?? '',
-          'keba-kiosk': state.deviceExePaths['keba-kiosk'] ?? '',
-          kiosk: state.deviceExePaths.kiosk ?? '',
+          holobox: state.start2streamPath,
+          'keba-kiosk': state.start2streamPath,
+          kiosk: state.start2streamPath,
         }
-      : state.start2streamPath
-        ? {
-            holobox: state.start2streamPath,
-            'keba-kiosk': state.start2streamPath,
-            kiosk: state.start2streamPath,
-          }
-        : defaultExePaths;
+      : defaultExePaths;
 
   if (version < 2) {
     const legacyWidgetUrl = state.widgetUrl ?? '';

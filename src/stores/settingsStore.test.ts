@@ -69,7 +69,8 @@ describe('persist migration', () => {
       };
 
       const result = migrate(oldState, 7);
-      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> }).deviceExePaths;
+      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> })
+        .deviceExePaths;
 
       expect(exePaths.holobox).toBe('/legacy/stream.exe');
       expect(exePaths['keba-kiosk']).toBe('/legacy/stream.exe');
@@ -88,7 +89,8 @@ describe('persist migration', () => {
       };
 
       const result = migrate(oldState, 7);
-      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> }).deviceExePaths;
+      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> })
+        .deviceExePaths;
 
       expect(exePaths.holobox).toBe('');
       expect(exePaths['keba-kiosk']).toBe('');
@@ -112,7 +114,8 @@ describe('persist migration', () => {
       };
 
       const result = migrate(stateWithPaths, 8);
-      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> }).deviceExePaths;
+      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> })
+        .deviceExePaths;
 
       expect(exePaths.holobox).toBe('/a.bat');
       expect(exePaths['keba-kiosk']).toBe('/b.bat');
@@ -132,7 +135,8 @@ describe('persist migration', () => {
       };
 
       const result = migrate(partial, 7);
-      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> }).deviceExePaths;
+      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> })
+        .deviceExePaths;
 
       expect(exePaths.holobox).toBe('/a.bat');
       expect(exePaths['keba-kiosk']).toBe('');

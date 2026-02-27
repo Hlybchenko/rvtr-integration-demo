@@ -40,9 +40,7 @@ function mockResponse(
 }
 
 // Helper: create a mock Response with broken JSON
-function mockBrokenJsonResponse(
-  status = 200,
-): Response {
+function mockBrokenJsonResponse(status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
@@ -155,9 +153,7 @@ describe('getWriterConfig', () => {
   });
 
   it('throws with fallback message when error field is missing on non-ok', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({}, { status: 500 }),
-    );
+    mockFetch.mockResolvedValueOnce(mockResponse({}, { status: 500 }));
 
     await expect(getWriterConfig()).rejects.toThrow('Failed to read writer config');
   });
@@ -264,9 +260,7 @@ describe('startDeviceProcess', () => {
   });
 
   it('returns error on spawn failure', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ error: 'ENOENT' }, { status: 500 }),
-    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ error: 'ENOENT' }, { status: 500 }));
 
     const result = await startDeviceProcess('kiosk', '/bad.bat');
     expect(result.ok).toBe(false);
@@ -286,9 +280,7 @@ describe('stopProcess', () => {
   });
 
   it('handles no active process', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ ok: true, stoppedDeviceId: null }),
-    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ ok: true, stoppedDeviceId: null }));
 
     const result = await stopProcess();
     expect(result.ok).toBe(true);
@@ -338,7 +330,10 @@ describe('restartStart2stream', () => {
 
   it('returns error when no exe path available', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse({ error: 'No executable path available for restart' }, { status: 400 }),
+      mockResponse(
+        { error: 'No executable path available for restart' },
+        { status: 400 },
+      ),
     );
 
     const result = await restartStart2stream();

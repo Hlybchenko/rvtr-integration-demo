@@ -36,8 +36,8 @@ export function DevicePage() {
   // Select only the exe path for the current device to avoid unnecessary
   // effect re-runs when other device paths change in the store.
   const streamDeviceId = deviceId && isStreamDevice(deviceId) ? deviceId : null;
-  const exePath = useSettingsStore(
-    (s) => (streamDeviceId ? s.deviceExePaths[streamDeviceId] : ''),
+  const exePath = useSettingsStore((s) =>
+    streamDeviceId ? s.deviceExePaths[streamDeviceId] : '',
   );
 
   // Guard against race conditions when rapidly switching between devices.

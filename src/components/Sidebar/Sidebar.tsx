@@ -78,9 +78,7 @@ export function Sidebar({ className }: SidebarProps) {
               `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
             }
           >
-            <span className={styles.navIcon}>
-              {DEVICE_ICONS[device.id] || '📦'}
-            </span>
+            <span className={styles.navIcon}>{DEVICE_ICONS[device.id] || '📦'}</span>
             {device.name}
           </NavLink>
         ))}

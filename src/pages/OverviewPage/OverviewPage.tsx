@@ -109,11 +109,13 @@ export function OverviewPage() {
   const [filePathResolvedPath, setFilePathResolvedPath] = useState<string | null>(null);
 
   // -- per-device exe path state --
-  const [exeStates, setExeStates] = useState<Record<StreamDeviceId, ExeFieldState>>(() => ({
-    holobox: initExeState(deviceExePaths.holobox),
-    'keba-kiosk': initExeState(deviceExePaths['keba-kiosk']),
-    kiosk: initExeState(deviceExePaths.kiosk),
-  }));
+  const [exeStates, setExeStates] = useState<Record<StreamDeviceId, ExeFieldState>>(
+    () => ({
+      holobox: initExeState(deviceExePaths.holobox),
+      'keba-kiosk': initExeState(deviceExePaths['keba-kiosk']),
+      kiosk: initExeState(deviceExePaths.kiosk),
+    }),
+  );
 
   const updateExeState = useCallback(
     (deviceId: StreamDeviceId, patch: Partial<ExeFieldState>) => {
@@ -265,7 +267,9 @@ export function OverviewPage() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -299,9 +303,13 @@ export function OverviewPage() {
         // Align pending selection with what's actually in the file
         setPendingVoiceAgent(result.voiceAgent);
       })
-      .catch(() => { /* ignore — non-critical */ });
+      .catch(() => {
+        /* ignore — non-critical */
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isFileConfigured]);
 
   const hasPendingAgentChange = pendingVoiceAgent !== voiceAgent;
@@ -374,7 +382,9 @@ export function OverviewPage() {
 
       // Backend error — no path returned but not cancelled
       if (!result.licenseFilePath) {
-        setFilePathError(result.errors.join('; ') || 'File picker failed — check backend logs');
+        setFilePathError(
+          result.errors.join('; ') || 'File picker failed — check backend logs',
+        );
         return;
       }
 
@@ -413,101 +423,107 @@ export function OverviewPage() {
     }
   }, [setLicenseFilePath]);
 
-  const handleSaveExePath = useCallback(async (deviceId: StreamDeviceId) => {
-    const trimmed = exeStatesRef.current[deviceId].input.trim();
-    if (!trimmed) {
-      updateExeState(deviceId, { error: 'Executable path is required' });
-      return;
-    }
+  const handleSaveExePath = useCallback(
+    async (deviceId: StreamDeviceId) => {
+      const trimmed = exeStatesRef.current[deviceId].input.trim();
+      if (!trimmed) {
+        updateExeState(deviceId, { error: 'Executable path is required' });
+        return;
+      }
 
-    updateExeState(deviceId, { saving: true, error: null, resolvedPath: null });
+      updateExeState(deviceId, { saving: true, error: null, resolvedPath: null });
 
-    try {
-      const result = await setDeviceExePath(deviceId, trimmed);
+      try {
+        const result = await setDeviceExePath(deviceId, trimmed);
 
-      if (!result.ok) {
+        if (!result.ok) {
+          updateExeState(deviceId, {
+            error: result.error ?? 'Validation failed',
+            resolvedPath: result.resolvedPath ?? null,
+            saved: false,
+            saving: false,
+          });
+          return;
+        }
+
+        setDeviceExePathStore(deviceId, result.resolvedPath ?? trimmed);
         updateExeState(deviceId, {
-          error: result.error ?? 'Validation failed',
           resolvedPath: result.resolvedPath ?? null,
+          saved: true,
+          error: null,
+          saving: false,
+        });
+      } catch (error) {
+        updateExeState(deviceId, {
+          error: error instanceof Error ? error.message : String(error),
           saved: false,
           saving: false,
         });
-        return;
       }
+    },
+    [updateExeState, setDeviceExePathStore],
+  );
 
-      setDeviceExePathStore(deviceId, result.resolvedPath ?? trimmed);
-      updateExeState(deviceId, {
-        resolvedPath: result.resolvedPath ?? null,
-        saved: true,
-        error: null,
-        saving: false,
-      });
-    } catch (error) {
-      updateExeState(deviceId, {
-        error: error instanceof Error ? error.message : String(error),
-        saved: false,
-        saving: false,
-      });
-    }
-  }, [updateExeState, setDeviceExePathStore]);
+  const handleBrowseExe = useCallback(
+    async (deviceId: StreamDeviceId) => {
+      updateExeState(deviceId, { browsing: true, error: null });
 
-  const handleBrowseExe = useCallback(async (deviceId: StreamDeviceId) => {
-    updateExeState(deviceId, { browsing: true, error: null });
+      try {
+        const result = await browseForExe();
 
-    try {
-      const result = await browseForExe();
+        if (result.cancelled) {
+          updateExeState(deviceId, { browsing: false });
+          return;
+        }
 
-      if (result.cancelled) {
-        updateExeState(deviceId, { browsing: false });
-        return;
-      }
-
-      if (!result.exePath) {
-        updateExeState(deviceId, {
-          error: result.errors.join('; ') || 'File picker failed — check backend logs',
-          browsing: false,
-        });
-        return;
-      }
-
-      updateExeState(deviceId, { input: result.exePath });
-
-      if (result.valid) {
-        const saveResult = await setDeviceExePath(deviceId, result.exePath);
-
-        if (saveResult.ok) {
-          setDeviceExePathStore(deviceId, saveResult.resolvedPath ?? result.exePath);
+        if (!result.exePath) {
           updateExeState(deviceId, {
-            resolvedPath: saveResult.resolvedPath ?? result.exePath,
-            saved: true,
-            error: null,
+            error: result.errors.join('; ') || 'File picker failed — check backend logs',
             browsing: false,
           });
+          return;
+        }
+
+        updateExeState(deviceId, { input: result.exePath });
+
+        if (result.valid) {
+          const saveResult = await setDeviceExePath(deviceId, result.exePath);
+
+          if (saveResult.ok) {
+            setDeviceExePathStore(deviceId, saveResult.resolvedPath ?? result.exePath);
+            updateExeState(deviceId, {
+              resolvedPath: saveResult.resolvedPath ?? result.exePath,
+              saved: true,
+              error: null,
+              browsing: false,
+            });
+          } else {
+            updateExeState(deviceId, {
+              error: saveResult.error ?? 'Failed to save',
+              saved: false,
+              browsing: false,
+            });
+          }
         } else {
           updateExeState(deviceId, {
-            error: saveResult.error ?? 'Failed to save',
+            error: result.errors.join('; ') || 'Selected file is not valid',
             saved: false,
             browsing: false,
           });
         }
-      } else {
-        updateExeState(deviceId, {
-          error: result.errors.join('; ') || 'Selected file is not valid',
-          saved: false,
-          browsing: false,
-        });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        let errorMsg = msg;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          errorMsg = 'Browse timed out — backend may be unresponsive';
+        } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+          errorMsg = 'Cannot reach backend (http://127.0.0.1:3210). Is it running?';
+        }
+        updateExeState(deviceId, { error: errorMsg, browsing: false });
       }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      let errorMsg = msg;
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        errorMsg = 'Browse timed out — backend may be unresponsive';
-      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        errorMsg = 'Cannot reach backend (http://127.0.0.1:3210). Is it running?';
-      }
-      updateExeState(deviceId, { error: errorMsg, browsing: false });
-    }
-  }, [updateExeState, setDeviceExePathStore]);
+    },
+    [updateExeState, setDeviceExePathStore],
+  );
 
   return (
     <div className={styles.settings}>
@@ -546,9 +562,7 @@ export function OverviewPage() {
                 className={`${styles.input} ${filePathError ? styles.inputError : ''}`}
                 type="text"
                 placeholder={
-                  IS_WINDOWS
-                    ? 'C:\\Path\\To\\license.lic'
-                    : '/path/to/license.lic'
+                  IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'
                 }
                 value={filePathInput}
                 onChange={(e) => {
@@ -630,16 +644,16 @@ export function OverviewPage() {
             <button
               type="button"
               className={styles.filePathAction}
-              onClick={() => { void handleApplyAgent(); }}
+              onClick={() => {
+                void handleApplyAgent();
+              }}
               disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
             >
               {isApplying ? 'Applying...' : 'Apply'}
             </button>
           </div>
 
-          {applyError && (
-            <p className={styles.filePathValidationError}>{applyError}</p>
-          )}
+          {applyError && <p className={styles.filePathValidationError}>{applyError}</p>}
         </section>
 
         {/* ── Device Executables ── */}
@@ -672,9 +686,7 @@ export function OverviewPage() {
                     className={`${styles.input} ${st.error ? styles.inputError : ''}`}
                     type="text"
                     placeholder={
-                      IS_WINDOWS
-                        ? `C:\\Path\\To\\${did}.bat`
-                        : `/path/to/${did}.bat`
+                      IS_WINDOWS ? `C:\\Path\\To\\${did}.bat` : `/path/to/${did}.bat`
                     }
                     value={st.input}
                     onChange={(e) => {
@@ -690,7 +702,9 @@ export function OverviewPage() {
                   <button
                     type="button"
                     className={styles.filePathAction}
-                    onClick={() => { void handleBrowseExe(did); }}
+                    onClick={() => {
+                      void handleBrowseExe(did);
+                    }}
                     disabled={st.browsing || st.saving}
                   >
                     {st.browsing ? 'Picking...' : 'Browse'}
@@ -698,7 +712,9 @@ export function OverviewPage() {
                   <button
                     type="button"
                     className={styles.filePathAction}
-                    onClick={() => { void handleSaveExePath(did); }}
+                    onClick={() => {
+                      void handleSaveExePath(did);
+                    }}
                     disabled={st.saving || st.browsing || !st.input.trim()}
                   >
                     {st.saving ? 'Saving...' : 'Save'}
@@ -710,9 +726,7 @@ export function OverviewPage() {
                     <span className={styles.filePathValidationError}>{st.error}</span>
                   )}
                   {st.resolvedPath && !st.error && (
-                    <span className={styles.filePathResolvedPath}>
-                      {st.resolvedPath}
-                    </span>
+                    <span className={styles.filePathResolvedPath}>{st.resolvedPath}</span>
                   )}
                 </div>
               </div>

@@ -29,11 +29,8 @@ vi.mock('@/hooks/useDetectScreenRect', () => ({
   warmDetectScreenRect: vi.fn(),
 }));
 
-const {
-  getWriterConfig,
-  getProcessStatus,
-  readVoiceAgentFromFile,
-} = await import('@/services/voiceAgentWriter');
+const { getWriterConfig, getProcessStatus, readVoiceAgentFromFile } =
+  await import('@/services/voiceAgentWriter');
 
 const mockedGetConfig = vi.mocked(getWriterConfig);
 const mockedGetStatus = vi.mocked(getProcessStatus);
@@ -69,9 +66,7 @@ describe('OverviewPage init effect', () => {
     render(<OverviewPage />);
 
     await vi.waitFor(() => {
-      expect(
-        screen.getByText(/Backend unavailable/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Backend unavailable/)).toBeInTheDocument();
     });
   });
 
@@ -120,9 +115,15 @@ describe('OverviewPage init effect', () => {
 
   it('does not update state after unmount (cancelled guard)', async () => {
     // Make getWriterConfig resolve slowly
-    let resolveConfig!: (value: { licenseFilePath: string; deviceExePaths: Record<string, string> }) => void;
+    let resolveConfig!: (value: {
+      licenseFilePath: string;
+      deviceExePaths: Record<string, string>;
+    }) => void;
     mockedGetConfig.mockImplementationOnce(
-      () => new Promise((r) => { resolveConfig = r; }),
+      () =>
+        new Promise((r) => {
+          resolveConfig = r;
+        }),
     );
 
     const { unmount } = render(<OverviewPage />);
