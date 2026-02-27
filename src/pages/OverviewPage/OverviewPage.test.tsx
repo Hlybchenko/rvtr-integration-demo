@@ -17,7 +17,6 @@ vi.mock('@/services/voiceAgentWriter', () => ({
   browseForFile: vi.fn(),
   browseForExe: vi.fn(),
   restartStart2stream: vi.fn(),
-  stopProcess: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 // Mock device config to avoid complex imports

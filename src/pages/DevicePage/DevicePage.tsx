@@ -51,14 +51,20 @@ export function DevicePage() {
 
   // Track whether a process was started so the blocker knows if stop is needed.
   const processActiveRef = useRef(false);
+  // Gate: iframe URL is withheld until the process is fully started.
+  // This prevents the iframe from connecting to a stale or restarting PS server,
+  // which causes duplicate WebRTC connections and eventual freeze.
+  const [processReady, setProcessReady] = useState(false);
 
   useEffect(() => {
     if (!streamDeviceId || !exePath) {
       processActiveRef.current = false;
+      setProcessReady(false);
       return;
     }
 
     let cancelled = false;
+    setProcessReady(false);
 
     const launch = async () => {
       // Stop any running process first. This call is serialized via the
@@ -75,6 +81,7 @@ export function DevicePage() {
       processActiveRef.current = true;
       try {
         await startDeviceProcess(streamDeviceId, exePath);
+        if (!cancelled) setProcessReady(true);
       } catch (err) {
         console.error(`[DevicePage] Failed to start process for ${streamDeviceId}:`, err);
         processActiveRef.current = false;
@@ -92,6 +99,7 @@ export function DevicePage() {
     // async queue guarantees the next launch() won't start until this finishes.
     return () => {
       cancelled = true;
+      setProcessReady(false);
       if (!processActiveRef.current) return;
       processActiveRef.current = false;
       void stopProcess().catch(() => {});
@@ -193,7 +201,11 @@ export function DevicePage() {
     return <div className={styles.devicePage} />;
   }
 
-  const finalUrl = resolvedUrl || displayedDevice.defaultUrl || '';
+  // For stream devices, withhold URL until the process is confirmed started.
+  // This prevents the iframe from connecting to a stale/restarting PS server.
+  // Non-stream devices (phone, laptop) don't need a process — pass URL through.
+  const rawUrl = resolvedUrl || displayedDevice.defaultUrl || '';
+  const finalUrl = streamDeviceId ? (processReady ? rawUrl : '') : rawUrl;
   const transitionClass =
     transitionPhase === 'exiting'
       ? styles.previewExit
