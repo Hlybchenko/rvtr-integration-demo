@@ -561,9 +561,9 @@ export function OverviewPage() {
         {/* ── Voice Agent (must be configured first) ── */}
         <section
           className={`${styles.settingsBlock} ${
-            filePathError
+            filePathError || (isFileConfigured && hasPendingAgentChange)
               ? styles.settingsBlockError
-              : isFileConfigured
+              : isFileConfigured && !hasPendingAgentChange
                 ? styles.settingsBlockValid
                 : ''
           }`}
@@ -632,6 +632,16 @@ export function OverviewPage() {
           {/* Voice agent selector */}
           <div className={styles.fieldHeader}>
             <label className={styles.label}>Agent provider</label>
+            {isFileConfigured && !hasPendingAgentChange && voiceAgent && (
+              <span className={`${styles.badge} ${styles.badgeValid}`}>
+                ✓ Applied
+              </span>
+            )}
+            {isFileConfigured && hasPendingAgentChange && (
+              <span className={`${styles.badge} ${styles.badgeInvalid}`}>
+                ● Unsaved
+              </span>
+            )}
           </div>
 
           <div

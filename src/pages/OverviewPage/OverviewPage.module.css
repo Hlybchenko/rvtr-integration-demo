@@ -55,7 +55,7 @@
   flex-direction: column;
   gap: 10px;
   padding: var(--space-3);
-  background: color-mix(in srgb, var(--glass-bg) 60%, transparent);
+  background: var(--card-nested-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   transition:
@@ -74,7 +74,7 @@
 }
 
 .deviceCardTitle {
-  margin: 0;
+  margin: 0 0 var(--space-2);
   font-size: var(--font-md);
   font-weight: 600;
   color: var(--text-primary);
