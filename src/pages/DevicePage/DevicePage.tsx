@@ -51,6 +51,8 @@ export function DevicePage() {
 
   // Track whether a process was started so the blocker knows if stop is needed.
   const processActiveRef = useRef(false);
+  // Holds the pending stop promise so the next start can await it.
+  const pendingStopRef = useRef<Promise<unknown> | null>(null);
 
   useEffect(() => {
     if (!streamDeviceId || !exePath) {
@@ -58,15 +60,47 @@ export function DevicePage() {
       return;
     }
 
-    processActiveRef.current = true;
+    let cancelled = false;
 
-    void startDeviceProcess(streamDeviceId, exePath).catch((err) => {
-      console.error(`[DevicePage] Failed to start process for ${streamDeviceId}:`, err);
+    const launch = async () => {
+      // Always stop any running process first and await completion.
+      // This prevents the race where start fires before stop finishes,
+      // resulting in two concurrent processes / Pixel Streaming sessions.
+      if (pendingStopRef.current) {
+        await pendingStopRef.current;
+        pendingStopRef.current = null;
+      }
+      // Also do an unconditional stop to kill orphaned processes
+      // (e.g., left over from a previous HMR cycle or browser refresh).
+      try {
+        await stopProcess();
+      } catch {
+        // Ignore — process may not be running
+      }
+
+      if (cancelled) return;
+
+      processActiveRef.current = true;
+      try {
+        await startDeviceProcess(streamDeviceId, exePath);
+      } catch (err) {
+        console.error(`[DevicePage] Failed to start process for ${streamDeviceId}:`, err);
+        processActiveRef.current = false;
+      }
+    };
+
+    void launch();
+
+    // Safety net: stop the process when the effect re-runs (HMR, deps change)
+    // or the component unmounts without going through the navigation blocker.
+    // The blocker sets processActiveRef.current = false before proceed(),
+    // so this cleanup will be a no-op after a blocker-managed stop.
+    return () => {
+      cancelled = true;
+      if (!processActiveRef.current) return;
       processActiveRef.current = false;
-    });
-
-    // No cleanup here — stop is handled by the navigation blocker below.
-    // This ensures we await the stop before the route actually changes.
+      pendingStopRef.current = stopProcess().catch(() => {});
+    };
   }, [streamDeviceId, exePath]);
 
   // ---------------------------------------------------------------------------

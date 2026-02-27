@@ -241,9 +241,14 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     // Setting src to "about:blank" forces the browser to close any active
     // WebSocket, HTTP, or media connections inside the iframe immediately,
     // rather than waiting for GC or TCP keepalive timeout.
+    //
+    // NOTE: read iframeRef.current inside the cleanup, not at effect time,
+    // because at mount time the iframe hasn't rendered yet (shouldRenderIframe
+    // is initially false) so the ref would capture null.
     useEffect(() => {
-      const iframe = iframeRef.current;
       return () => {
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: iframe renders conditionally, ref is null at mount time
+        const iframe = iframeRef.current;
         if (iframe) {
           try {
             iframe.src = 'about:blank';
