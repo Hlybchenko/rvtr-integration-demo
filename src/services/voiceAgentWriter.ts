@@ -438,9 +438,26 @@ export async function browseForExe(): Promise<BrowseExeResult> {
 // Lifecycle:
 //   DevicePage mount  → startDeviceProcess(deviceId, exePath)
 //   DevicePage unmount → stopProcess()
+//   OverviewPage mount → stopProcess() (safety net — kill orphaned processes)
 //   OverviewPage "Apply" → restartStart2stream() (re-reads config from disk)
 //   OverviewPage poll  → getProcessStatus() every 5s
+//
+// IMPORTANT: All mutating process operations (start, stop, restart) are
+// serialized through an async queue to prevent concurrent HTTP requests.
+// Without this, rapid navigation, HMR re-mounts, or overlapping cleanup
+// effects can fire two start/stop calls simultaneously, creating duplicate
+// Pixel Streaming WebRTC connections that freeze the stream.
 // ---------------------------------------------------------------------------
+
+// Async operation queue: ensures start/stop/restart never run concurrently.
+// Each call chains onto the previous promise, so they execute one-by-one.
+let processQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueProcessOp<T>(op: () => Promise<T>): Promise<T> {
+  const result = processQueue.then(op, op);
+  processQueue = result.catch(() => {});
+  return result;
+}
 
 export interface ProcessRestartResult {
   ok: boolean;
@@ -449,32 +466,34 @@ export interface ProcessRestartResult {
   error?: string;
 }
 
-export async function restartStart2stream(): Promise<ProcessRestartResult> {
-  const response = await fetchWithTimeout(
-    `${WRITER_BASE_URL}/process/restart`,
-    { method: 'POST' },
-    15_000, // process kill + spawn may take a few seconds
-  );
+export function restartStart2stream(): Promise<ProcessRestartResult> {
+  return enqueueProcessOp(async () => {
+    const response = await fetchWithTimeout(
+      `${WRITER_BASE_URL}/process/restart`,
+      { method: 'POST' },
+      15_000, // process kill + spawn may take a few seconds
+    );
 
-  const payload = await parseJsonSafely(response);
-  const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
-    string,
-    unknown
-  >;
+    const payload = await parseJsonSafely(response);
+    const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
+      string,
+      unknown
+    >;
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          typeof record.error === 'string' ? record.error : 'Failed to restart process',
+      };
+    }
+
     return {
-      ok: false,
-      error:
-        typeof record.error === 'string' ? record.error : 'Failed to restart process',
+      ok: true,
+      pid: typeof record.pid === 'number' ? record.pid : undefined,
+      deviceId: typeof record.deviceId === 'string' ? record.deviceId : undefined,
     };
-  }
-
-  return {
-    ok: true,
-    pid: typeof record.pid === 'number' ? record.pid : undefined,
-    deviceId: typeof record.deviceId === 'string' ? record.deviceId : undefined,
-  };
+  });
 }
 
 export interface ProcessStatusResult {
@@ -512,58 +531,68 @@ export interface ProcessStartResult {
  * Backend kills any active process first, then spawns a new one.
  * Returns the new PID and deviceId on success.
  * 15s timeout — process spawn can take a few seconds.
+ *
+ * Serialized via async queue — safe to call from multiple React effects.
  */
-export async function startDeviceProcess(
+export function startDeviceProcess(
   deviceId: StreamDeviceId,
   exePath: string,
 ): Promise<ProcessStartResult> {
-  const response = await fetchWithTimeout(
-    `${WRITER_BASE_URL}/process/start`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deviceId, exePath }),
-    },
-    15_000,
-  );
+  return enqueueProcessOp(async () => {
+    const response = await fetchWithTimeout(
+      `${WRITER_BASE_URL}/process/start`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, exePath }),
+      },
+      15_000,
+    );
 
-  const payload = await parseJsonSafely(response);
-  const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
-    string,
-    unknown
-  >;
+    const payload = await parseJsonSafely(response);
+    const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
+      string,
+      unknown
+    >;
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          typeof record.error === 'string' ? record.error : 'Failed to start process',
+      };
+    }
+
     return {
-      ok: false,
-      error: typeof record.error === 'string' ? record.error : 'Failed to start process',
+      ok: true,
+      deviceId: typeof record.deviceId === 'string' ? record.deviceId : undefined,
+      pid: typeof record.pid === 'number' ? record.pid : undefined,
     };
-  }
-
-  return {
-    ok: true,
-    deviceId: typeof record.deviceId === 'string' ? record.deviceId : undefined,
-    pid: typeof record.pid === 'number' ? record.pid : undefined,
-  };
+  });
 }
 
-/** Stop the currently running process */
-export async function stopProcess(): Promise<{ ok: boolean; stoppedDeviceId?: string }> {
-  const response = await fetchWithTimeout(
-    `${WRITER_BASE_URL}/process/stop`,
-    { method: 'POST' },
-    10_000,
-  );
+/**
+ * Stop the currently running process.
+ * Serialized via async queue — safe to call from cleanup effects.
+ */
+export function stopProcess(): Promise<{ ok: boolean; stoppedDeviceId?: string }> {
+  return enqueueProcessOp(async () => {
+    const response = await fetchWithTimeout(
+      `${WRITER_BASE_URL}/process/stop`,
+      { method: 'POST' },
+      10_000,
+    );
 
-  const payload = await parseJsonSafely(response);
-  const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
-    string,
-    unknown
-  >;
+    const payload = await parseJsonSafely(response);
+    const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
+      string,
+      unknown
+    >;
 
-  return {
-    ok: response.ok,
-    stoppedDeviceId:
-      typeof record.stoppedDeviceId === 'string' ? record.stoppedDeviceId : undefined,
-  };
+    return {
+      ok: response.ok,
+      stoppedDeviceId:
+        typeof record.stoppedDeviceId === 'string' ? record.stoppedDeviceId : undefined,
+    };
+  });
 }

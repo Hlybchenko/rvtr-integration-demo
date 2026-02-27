@@ -178,7 +178,12 @@ export function OverviewPage() {
   const streamAllGood = STREAM_DEVICES.every((d) => {
     const sid = d.id as StreamDeviceId;
     const v = valuesByDevice[d.id];
-    return v.trim().length > 0 && isValidUrl(v) && exeStates[sid].saved && !exeStates[sid].error;
+    return (
+      v.trim().length > 0 &&
+      isValidUrl(v) &&
+      exeStates[sid].saved &&
+      !exeStates[sid].error
+    );
   });
 
   /** Restart the currently running process (if any) */
@@ -320,7 +325,8 @@ export function OverviewPage() {
   // -- debounced auto-save for license file path --
   useEffect(() => {
     const trimmed = filePathInput.trim();
-    if (!trimmed || filePathSaved || isFilePathSaving || isBrowsing || filePathError) return;
+    if (!trimmed || filePathSaved || isFilePathSaving || isBrowsing || filePathError)
+      return;
 
     const timer = setTimeout(() => {
       void (async () => {
@@ -350,7 +356,14 @@ export function OverviewPage() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [filePathInput, filePathSaved, isFilePathSaving, isBrowsing, filePathError, setLicenseFilePath]);
+  }, [
+    filePathInput,
+    filePathSaved,
+    isFilePathSaving,
+    isBrowsing,
+    filePathError,
+    setLicenseFilePath,
+  ]);
 
   // -- handlers --
 
@@ -371,7 +384,7 @@ export function OverviewPage() {
         setVoiceAgent(pendingVoiceAgent);
         void triggerRestart();
       } else {
-        setApplyError('Agent updated, but the file content didn\'t change as expected');
+        setApplyError("Agent updated, but the file content didn't change as expected");
       }
     } catch (error) {
       setApplyError(error instanceof Error ? error.message : String(error));
@@ -392,7 +405,8 @@ export function OverviewPage() {
       // Backend error — no path returned but not cancelled
       if (!result.licenseFilePath) {
         setFilePathError(
-          result.errors.join('; ') || 'File picker failed. Try again or enter the path manually.',
+          result.errors.join('; ') ||
+            'File picker failed. Try again or enter the path manually.',
         );
         return;
       }
@@ -410,12 +424,16 @@ export function OverviewPage() {
           setFilePathSaved(true);
           setFilePathError(null);
         } else {
-          setFilePathError(saveResult.error ?? 'Could not save — file may be missing or locked');
+          setFilePathError(
+            saveResult.error ?? 'Could not save — file may be missing or locked',
+          );
           setFilePathSaved(false);
         }
       } else {
         // File picked but invalid
-        setFilePathError(result.errors.join('; ') || 'Selected file is not valid for this field');
+        setFilePathError(
+          result.errors.join('; ') || 'Selected file is not valid for this field',
+        );
         setFilePathSaved(false);
       }
     } catch (error) {
@@ -423,7 +441,9 @@ export function OverviewPage() {
       if (error instanceof DOMException && error.name === 'AbortError') {
         setFilePathError('Browse timed out — the local server may be unresponsive');
       } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setFilePathError('Cannot reach the local server. Is agent-option-writer running?');
+        setFilePathError(
+          'Cannot reach the local server. Is agent-option-writer running?',
+        );
       } else {
         setFilePathError(msg);
       }
@@ -487,7 +507,9 @@ export function OverviewPage() {
 
         if (!result.exePath) {
           updateExeState(deviceId, {
-            error: result.errors.join('; ') || 'File picker failed. Try again or enter the path manually.',
+            error:
+              result.errors.join('; ') ||
+              'File picker failed. Try again or enter the path manually.',
             browsing: false,
           });
           return;
@@ -515,7 +537,8 @@ export function OverviewPage() {
           }
         } else {
           updateExeState(deviceId, {
-            error: result.errors.join('; ') || 'Selected file is not valid for this field',
+            error:
+              result.errors.join('; ') || 'Selected file is not valid for this field',
             saved: false,
             browsing: false,
           });
@@ -564,197 +587,194 @@ export function OverviewPage() {
       <div className={styles.form}>
         {/* ── Left column: Voice Agent + Widget ── */}
         <div className={styles.column}>
-        {/* ── Voice Agent (must be configured first) ── */}
-        <section
-          className={`${styles.settingsBlock} ${
-            filePathError || (isFileConfigured && hasPendingAgentChange)
-              ? styles.settingsBlockError
-              : isFileConfigured && !hasPendingAgentChange
-                ? styles.settingsBlockValid
-                : ''
-          }`}
-        >
-          <h2 className={styles.settingsBlockTitle}>Voice Agent</h2>
-
-          {/* File path input */}
-          <div className={styles.field}>
-            <div className={styles.fieldHeader}>
-              <label className={styles.label} htmlFor="license-file-path">
-                License file path
-              </label>
-              {filePathSaved && !filePathError && (
-                <span className={`${styles.badge} ${styles.badgeValid}`}>
-                  ✓ Configured
-                </span>
-              )}
-              {filePathError && (
-                <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                  ✗ Invalid
-                </span>
-              )}
-            </div>
-
-            <div className={styles.filePathRow}>
-              <input
-                id="license-file-path"
-                className={`${styles.input} ${filePathError ? styles.inputError : ''}`}
-                type="text"
-                placeholder={
-                  IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'
-                }
-                value={filePathInput}
-                onChange={(e) => {
-                  setFilePathInput(e.target.value);
-                  setFilePathSaved(false);
-                  setFilePathError(null);
-                }}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                className={styles.filePathAction}
-                onClick={() => {
-                  void handleBrowse();
-                }}
-                disabled={isBrowsing || isFilePathSaving}
-              >
-                {isBrowsing ? 'Browsing...' : 'Browse'}
-              </button>
-            </div>
-
-            <div className={styles.filePathValidation}>
-              {filePathError && (
-                <span className={styles.filePathValidationError}>{filePathError}</span>
-              )}
-              {filePathResolvedPath && !filePathError && (
-                <span className={styles.filePathResolvedPath}>
-                  {filePathResolvedPath}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Voice agent selector */}
-          <div className={styles.fieldHeader}>
-            <label className={styles.label}>Agent provider</label>
-            {isFileConfigured && !hasPendingAgentChange && voiceAgent && (
-              <span className={`${styles.badge} ${styles.badgeValid}`}>
-                ✓ Applied
-              </span>
-            )}
-            {isFileConfigured && hasPendingAgentChange && (
-              <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                ● Unsaved
-              </span>
-            )}
-          </div>
-
-          <div
-            className={`${styles.radioGroup} ${!isFileConfigured ? styles.radioGroupDisabled : ''}`}
-            role="radiogroup"
-            aria-label="Voice agent"
+          {/* ── Voice Agent (must be configured first) ── */}
+          <section
+            className={`${styles.settingsBlock} ${
+              filePathError || (isFileConfigured && hasPendingAgentChange)
+                ? styles.settingsBlockError
+                : isFileConfigured && !hasPendingAgentChange
+                  ? styles.settingsBlockValid
+                  : ''
+            }`}
           >
-            <label className={styles.radioOption}>
-              <input
-                type="radio"
-                name="voice-agent"
-                value="elevenlabs"
-                checked={pendingVoiceAgent === 'elevenlabs'}
-                onChange={() => setPendingVoiceAgent('elevenlabs')}
-                disabled={!isFileConfigured || isApplying}
-              />
-              <span>ElevenLabs</span>
-            </label>
+            <h2 className={styles.settingsBlockTitle}>Voice Agent</h2>
 
-            <label className={styles.radioOption}>
-              <input
-                type="radio"
-                name="voice-agent"
-                value="gemini-live"
-                checked={pendingVoiceAgent === 'gemini-live'}
-                onChange={() => setPendingVoiceAgent('gemini-live')}
-                disabled={!isFileConfigured || isApplying}
-              />
-              <span>Gemini Live</span>
-            </label>
-
-          </div>
-
-          <button
-            type="button"
-            className={styles.applyButton}
-            onClick={() => {
-              void handleApplyAgent();
-            }}
-            disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
-          >
-            {isApplying ? 'Applying...' : 'Apply'}
-          </button>
-
-          {applyError && <p className={styles.filePathValidationError}>{applyError}</p>}
-        </section>
-
-        {/* ── Widget: Phone + Laptop (URL-only) ── */}
-        <section
-          className={`${styles.settingsBlock} ${
-            widgetHasError
-              ? styles.settingsBlockError
-              : widgetAllGood
-                ? styles.settingsBlockValid
-                : ''
-          }`}
-        >
-          <h2 className={styles.settingsBlockTitle}>Widget</h2>
-
-          {WIDGET_DEVICES.map((field) => {
-            const urlValue = valuesByDevice[field.id];
-            const hasUrl = urlValue.trim().length > 0;
-            const urlValid = !hasUrl || isValidUrl(urlValue);
-            const hasError = hasUrl && !urlValid;
-            const allGood = hasUrl && urlValid;
-
-            return (
-              <div
-                key={field.id}
-                className={`${styles.deviceCard} ${
-                  hasError
-                    ? styles.deviceCardError
-                    : allGood
-                      ? styles.deviceCardValid
-                      : ''
-                }`}
-              >
-                <h3 className={styles.deviceCardTitle}>{field.label}</h3>
-
-                <div className={styles.field}>
-                  <div className={styles.fieldHeader}>
-                    <label className={styles.label} htmlFor={`${field.id}-url`}>
-                      URL
-                    </label>
-                    {hasUrl && (
-                      <span
-                        className={`${styles.badge} ${urlValid ? styles.badgeValid : styles.badgeInvalid}`}
-                      >
-                        {urlValid ? '✓ Valid' : '✗ Invalid URL'}
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    id={`${field.id}-url`}
-                    className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
-                    type="url"
-                    placeholder={field.placeholder}
-                    value={urlValue}
-                    onChange={(e) => setDeviceUrl(field.id, e.target.value)}
-                    spellCheck={false}
-                    autoComplete="url"
-                  />
-                </div>
+            {/* File path input */}
+            <div className={styles.field}>
+              <div className={styles.fieldHeader}>
+                <label className={styles.label} htmlFor="license-file-path">
+                  License file path
+                </label>
+                {filePathSaved && !filePathError && (
+                  <span className={`${styles.badge} ${styles.badgeValid}`}>
+                    ✓ Configured
+                  </span>
+                )}
+                {filePathError && (
+                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>
+                    ✗ Invalid
+                  </span>
+                )}
               </div>
-            );
-          })}
-        </section>
+
+              <div className={styles.filePathRow}>
+                <input
+                  id="license-file-path"
+                  className={`${styles.input} ${filePathError ? styles.inputError : ''}`}
+                  type="text"
+                  placeholder={
+                    IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'
+                  }
+                  value={filePathInput}
+                  onChange={(e) => {
+                    setFilePathInput(e.target.value);
+                    setFilePathSaved(false);
+                    setFilePathError(null);
+                  }}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className={styles.filePathAction}
+                  onClick={() => {
+                    void handleBrowse();
+                  }}
+                  disabled={isBrowsing || isFilePathSaving}
+                >
+                  {isBrowsing ? 'Browsing...' : 'Browse'}
+                </button>
+              </div>
+
+              <div className={styles.filePathValidation}>
+                {filePathError && (
+                  <span className={styles.filePathValidationError}>{filePathError}</span>
+                )}
+                {filePathResolvedPath && !filePathError && (
+                  <span className={styles.filePathResolvedPath}>
+                    {filePathResolvedPath}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Voice agent selector */}
+            <div className={styles.fieldHeader}>
+              <label className={styles.label}>Agent provider</label>
+              {isFileConfigured && !hasPendingAgentChange && voiceAgent && (
+                <span className={`${styles.badge} ${styles.badgeValid}`}>✓ Applied</span>
+              )}
+              {isFileConfigured && hasPendingAgentChange && (
+                <span className={`${styles.badge} ${styles.badgeInvalid}`}>
+                  ● Unsaved
+                </span>
+              )}
+            </div>
+
+            <div
+              className={`${styles.radioGroup} ${!isFileConfigured ? styles.radioGroupDisabled : ''}`}
+              role="radiogroup"
+              aria-label="Voice agent"
+            >
+              <label className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="voice-agent"
+                  value="elevenlabs"
+                  checked={pendingVoiceAgent === 'elevenlabs'}
+                  onChange={() => setPendingVoiceAgent('elevenlabs')}
+                  disabled={!isFileConfigured || isApplying}
+                />
+                <span>ElevenLabs</span>
+              </label>
+
+              <label className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="voice-agent"
+                  value="gemini-live"
+                  checked={pendingVoiceAgent === 'gemini-live'}
+                  onChange={() => setPendingVoiceAgent('gemini-live')}
+                  disabled={!isFileConfigured || isApplying}
+                />
+                <span>Gemini Live</span>
+              </label>
+            </div>
+
+            <button
+              type="button"
+              className={styles.applyButton}
+              onClick={() => {
+                void handleApplyAgent();
+              }}
+              disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
+            >
+              {isApplying ? 'Applying...' : 'Apply'}
+            </button>
+
+            {applyError && <p className={styles.filePathValidationError}>{applyError}</p>}
+          </section>
+
+          {/* ── Widget: Phone + Laptop (URL-only) ── */}
+          <section
+            className={`${styles.settingsBlock} ${
+              widgetHasError
+                ? styles.settingsBlockError
+                : widgetAllGood
+                  ? styles.settingsBlockValid
+                  : ''
+            }`}
+          >
+            <h2 className={styles.settingsBlockTitle}>Widget</h2>
+
+            {WIDGET_DEVICES.map((field) => {
+              const urlValue = valuesByDevice[field.id];
+              const hasUrl = urlValue.trim().length > 0;
+              const urlValid = !hasUrl || isValidUrl(urlValue);
+              const hasError = hasUrl && !urlValid;
+              const allGood = hasUrl && urlValid;
+
+              return (
+                <div
+                  key={field.id}
+                  className={`${styles.deviceCard} ${
+                    hasError
+                      ? styles.deviceCardError
+                      : allGood
+                        ? styles.deviceCardValid
+                        : ''
+                  }`}
+                >
+                  <h3 className={styles.deviceCardTitle}>{field.label}</h3>
+
+                  <div className={styles.field}>
+                    <div className={styles.fieldHeader}>
+                      <label className={styles.label} htmlFor={`${field.id}-url`}>
+                        URL
+                      </label>
+                      {hasUrl && (
+                        <span
+                          className={`${styles.badge} ${urlValid ? styles.badgeValid : styles.badgeInvalid}`}
+                        >
+                          {urlValid ? '✓ Valid' : '✗ Invalid URL'}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      id={`${field.id}-url`}
+                      className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
+                      type="url"
+                      placeholder={field.placeholder}
+                      value={urlValue}
+                      onChange={(e) => setDeviceUrl(field.id, e.target.value)}
+                      spellCheck={false}
+                      autoComplete="url"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </section>
         </div>
 
         {/* ── Right column: Streaming ── */}
@@ -778,8 +798,7 @@ export function OverviewPage() {
               const urlValid = !hasUrl || isValidUrl(urlValue);
 
               const hasError = (hasUrl && !urlValid) || !!exeSt.error;
-              const allGood =
-                hasUrl && urlValid && exeSt.saved && !exeSt.error;
+              const allGood = hasUrl && urlValid && exeSt.saved && !exeSt.error;
 
               return (
                 <div
@@ -823,10 +842,7 @@ export function OverviewPage() {
                   {/* Executable */}
                   <div className={styles.field}>
                     <div className={styles.fieldHeader}>
-                      <label
-                        className={styles.label}
-                        htmlFor={`exe-path-${streamId}`}
-                      >
+                      <label className={styles.label} htmlFor={`exe-path-${streamId}`}>
                         Executable
                       </label>
                       {exeSt.saved && !exeSt.error && (

@@ -318,7 +318,10 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                   {isEmbedBlocked ? (
                     <div className={`${styles.emptyScreen} ${styles.embedBlockedScreen}`}>
                       <span className={styles.emptyIcon}>⛔</span>
-                      <span>This URL blocks embedding. Try a different URL or check the server's CSP headers.</span>
+                      <span>
+                        This URL blocks embedding. Try a different URL or check the
+                        server's CSP headers.
+                      </span>
                     </div>
                   ) : null}
                 </>

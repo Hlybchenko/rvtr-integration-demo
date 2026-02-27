@@ -103,9 +103,7 @@
     transparent 100%
   );
   --glass-blur: 18px;
-  --glass-shadow:
-    0 2px 12px rgba(20, 27, 45, 0.06),
-    0 1px 3px rgba(20, 27, 45, 0.04);
+  --glass-shadow: 0 2px 12px rgba(20, 27, 45, 0.06), 0 1px 3px rgba(20, 27, 45, 0.04);
 
   /* Nested card (inside glass panels) */
   --card-nested-bg: rgba(20, 27, 45, 0.03);

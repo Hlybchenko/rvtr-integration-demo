@@ -51,8 +51,6 @@ export function DevicePage() {
 
   // Track whether a process was started so the blocker knows if stop is needed.
   const processActiveRef = useRef(false);
-  // Holds the pending stop promise so the next start can await it.
-  const pendingStopRef = useRef<Promise<unknown> | null>(null);
 
   useEffect(() => {
     if (!streamDeviceId || !exePath) {
@@ -63,15 +61,9 @@ export function DevicePage() {
     let cancelled = false;
 
     const launch = async () => {
-      // Always stop any running process first and await completion.
-      // This prevents the race where start fires before stop finishes,
-      // resulting in two concurrent processes / Pixel Streaming sessions.
-      if (pendingStopRef.current) {
-        await pendingStopRef.current;
-        pendingStopRef.current = null;
-      }
-      // Also do an unconditional stop to kill orphaned processes
-      // (e.g., left over from a previous HMR cycle or browser refresh).
+      // Stop any running process first. This call is serialized via the
+      // async queue in voiceAgentWriter — if the previous effect cleanup
+      // already queued a stop, this one waits for it before executing.
       try {
         await stopProcess();
       } catch {
@@ -95,11 +87,14 @@ export function DevicePage() {
     // or the component unmounts without going through the navigation blocker.
     // The blocker sets processActiveRef.current = false before proceed(),
     // so this cleanup will be a no-op after a blocker-managed stop.
+    //
+    // stopProcess() is fire-and-forget here (can't await in cleanup), but the
+    // async queue guarantees the next launch() won't start until this finishes.
     return () => {
       cancelled = true;
       if (!processActiveRef.current) return;
       processActiveRef.current = false;
-      pendingStopRef.current = stopProcess().catch(() => {});
+      void stopProcess().catch(() => {});
     };
   }, [streamDeviceId, exePath]);
 
@@ -112,10 +107,15 @@ export function DevicePage() {
   // torn down before the next page mounts.
   // ---------------------------------------------------------------------------
   const shouldBlock = useCallback(
-    ({ currentLocation, nextLocation }: { currentLocation: { pathname: string }; nextLocation: { pathname: string } }) => {
+    ({
+      currentLocation,
+      nextLocation,
+    }: {
+      currentLocation: { pathname: string };
+      nextLocation: { pathname: string };
+    }) => {
       return (
-        processActiveRef.current &&
-        currentLocation.pathname !== nextLocation.pathname
+        processActiveRef.current && currentLocation.pathname !== nextLocation.pathname
       );
     },
     [],
