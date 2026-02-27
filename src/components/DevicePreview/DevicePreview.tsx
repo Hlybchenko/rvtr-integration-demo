@@ -115,18 +115,12 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       return () => ro.disconnect();
     }, [computeSize]);
 
-    // Reset loading state when url or device changes.
-    // Blank out the old iframe first to sever any active connections
-    // (WebSocket, media streams) before the new src is applied.
+    // Reset loading / blocked state when url or device changes.
+    // The browser automatically closes the old page context (WebSocket,
+    // WebRTC, etc.) when React updates the iframe `src` prop, so there's
+    // no need to imperatively blank it — doing so desynchronises React's
+    // virtual DOM from the real DOM and can kill Pixel Streaming sessions.
     useEffect(() => {
-      const iframe = iframeRef.current;
-      if (iframe) {
-        try {
-          iframe.src = 'about:blank';
-        } catch {
-          // cross-origin — safe to ignore
-        }
-      }
       setLoading(!!url);
       setIsEmbedBlocked(false);
     }, [url, device.id, device.frameSrc]);
@@ -260,24 +254,11 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       };
     }, []);
 
-    // Keep focus on the iframe – re-focus whenever it loses it
-    useEffect(() => {
-      const iframe = iframeRef.current;
-      if (!iframe || !url || isEmbedBlocked) return;
-
-      const refocus = () => {
-        requestAnimationFrame(() => {
-          try {
-            iframeRef.current?.focus();
-          } catch {
-            // cross-origin – safe to ignore
-          }
-        });
-      };
-
-      iframe.addEventListener('blur', refocus);
-      return () => iframe.removeEventListener('blur', refocus);
-    }, [url, isEmbedBlocked, isGeometryReady]);
+    // NOTE: aggressive blur→refocus was removed because it creates a
+    // focus cycling loop during idle / tab-switch that interferes with
+    // Pixel Streaming's WebRTC heartbeat and can freeze the stream.
+    // The iframe is focused once on load (handleIframeLoad) and on
+    // mousedown (handleScreenMouseDown), which is sufficient.
 
     return (
       <div className={styles.container} ref={containerRef}>
