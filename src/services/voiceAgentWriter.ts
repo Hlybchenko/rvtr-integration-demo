@@ -221,6 +221,8 @@ export async function writeVoiceAgentToFile(voiceAgent: VoiceAgent): Promise<voi
 
 export interface VoiceAgentSyncResult {
   matched: boolean;
+  /** Whether a write to the license file actually happened (agent was changed) */
+  written: boolean;
   fileVoiceAgent: VoiceAgent | null;
   filePath?: string;
   configured: boolean;
@@ -234,6 +236,7 @@ export async function ensureVoiceAgentFileSync(
   if (!current.configured) {
     return {
       matched: false,
+      written: false,
       fileVoiceAgent: null,
       filePath: current.filePath,
       configured: false,
@@ -243,6 +246,7 @@ export async function ensureVoiceAgentFileSync(
   if (current.voiceAgent === selectedVoiceAgent) {
     return {
       matched: true,
+      written: false,
       fileVoiceAgent: current.voiceAgent,
       filePath: current.filePath,
       configured: true,
@@ -254,6 +258,7 @@ export async function ensureVoiceAgentFileSync(
 
   return {
     matched: updated.voiceAgent === selectedVoiceAgent,
+    written: true,
     fileVoiceAgent: updated.voiceAgent,
     filePath: updated.filePath,
     configured: updated.configured,

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
 import { useSettingsStore, type DeviceId, type VoiceAgent } from '@/stores/settingsStore';
 import {
-  ensureVoiceAgentFileSync,
   forceRewriteVoiceAgentFile,
+  readVoiceAgentFromFile,
   setWriterFilePath,
   getWriterConfig,
   browseForFile,
@@ -14,8 +14,6 @@ import {
   getProcessStatus,
 } from '@/services/voiceAgentWriter';
 import styles from './OverviewPage.module.css';
-
-const VOICE_AGENT_SYNC_DEBOUNCE_MS = 180;
 
 const IS_WINDOWS =
   typeof navigator !== 'undefined' &&
@@ -91,15 +89,11 @@ export function OverviewPage() {
   const [isRestarting, setIsRestarting] = useState(false);
   const [restartMessage, setRestartMessage] = useState<string | null>(null);
 
-  // -- voice agent sync state --
-  const [fileVoiceAgent, setFileVoiceAgent] = useState<VoiceAgent | null>(null);
-  const [isAgentSyncMatched, setIsAgentSyncMatched] = useState<boolean | null>(null);
-  const [agentSyncError, setAgentSyncError] = useState<string | null>(null);
-  const [isForceRewriting, setIsForceRewriting] = useState(false);
-  const [forceRewriteMessage, setForceRewriteMessage] = useState<string | null>(null);
-  const lastSyncedVoiceAgentRef = useRef<VoiceAgent | null>(null);
-  const syncDebounceTimerRef = useRef<number | null>(null);
-  const syncRequestIdRef = useRef(0);
+  // -- voice agent state --
+  /** Local voice agent selection — only written to file on Apply */
+  const [pendingVoiceAgent, setPendingVoiceAgent] = useState<VoiceAgent>(voiceAgent);
+  const [isApplying, setIsApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   const valuesByDevice: Record<DeviceId, string> = {
     phone: phoneUrl,
@@ -213,46 +207,47 @@ export function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // -- sync voice agent when selection changes --
+  // -- sync pendingVoiceAgent from file on mount (read-only, no restart) --
   useEffect(() => {
     if (!isFileConfigured) return;
-    if (lastSyncedVoiceAgentRef.current === voiceAgent) return;
-    lastSyncedVoiceAgentRef.current = voiceAgent;
+    let cancelled = false;
 
-    if (syncDebounceTimerRef.current) {
-      window.clearTimeout(syncDebounceTimerRef.current);
-      syncDebounceTimerRef.current = null;
-    }
+    void readVoiceAgentFromFile()
+      .then((result) => {
+        if (cancelled || !result.configured || !result.voiceAgent) return;
+        // Align pending selection with what's actually in the file
+        setPendingVoiceAgent(result.voiceAgent);
+      })
+      .catch(() => { /* ignore — non-critical */ });
 
-    const requestId = syncRequestIdRef.current + 1;
-    syncRequestIdRef.current = requestId;
+    return () => { cancelled = true; };
+  }, [isFileConfigured]);
 
-    syncDebounceTimerRef.current = window.setTimeout(() => {
-      void ensureVoiceAgentFileSync(voiceAgent)
-        .then((result) => {
-          if (syncRequestIdRef.current !== requestId) return;
-          setFileVoiceAgent(result.fileVoiceAgent);
-          setIsAgentSyncMatched(result.matched);
-          setAgentSyncError(null);
-          // Auto-restart start2stream after successful write
-          if (result.matched) void triggerRestart();
-        })
-        .catch((error) => {
-          if (syncRequestIdRef.current !== requestId) return;
-          setIsAgentSyncMatched(false);
-          setAgentSyncError(error instanceof Error ? error.message : String(error));
-        });
-    }, VOICE_AGENT_SYNC_DEBOUNCE_MS);
-
-    return () => {
-      if (syncDebounceTimerRef.current) {
-        window.clearTimeout(syncDebounceTimerRef.current);
-        syncDebounceTimerRef.current = null;
-      }
-    };
-  }, [voiceAgent, isFileConfigured, triggerRestart]);
+  const hasPendingAgentChange = pendingVoiceAgent !== voiceAgent;
 
   // -- handlers --
+
+  /** Apply the selected voice agent: force write to file, update store, restart */
+  const handleApplyAgent = useCallback(async () => {
+    if (!isFileConfigured) return;
+    setIsApplying(true);
+    setApplyError(null);
+
+    try {
+      const result = await forceRewriteVoiceAgentFile(pendingVoiceAgent);
+
+      if (result.matched) {
+        setVoiceAgent(pendingVoiceAgent);
+        void triggerRestart();
+      } else {
+        setApplyError('Write completed, but file value still differs');
+      }
+    } catch (error) {
+      setApplyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsApplying(false);
+    }
+  }, [pendingVoiceAgent, isFileConfigured, setVoiceAgent, triggerRestart]);
 
   const handleSaveFilePath = useCallback(async () => {
     const trimmed = filePathInput.trim();
@@ -279,12 +274,6 @@ export function OverviewPage() {
       setFilePathResolvedPath(result.resolvedPath ?? null);
       setFilePathSaved(true);
       setFilePathError(null);
-
-      // Reset sync state so it re-checks with the new file
-      lastSyncedVoiceAgentRef.current = null;
-      setIsAgentSyncMatched(null);
-      setFileVoiceAgent(null);
-      setAgentSyncError(null);
     } catch (error) {
       setFilePathError(error instanceof Error ? error.message : String(error));
       setFilePathSaved(false);
@@ -320,12 +309,6 @@ export function OverviewPage() {
           setFilePathResolvedPath(saveResult.resolvedPath ?? result.licenseFilePath);
           setFilePathSaved(true);
           setFilePathError(null);
-
-          // Reset sync state
-          lastSyncedVoiceAgentRef.current = null;
-          setIsAgentSyncMatched(null);
-          setFileVoiceAgent(null);
-          setAgentSyncError(null);
         } else {
           setFilePathError(saveResult.error ?? 'Failed to save');
           setFilePathSaved(false);
@@ -348,29 +331,6 @@ export function OverviewPage() {
       setIsBrowsing(false);
     }
   }, [setLicenseFilePath]);
-
-  const handleForceRewrite = async () => {
-    setIsForceRewriting(true);
-    setForceRewriteMessage(null);
-
-    try {
-      const result = await forceRewriteVoiceAgentFile(voiceAgent);
-      setFileVoiceAgent(result.fileVoiceAgent);
-      setIsAgentSyncMatched(result.matched);
-      setAgentSyncError(null);
-      setForceRewriteMessage(
-        result.matched ? null : 'Rewrite completed, but values still differ',
-      );
-      // Auto-restart start2stream after successful force rewrite
-      if (result.matched) void triggerRestart();
-    } catch (error) {
-      setIsAgentSyncMatched(false);
-      setAgentSyncError(error instanceof Error ? error.message : String(error));
-      setForceRewriteMessage('Force rewrite failed');
-    } finally {
-      setIsForceRewriting(false);
-    }
-  };
 
   const handleSaveExePath = useCallback(async () => {
     const trimmed = exePathInput.trim();
@@ -454,16 +414,6 @@ export function OverviewPage() {
   const handleManualRestart = useCallback(() => {
     void triggerRestart();
   }, [triggerRestart]);
-
-  const syncReasonTooltip = agentSyncError
-    ? `Writer error: ${agentSyncError}`
-    : isAgentSyncMatched === null
-      ? 'Checking current value in target file'
-      : fileVoiceAgent === null
-        ? 'No valid voice_agent value found in target file'
-        : isAgentSyncMatched
-          ? `File contains "${fileVoiceAgent}" and matches selected option`
-          : `Mismatch: selected "${voiceAgent}", file contains "${fileVoiceAgent}"`;
 
   return (
     <div className={styles.settings}>
@@ -552,32 +502,6 @@ export function OverviewPage() {
           {/* Voice agent selector */}
           <div className={styles.fieldHeader}>
             <label className={styles.label}>Agent provider</label>
-            {isFileConfigured && (
-              <>
-                {isAgentSyncMatched === null ? (
-                  <span
-                    className={`${styles.voiceAgentStatusIcon} ${styles.voiceAgentStatusNeutral}`}
-                    title={syncReasonTooltip}
-                  >
-                    ...
-                  </span>
-                ) : isAgentSyncMatched ? (
-                  <span
-                    className={`${styles.voiceAgentStatusIcon} ${styles.voiceAgentStatusOk}`}
-                    title={syncReasonTooltip}
-                  >
-                    ✓
-                  </span>
-                ) : (
-                  <span
-                    className={`${styles.voiceAgentStatusIcon} ${styles.voiceAgentStatusError}`}
-                    title={syncReasonTooltip}
-                  >
-                    ✗
-                  </span>
-                )}
-              </>
-            )}
           </div>
 
           <div
@@ -590,9 +514,9 @@ export function OverviewPage() {
                 type="radio"
                 name="voice-agent"
                 value="elevenlabs"
-                checked={voiceAgent === 'elevenlabs'}
-                onChange={() => setVoiceAgent('elevenlabs')}
-                disabled={!isFileConfigured}
+                checked={pendingVoiceAgent === 'elevenlabs'}
+                onChange={() => setPendingVoiceAgent('elevenlabs')}
+                disabled={!isFileConfigured || isApplying}
               />
               <span>ElevenLabs</span>
             </label>
@@ -602,67 +526,25 @@ export function OverviewPage() {
                 type="radio"
                 name="voice-agent"
                 value="gemini-live"
-                checked={voiceAgent === 'gemini-live'}
-                onChange={() => setVoiceAgent('gemini-live')}
-                disabled={!isFileConfigured}
+                checked={pendingVoiceAgent === 'gemini-live'}
+                onChange={() => setPendingVoiceAgent('gemini-live')}
+                disabled={!isFileConfigured || isApplying}
               />
               <span>Gemini Live</span>
             </label>
+
+            <button
+              type="button"
+              className={styles.filePathAction}
+              onClick={() => { void handleApplyAgent(); }}
+              disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
+            >
+              {isApplying ? 'Applying...' : 'Apply'}
+            </button>
           </div>
 
-          {/* Sync status (only when file is configured) */}
-          {isFileConfigured && (
-            <div className={styles.syncStatusBox}>
-              <div className={styles.syncStatusRow}>
-                <span className={styles.syncStatusLabel}>Sync status</span>
-                {isAgentSyncMatched === null ? (
-                  <span className={styles.syncStatusNeutral}>Checking...</span>
-                ) : isAgentSyncMatched ? (
-                  <span className={styles.syncStatusOk}>
-                    ✓ File matches selected option
-                  </span>
-                ) : (
-                  <span className={styles.syncStatusError}>
-                    ✗ File differs from selected option
-                  </span>
-                )}
-              </div>
-
-              <div className={styles.syncStatusRow}>
-                <span className={styles.syncStatusLabel}>Selected</span>
-                <span className={styles.syncStatusValue}>{voiceAgent}</span>
-              </div>
-
-              <div className={styles.syncStatusRow}>
-                <span className={styles.syncStatusLabel}>Target file</span>
-                <span
-                  className={`${styles.syncStatusValue} ${styles.syncStatusValueWithTooltip}`}
-                  title={syncReasonTooltip}
-                >
-                  {fileVoiceAgent ?? 'not set'}
-                </span>
-              </div>
-
-              <div className={styles.syncActions}>
-                <button
-                  type="button"
-                  className={styles.forceRewriteButton}
-                  onClick={() => {
-                    void handleForceRewrite();
-                  }}
-                  disabled={isForceRewriting}
-                >
-                  {isForceRewriting ? 'Rewriting...' : 'Force rewrite'}
-                </button>
-                {forceRewriteMessage ? (
-                  <span className={styles.syncActionMessage}>{forceRewriteMessage}</span>
-                ) : null}
-              </div>
-
-              {agentSyncError ? (
-                <p className={styles.syncStatusErrorText}>{agentSyncError}</p>
-              ) : null}
-            </div>
+          {applyError && (
+            <p className={styles.filePathValidationError}>{applyError}</p>
           )}
         </section>
 
@@ -769,7 +651,7 @@ export function OverviewPage() {
               </div>
 
               <p className={styles.hint}>
-                Process auto-restarts when voice agent is changed.
+                Process restarts automatically when voice agent is applied.
               </p>
             </div>
           )}
