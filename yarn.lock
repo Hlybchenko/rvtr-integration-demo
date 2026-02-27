@@ -453,10 +453,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@esbuild/linux-arm64@npm:0.27.3, @esbuild/linux-arm64@npm:^0.27.3":
+"@esbuild/linux-arm64@npm:0.27.3":
   version: 0.27.3
   resolution: "@esbuild/linux-arm64@npm:0.27.3"
-  checksum: 10c0/7241a7d77a04b6b2935ea8c4d0f5bebb27f16c6795d2b3c8d8efadc4ae50e42568041fd6103a7a213277009350c2adaa2331b73eb2e91ca7a7a8d6c6b8751679
   conditions: os=linux & cpu=arm64
   languageName: node
   linkType: hard
@@ -977,10 +976,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@rollup/rollup-linux-arm64-gnu@npm:4.59.0, @rollup/rollup-linux-arm64-gnu@npm:^4.59.0":
+"@rollup/rollup-linux-arm64-gnu@npm:4.59.0":
   version: 4.59.0
   resolution: "@rollup/rollup-linux-arm64-gnu@npm:4.59.0"
-  checksum: 10c0/028f9caabc51ee7256c6f6ba1af54eef0cb7360bc845d49bea12fd59ca0dedc357aa847922f190b9c3be268373703e808d5135c50293b45f04dd912bc5a862da
   conditions: os=linux & cpu=arm64 & libc=glibc
   languageName: node
   linkType: hard
@@ -3322,9 +3320,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "rvtr-integration-demo@workspace:."
   dependencies:
-    "@esbuild/linux-arm64": "npm:^0.27.3"
     "@eslint/js": "npm:^9.17.0"
-    "@rollup/rollup-linux-arm64-gnu": "npm:^4.59.0"
     "@tanstack/react-query": "npm:^5.62.0"
     "@testing-library/dom": "npm:^10.4.1"
     "@testing-library/jest-dom": "npm:^6.9.1"
