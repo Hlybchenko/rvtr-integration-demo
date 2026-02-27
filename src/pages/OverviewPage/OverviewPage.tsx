@@ -127,9 +127,10 @@ export function OverviewPage() {
     [],
   );
 
-  // Keep a ref to always have fresh exeStates in callbacks without
-  // adding exeStates to dependency arrays (avoids re-creating handlers
-  // on every keystroke).
+  // Ref mirror of exeStates — allows callbacks (handleSaveExePath) to read
+  // the latest input value without listing exeStates in their deps array.
+  // Without this, every keystroke would re-create all save handlers because
+  // exeStates changes on every input change.
   const exeStatesRef = useRef(exeStates);
   exeStatesRef.current = exeStates;
 
@@ -181,7 +182,19 @@ export function OverviewPage() {
     });
   }, []);
 
-  // -- init: sync file path from backend config, then auto-validate --
+  // ---------------------------------------------------------------------------
+  // Init effect: synchronize frontend state with the backend on mount.
+  //
+  // Data flow:
+  //   1. GET /config → read license path + device exe paths from backend
+  //   2. Compare with Zustand store → backend wins if it has a value
+  //   3. If Zustand has a value but backend doesn't → push to backend (POST)
+  //   4. GET /process/status → show current process state in UI
+  //
+  // The `cancelled` flag prevents state updates after unmount, which would
+  // happen if the user navigates away before the async chain completes.
+  // Each `await` is followed by `if (cancelled) return` to bail out early.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
 
@@ -191,7 +204,8 @@ export function OverviewPage() {
         if (cancelled) return;
         setBackendError(null);
 
-        // Backend has a saved path — use it as source of truth
+        // Backend is the source of truth for paths; fall back to Zustand
+        // only if the backend has no value yet (first-time setup).
         const backendLicensePath = cfg.licenseFilePath || '';
         const effectiveLicensePath = backendLicensePath || licenseFilePath;
 
@@ -207,7 +221,7 @@ export function OverviewPage() {
               setLicenseFilePath(result.resolvedPath ?? licenseFilePath);
               setFilePathSaved(true);
             } else {
-              setFilePathError(result.error ?? 'Saved path is no longer valid');
+              setFilePathError(result.error ?? 'Previously saved path no longer exists');
               setFilePathSaved(false);
             }
           } else {
@@ -238,7 +252,7 @@ export function OverviewPage() {
                 setDeviceExePathStore(did, result.resolvedPath ?? storePath);
               } else {
                 updateExeState(did, {
-                  error: result.error ?? 'Saved exe path is no longer valid',
+                  error: result.error ?? 'Previously saved path no longer exists',
                   saved: false,
                 });
               }
@@ -262,7 +276,7 @@ export function OverviewPage() {
       } catch (err) {
         if (cancelled) return;
         setBackendError(
-          `Backend unavailable (http://127.0.0.1:3210). Is agent-option-writer running? ${err instanceof Error ? err.message : ''}`,
+          `Local server unavailable. Start agent-option-writer and reload the page.${err instanceof Error ? ` (${err.message})` : ''}`,
         );
       }
     })();
@@ -273,7 +287,12 @@ export function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // -- poll process status while any exe is configured --
+  // -- Poll process status (health-check) --
+  // Why: the process can crash or be killed externally. Without polling,
+  // the UI would show "Running" forever after the initial status check.
+  // The poll only runs when at least one device has a configured exe path.
+  // On error (backend down), we silently keep the last known status to
+  // avoid UI flicker during brief network hiccups.
   useEffect(() => {
     if (!hasAnyExeConfigured) return;
 
@@ -285,7 +304,7 @@ export function OverviewPage() {
           setProcessDeviceId(status.deviceId);
         })
         .catch(() => {
-          // Backend unreachable — don't clear status to avoid flicker
+          // Backend unreachable — keep last known status to avoid flicker
         });
     }, POLL_INTERVAL_MS);
 
@@ -316,7 +335,11 @@ export function OverviewPage() {
 
   // -- handlers --
 
-  /** Apply the selected voice agent: force write to file, update store, restart */
+  /**
+   * Apply voice agent: write selected value to the license file on disk,
+   * update the Zustand store, and restart the running process so it picks
+   * up the new agent. Restart is fire-and-forget (no await) to keep UI snappy.
+   */
   const handleApplyAgent = useCallback(async () => {
     if (!isFileConfigured) return;
     setIsApplying(true);
@@ -329,7 +352,7 @@ export function OverviewPage() {
         setVoiceAgent(pendingVoiceAgent);
         void triggerRestart();
       } else {
-        setApplyError('Write completed, but file value still differs');
+        setApplyError('Agent updated, but the file content didn\'t change as expected');
       }
     } catch (error) {
       setApplyError(error instanceof Error ? error.message : String(error));
@@ -353,7 +376,7 @@ export function OverviewPage() {
       const result = await setWriterFilePath(trimmed);
 
       if (!result.ok) {
-        setFilePathError(result.error ?? 'Validation failed');
+        setFilePathError(result.error ?? 'Path not found or not readable');
         setFilePathResolvedPath(result.resolvedPath ?? null);
         setFilePathSaved(false);
         return;
@@ -383,7 +406,7 @@ export function OverviewPage() {
       // Backend error — no path returned but not cancelled
       if (!result.licenseFilePath) {
         setFilePathError(
-          result.errors.join('; ') || 'File picker failed — check backend logs',
+          result.errors.join('; ') || 'File picker failed. Try again or enter the path manually.',
         );
         return;
       }
@@ -401,20 +424,20 @@ export function OverviewPage() {
           setFilePathSaved(true);
           setFilePathError(null);
         } else {
-          setFilePathError(saveResult.error ?? 'Failed to save');
+          setFilePathError(saveResult.error ?? 'Could not save — file may be missing or locked');
           setFilePathSaved(false);
         }
       } else {
         // File picked but invalid
-        setFilePathError(result.errors.join('; ') || 'Selected file is not valid');
+        setFilePathError(result.errors.join('; ') || 'Selected file is not valid for this field');
         setFilePathSaved(false);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (error instanceof DOMException && error.name === 'AbortError') {
-        setFilePathError('Browse timed out — backend may be unresponsive');
+        setFilePathError('Browse timed out — the local server may be unresponsive');
       } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setFilePathError('Cannot reach backend (http://127.0.0.1:3210). Is it running?');
+        setFilePathError('Cannot reach the local server. Is agent-option-writer running?');
       } else {
         setFilePathError(msg);
       }
@@ -438,7 +461,7 @@ export function OverviewPage() {
 
         if (!result.ok) {
           updateExeState(deviceId, {
-            error: result.error ?? 'Validation failed',
+            error: result.error ?? 'Path not found or not readable',
             resolvedPath: result.resolvedPath ?? null,
             saved: false,
             saving: false,
@@ -478,7 +501,7 @@ export function OverviewPage() {
 
         if (!result.exePath) {
           updateExeState(deviceId, {
-            error: result.errors.join('; ') || 'File picker failed — check backend logs',
+            error: result.errors.join('; ') || 'File picker failed. Try again or enter the path manually.',
             browsing: false,
           });
           return;
@@ -499,14 +522,14 @@ export function OverviewPage() {
             });
           } else {
             updateExeState(deviceId, {
-              error: saveResult.error ?? 'Failed to save',
+              error: saveResult.error ?? 'Could not save — file may be missing or locked',
               saved: false,
               browsing: false,
             });
           }
         } else {
           updateExeState(deviceId, {
-            error: result.errors.join('; ') || 'Selected file is not valid',
+            error: result.errors.join('; ') || 'Selected file is not valid for this field',
             saved: false,
             browsing: false,
           });
@@ -515,9 +538,9 @@ export function OverviewPage() {
         const msg = error instanceof Error ? error.message : String(error);
         let errorMsg = msg;
         if (error instanceof DOMException && error.name === 'AbortError') {
-          errorMsg = 'Browse timed out — backend may be unresponsive';
+          errorMsg = 'Browse timed out — the local server may be unresponsive';
         } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-          errorMsg = 'Cannot reach backend (http://127.0.0.1:3210). Is it running?';
+          errorMsg = 'Cannot reach the local server. Is agent-option-writer running?';
         }
         updateExeState(deviceId, { error: errorMsg, browsing: false });
       }
@@ -581,7 +604,7 @@ export function OverviewPage() {
                 }}
                 disabled={isBrowsing || isFilePathSaving}
               >
-                {isBrowsing ? 'Picking...' : 'Browse'}
+                {isBrowsing ? 'Browsing...' : 'Browse'}
               </button>
               <button
                 type="button"
@@ -707,7 +730,7 @@ export function OverviewPage() {
                     }}
                     disabled={st.browsing || st.saving}
                   >
-                    {st.browsing ? 'Picking...' : 'Browse'}
+                    {st.browsing ? 'Browsing...' : 'Browse'}
                   </button>
                   <button
                     type="button"
@@ -739,7 +762,7 @@ export function OverviewPage() {
               <div className={styles.syncStatusRow}>
                 <span className={styles.syncStatusLabel}>Process</span>
                 {processRunning === null ? (
-                  <span className={styles.syncStatusNeutral}>Unknown</span>
+                  <span className={styles.syncStatusNeutral}>Checking…</span>
                 ) : processRunning ? (
                   <span className={styles.syncStatusOk}>
                     Running{processDeviceId ? ` (${processDeviceId})` : ''}
@@ -750,7 +773,7 @@ export function OverviewPage() {
               </div>
 
               <p className={styles.hint}>
-                Processes start automatically when navigating to a device page.
+                Processes start when you open a device page.
               </p>
             </div>
           )}

@@ -32,17 +32,31 @@ export function DevicePage() {
     };
   }, []);
 
-  // -- Start/stop device process on mount/unmount --
-  // Select only the exe path for the current device to avoid unnecessary
-  // effect re-runs when other device paths change in the store.
+  // ---------------------------------------------------------------------------
+  // Process lifecycle: start on mount, stop on unmount
+  //
+  // Only stream devices (holobox, keba-kiosk, kiosk) need a native process.
+  // Non-stream devices (phone, laptop) skip this entirely.
+  //
+  // Granular selector: subscribe to THIS device's exePath only.
+  // Using the whole `deviceExePaths` object would re-trigger this effect
+  // whenever ANY device's path changes (e.g., user edits kiosk path while
+  // viewing holobox page → unnecessary process restart).
+  // ---------------------------------------------------------------------------
   const streamDeviceId = deviceId && isStreamDevice(deviceId) ? deviceId : null;
   const exePath = useSettingsStore((s) =>
     streamDeviceId ? s.deviceExePaths[streamDeviceId] : '',
   );
 
-  // Guard against race conditions when rapidly switching between devices.
-  // Without this, cleanup (stop) from device A can fire AFTER start for device B,
-  // killing the just-started process.
+  // Sequence counter: prevents race conditions during rapid device switches.
+  //
+  // Problem without it:
+  //   1. Navigate to /device/holobox → start(holobox), seq=1
+  //   2. Quickly navigate to /device/kiosk → start(kiosk), seq=2
+  //   3. Cleanup for holobox fires → stop() → kills kiosk's process!
+  //
+  // Solution: each effect captures its own `seq`. On cleanup, only stop
+  // if processSeqRef.current still matches — meaning no newer start happened.
   const processSeqRef = useRef(0);
 
   useEffect(() => {
@@ -50,14 +64,10 @@ export function DevicePage() {
 
     const seq = ++processSeqRef.current;
 
-    // Start the process for this device
     void startDeviceProcess(streamDeviceId, exePath).catch((err) => {
       console.error(`[DevicePage] Failed to start process for ${streamDeviceId}:`, err);
     });
 
-    // Stop when leaving this device page — but only if no newer start has been issued.
-    // Reading processSeqRef.current at cleanup time is intentional: we need the
-    // latest value to detect whether a newer effect has already started a new process.
     return () => {
       // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: seq guard reads latest ref value
       if (processSeqRef.current !== seq) return;
@@ -99,7 +109,7 @@ export function DevicePage() {
           <span>
             Device "<code>{deviceId}</code>" not found.
           </span>
-          <Link to="/">← Back to overview</Link>
+          <Link to="/">← Back to Settings</Link>
         </div>
       </div>
     );

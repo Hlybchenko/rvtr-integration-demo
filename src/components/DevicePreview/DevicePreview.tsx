@@ -305,14 +305,14 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                   {isEmbedBlocked ? (
                     <div className={`${styles.emptyScreen} ${styles.embedBlockedScreen}`}>
                       <span className={styles.emptyIcon}>⛔</span>
-                      <span>This URL does not allow iframe embedding</span>
+                      <span>This URL blocks embedding. Try a different URL or check the server's CSP headers.</span>
                     </div>
                   ) : null}
                 </>
               ) : !url && isGeometryReady ? (
                 <div className={styles.emptyScreen}>
                   <span className={styles.emptyIcon}>🔗</span>
-                  <span>Enter a widget URL in Settings</span>
+                  <span>Set a device URL in Settings to see the preview</span>
                 </div>
               ) : null}
             </div>

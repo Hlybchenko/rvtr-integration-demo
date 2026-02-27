@@ -1,10 +1,34 @@
+/**
+ * API client for the agent-option-writer backend (Node.js, port 3210).
+ *
+ * Responsibilities:
+ *  - License file path CRUD (GET/POST /config, /config/browse, /config/validate)
+ *  - Per-device start2stream executable paths (POST /config/device-exe, /config/browse-exe)
+ *  - Voice agent read/write to the license file (GET/POST /voice-agent)
+ *  - Process lifecycle: start, stop, restart, status (POST/GET /process/*)
+ *
+ * All requests use fetchWithTimeout (5s default) to avoid hanging when backend is down.
+ * Browse endpoints use 120s timeout because they block on native OS file picker.
+ * Process start/restart use 15s timeout because spawn may take time.
+ *
+ * Error handling: every endpoint returns a typed result object with ok/error fields
+ * instead of throwing, so callers can show user-friendly messages without try/catch.
+ * Internal helpers (ensureOk, parseJsonSafely) handle malformed responses gracefully.
+ */
 import type { VoiceAgent, StreamDeviceId } from '@/stores/settingsStore';
 
+/** Backend runs on localhost — not configurable, hardcoded by agent-option-writer */
 const WRITER_BASE_URL = 'http://127.0.0.1:3210';
+/** Default timeout for API calls; short to surface connectivity issues fast */
 const FETCH_TIMEOUT_MS = 5_000;
 const VALID_AGENTS: VoiceAgent[] = ['elevenlabs', 'gemini-live'];
 
-/** Fetch wrapper with AbortController timeout */
+/**
+ * Fetch wrapper with AbortController timeout.
+ * Aborts the request if it exceeds timeoutMs — prevents UI from hanging
+ * when the backend process is down or unreachable.
+ * The timer is always cleaned up via .finally() to prevent leaks.
+ */
 function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -22,6 +46,7 @@ function isVoiceAgent(value: unknown): value is VoiceAgent {
   return typeof value === 'string' && (VALID_AGENTS as string[]).includes(value);
 }
 
+/** Normalize legacy agent names from the backend/file. Returns null for unknown values. */
 function normalizeVoiceAgent(value: unknown): VoiceAgent | null {
   if (value === 'google-native-audio') return 'gemini-live';
   return isVoiceAgent(value) ? value : null;
@@ -50,7 +75,8 @@ async function ensureOk(response: Response, fallbackMessage: string): Promise<un
 }
 
 // ---------------------------------------------------------------------------
-// Config (license file path)
+// Config — license file path + per-device exe paths
+// Called by OverviewPage on mount to sync frontend state with backend.
 // ---------------------------------------------------------------------------
 
 export interface WriterConfig {
@@ -58,6 +84,11 @@ export interface WriterConfig {
   deviceExePaths: Record<StreamDeviceId, string>;
 }
 
+/**
+ * GET /config — read current backend configuration.
+ * Handles legacy `start2streamPath` (single path for all devices, pre-v8)
+ * by falling back to it when per-device `deviceExePaths` are missing.
+ */
 export async function getWriterConfig(): Promise<WriterConfig> {
   const response = await fetchWithTimeout(`${WRITER_BASE_URL}/config`);
   const payload = await ensureOk(response, 'Failed to read writer config');
@@ -81,6 +112,11 @@ export async function getWriterConfig(): Promise<WriterConfig> {
   };
 }
 
+/**
+ * POST /config — set license file path on the backend.
+ * Backend validates the file exists and is readable.
+ * Returns resolvedPath (absolute path after symlink resolution).
+ */
 export async function setWriterFilePath(
   licenseFilePath: string,
 ): Promise<{ ok: boolean; error?: string; resolvedPath?: string }> {
@@ -192,15 +228,26 @@ export async function validateFilePath(
 
 // ---------------------------------------------------------------------------
 // Voice agent read / write
+//
+// The voice agent setting lives inside the license file on disk (not just in
+// the Zustand store). This means changing it requires a file write via the
+// backend. The read/write cycle is:
+//   1. readVoiceAgentFromFile()  — GET /voice-agent  (what's on disk?)
+//   2. writeVoiceAgentToFile()   — POST /voice-agent (overwrite disk value)
+//   3. ensureVoiceAgentFileSync() — compare store vs file, write if different
+//   4. forceRewriteVoiceAgentFile() — always write, used by "Apply" button
 // ---------------------------------------------------------------------------
 
 export interface VoiceAgentFileState {
   voiceAgent: VoiceAgent | null;
+  /** Absolute path to the file where the agent value was read from */
   filePath?: string;
+  /** Whether a valid license file is configured on the backend */
   configured: boolean;
   error?: string;
 }
 
+/** GET /voice-agent — read the current voice agent from the license file on disk */
 export async function readVoiceAgentFromFile(): Promise<VoiceAgentFileState> {
   const response = await fetchWithTimeout(`${WRITER_BASE_URL}/voice-agent`);
   const payload = await ensureOk(response, 'Failed to read voice agent option file');
@@ -239,6 +286,11 @@ export interface VoiceAgentSyncResult {
   configured: boolean;
 }
 
+/**
+ * Compare the store's selected agent with the file on disk.
+ * If they differ and the file is configured, write the store's value to disk.
+ * Used during init to ensure store and file are consistent.
+ */
 export async function ensureVoiceAgentFileSync(
   selectedVoiceAgent: VoiceAgent,
 ): Promise<VoiceAgentSyncResult> {
@@ -296,9 +348,12 @@ export async function forceRewriteVoiceAgentFile(
 }
 
 // ---------------------------------------------------------------------------
-// Start2stream executable path
+// Start2stream executable path — per-device .bat/.sh files
+// Each stream device (holobox, keba-kiosk, kiosk) can have its own executable.
+// Paths are validated by the backend (file must exist and be executable).
 // ---------------------------------------------------------------------------
 
+/** POST /config/device-exe — save and validate an exe path for a specific device */
 export async function setDeviceExePath(
   deviceId: StreamDeviceId,
   exePath: string,
@@ -375,7 +430,16 @@ export async function browseForExe(): Promise<BrowseExeResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Process restart
+// Process management — start2stream lifecycle
+//
+// Only ONE process runs at a time. Starting a new device kills the previous one.
+// The backend tracks the active process (pid + deviceId).
+//
+// Lifecycle:
+//   DevicePage mount  → startDeviceProcess(deviceId, exePath)
+//   DevicePage unmount → stopProcess()
+//   OverviewPage "Apply" → restartStart2stream() (re-reads config from disk)
+//   OverviewPage poll  → getProcessStatus() every 5s
 // ---------------------------------------------------------------------------
 
 export interface ProcessRestartResult {
@@ -433,7 +497,7 @@ export async function getProcessStatus(): Promise<ProcessStatusResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Device process lifecycle
+// Device process lifecycle — called by DevicePage
 // ---------------------------------------------------------------------------
 
 export interface ProcessStartResult {
@@ -443,7 +507,12 @@ export interface ProcessStartResult {
   error?: string;
 }
 
-/** Start a process for a specific device (kills any active process first) */
+/**
+ * POST /process/start — start a process for a specific device.
+ * Backend kills any active process first, then spawns a new one.
+ * Returns the new PID and deviceId on success.
+ * 15s timeout — process spawn can take a few seconds.
+ */
 export async function startDeviceProcess(
   deviceId: StreamDeviceId,
   exePath: string,

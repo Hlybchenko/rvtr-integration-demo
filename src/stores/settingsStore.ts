@@ -64,7 +64,16 @@ interface SettingsState {
   getDeviceUrl: (deviceId: DeviceId) => string;
 }
 
-/** @internal Exported for unit tests only */
+/**
+ * Zustand persist migration: handles all schema versions from v1 to v8.
+ *
+ * Key migrations:
+ *   v1 → v2:  widgetUrl split into phoneUrl + laptopUrl
+ *   v7 → v8:  single start2streamPath → per-device deviceExePaths
+ *   any:      google-native-audio → gemini-live (voice agent rename)
+ *
+ * @internal Exported for unit tests only
+ */
 export function migrateSettingsState(
   persistedState: unknown,
   version: number,

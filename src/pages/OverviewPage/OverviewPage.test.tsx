@@ -66,7 +66,7 @@ describe('OverviewPage init effect', () => {
     render(<OverviewPage />);
 
     await vi.waitFor(() => {
-      expect(screen.getByText(/Backend unavailable/)).toBeInTheDocument();
+      expect(screen.getByText(/Local server unavailable/)).toBeInTheDocument();
     });
   });
 
