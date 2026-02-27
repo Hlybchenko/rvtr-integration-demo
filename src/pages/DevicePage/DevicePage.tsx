@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { devicesMap } from '@/config/devices';
-import { useResolvedUrl } from '@/stores/settingsStore';
+import { useResolvedUrl, useSettingsStore, isStreamDevice } from '@/stores/settingsStore';
+import { startDeviceProcess, stopProcess } from '@/services/voiceAgentWriter';
 import { DevicePreview } from '@/components/DevicePreview/DevicePreview';
 import styles from './DevicePage.module.css';
 
@@ -30,6 +31,28 @@ export function DevicePage() {
       if (finishEnterTimerRef.current) window.clearTimeout(finishEnterTimerRef.current);
     };
   }, []);
+
+  // -- Start/stop device process on mount/unmount --
+  const deviceExePaths = useSettingsStore((s) => s.deviceExePaths);
+
+  useEffect(() => {
+    if (!deviceId || !isStreamDevice(deviceId)) return;
+
+    const exePath = deviceExePaths[deviceId];
+    if (!exePath) return;
+
+    // Start the process for this device
+    void startDeviceProcess(deviceId, exePath).catch((err) => {
+      console.error(`[DevicePage] Failed to start process for ${deviceId}:`, err);
+    });
+
+    // Stop when leaving this device page
+    return () => {
+      void stopProcess().catch((err) => {
+        console.error(`[DevicePage] Failed to stop process:`, err);
+      });
+    };
+  }, [deviceId, deviceExePaths]);
 
   useEffect(() => {
     if (!deviceId || !targetDevice || displayedDeviceId === deviceId) return;

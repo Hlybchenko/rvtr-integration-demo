@@ -1,4 +1,4 @@
-import type { VoiceAgent } from '@/stores/settingsStore';
+import type { VoiceAgent, StreamDeviceId } from '@/stores/settingsStore';
 
 const WRITER_BASE_URL = 'http://127.0.0.1:3210';
 const FETCH_TIMEOUT_MS = 5_000;
@@ -55,7 +55,7 @@ async function ensureOk(response: Response, fallbackMessage: string): Promise<un
 
 export interface WriterConfig {
   licenseFilePath: string;
-  start2streamPath: string;
+  deviceExePaths: Record<StreamDeviceId, string>;
 }
 
 export async function getWriterConfig(): Promise<WriterConfig> {
@@ -64,12 +64,20 @@ export async function getWriterConfig(): Promise<WriterConfig> {
   const record = payload && typeof payload === 'object' ? payload : null;
 
   const r = record as Record<string, unknown> | null;
+  const rawPaths = r?.deviceExePaths as Record<string, string> | undefined;
+  // Legacy fallback: if backend still has old single start2streamPath
+  const legacyPath = r && typeof r.start2streamPath === 'string' ? r.start2streamPath : '';
+
+  const deviceExePaths: Record<StreamDeviceId, string> = {
+    holobox: rawPaths?.holobox ?? legacyPath,
+    'keba-kiosk': rawPaths?.['keba-kiosk'] ?? legacyPath,
+    kiosk: rawPaths?.kiosk ?? legacyPath,
+  };
 
   return {
     licenseFilePath:
       r && typeof r.licenseFilePath === 'string' ? r.licenseFilePath : '',
-    start2streamPath:
-      r && typeof r.start2streamPath === 'string' ? r.start2streamPath : '',
+    deviceExePaths,
   };
 }
 
@@ -288,13 +296,14 @@ export async function forceRewriteVoiceAgentFile(
 // Start2stream executable path
 // ---------------------------------------------------------------------------
 
-export async function setStart2streamPath(
-  start2streamPath: string,
+export async function setDeviceExePath(
+  deviceId: StreamDeviceId,
+  exePath: string,
 ): Promise<{ ok: boolean; error?: string; resolvedPath?: string }> {
-  const response = await fetchWithTimeout(`${WRITER_BASE_URL}/config/start2stream`, {
+  const response = await fetchWithTimeout(`${WRITER_BASE_URL}/config/device-exe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ start2streamPath }),
+    body: JSON.stringify({ deviceId, exePath }),
   });
 
   const payload = await parseJsonSafely(response);
@@ -314,13 +323,13 @@ export async function setStart2streamPath(
   return {
     ok: true,
     resolvedPath:
-      typeof record.start2streamPath === 'string' ? record.start2streamPath : undefined,
+      typeof record.exePath === 'string' ? record.exePath : undefined,
   };
 }
 
 export interface BrowseExeResult {
   cancelled: boolean;
-  start2streamPath: string | null;
+  exePath: string | null;
   valid: boolean;
   errors: string[];
 }
@@ -344,17 +353,17 @@ export async function browseForExe(): Promise<BrowseExeResult> {
 
   if (!response.ok) {
     const msg = typeof record.error === 'string' ? record.error : `Browse failed (HTTP ${response.status})`;
-    return { cancelled: false, start2streamPath: null, valid: false, errors: [msg] };
+    return { cancelled: false, exePath: null, valid: false, errors: [msg] };
   }
 
   if (record.cancelled === true) {
-    return { cancelled: true, start2streamPath: null, valid: false, errors: [] };
+    return { cancelled: true, exePath: null, valid: false, errors: [] };
   }
 
   return {
     cancelled: false,
-    start2streamPath:
-      typeof record.start2streamPath === 'string' ? record.start2streamPath : null,
+    exePath:
+      typeof record.exePath === 'string' ? record.exePath : null,
     valid: record.valid === true,
     errors: Array.isArray(record.errors)
       ? (record.errors as unknown[]).map(String)
@@ -401,6 +410,7 @@ export async function restartStart2stream(): Promise<ProcessRestartResult> {
 export interface ProcessStatusResult {
   running: boolean;
   pid: number | null;
+  deviceId: string | null;
 }
 
 export async function getProcessStatus(): Promise<ProcessStatusResult> {
@@ -412,5 +422,73 @@ export async function getProcessStatus(): Promise<ProcessStatusResult> {
   return {
     running: r?.running === true,
     pid: typeof r?.pid === 'number' ? r.pid : null,
+    deviceId: typeof r?.deviceId === 'string' ? r.deviceId : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Device process lifecycle
+// ---------------------------------------------------------------------------
+
+export interface ProcessStartResult {
+  ok: boolean;
+  deviceId?: string;
+  pid?: number;
+  error?: string;
+}
+
+/** Start a process for a specific device (kills any active process first) */
+export async function startDeviceProcess(
+  deviceId: StreamDeviceId,
+  exePath: string,
+): Promise<ProcessStartResult> {
+  const response = await fetchWithTimeout(
+    `${WRITER_BASE_URL}/process/start`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId, exePath }),
+    },
+    15_000,
+  );
+
+  const payload = await parseJsonSafely(response);
+  const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
+    string,
+    unknown
+  >;
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: typeof record.error === 'string' ? record.error : 'Failed to start process',
+    };
+  }
+
+  return {
+    ok: true,
+    deviceId: typeof record.deviceId === 'string' ? record.deviceId : undefined,
+    pid: typeof record.pid === 'number' ? record.pid : undefined,
+  };
+}
+
+/** Stop the currently running process */
+export async function stopProcess(): Promise<{ ok: boolean; stoppedDeviceId?: string }> {
+  const response = await fetchWithTimeout(
+    `${WRITER_BASE_URL}/process/stop`,
+    { method: 'POST' },
+    10_000,
+  );
+
+  const payload = await parseJsonSafely(response);
+  const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
+    string,
+    unknown
+  >;
+
+  return {
+    ok: response.ok,
+    stoppedDeviceId:
+      typeof record.stoppedDeviceId === 'string' ? record.stoppedDeviceId : undefined,
   };
 }

@@ -52,8 +52,16 @@ async function writeConfig(cfg) {
 // Process management (start2stream)
 // ---------------------------------------------------------------------------
 
-/** @type {import('node:child_process').ChildProcess | null} */
-let start2streamProcess = null;
+/**
+ * Active process state — only one device process runs at a time.
+ * @type {{ deviceId: string, child: import('node:child_process').ChildProcess } | null}
+ */
+let activeProcess = null;
+
+/** Legacy alias used by some internal references */
+function getStart2streamProcess() {
+  return activeProcess?.child ?? null;
+}
 
 /** Full path to taskkill.exe — avoids ENOENT if PATH is incomplete */
 function getTaskkillPath() {
@@ -62,22 +70,25 @@ function getTaskkillPath() {
 }
 
 /**
- * Kill the current start2stream process if running.
+ * Kill the active process if running.
  * Cross-platform: SIGTERM on POSIX, taskkill on Windows.
+ * Returns the deviceId of the killed process, or null.
  */
-async function killStart2stream() {
-  if (!start2streamProcess || start2streamProcess.exitCode !== null) {
-    start2streamProcess = null;
-    return;
+async function killActiveProcess() {
+  const proc = activeProcess;
+  if (!proc || proc.child.exitCode !== null) {
+    activeProcess = null;
+    return null;
   }
 
-  const pid = start2streamProcess.pid;
-  if (!pid) return;
+  const pid = proc.child.pid;
+  const killedDeviceId = proc.deviceId;
+  if (!pid) { activeProcess = null; return null; }
 
   const isWin = os.platform() === 'win32';
   const taskkill = isWin ? getTaskkillPath() : null;
 
-  return new Promise((resolve) => {
+  await new Promise((resolve) => {
     let done = false;
     const finish = () => { if (!done) { done = true; clearTimeout(forceTimer); resolve(); } };
 
@@ -85,18 +96,17 @@ async function killStart2stream() {
       try {
         if (isWin) {
           execFile(taskkill, ['/F', '/T', '/PID', String(pid)], finish);
-          return; // let callback call finish
+          return;
         }
         process.kill(pid, 'SIGKILL');
       } catch { /* already dead */ }
       finish();
     }, 3000);
 
-    start2streamProcess.once('exit', finish);
+    proc.child.once('exit', finish);
 
     try {
       if (isWin) {
-        // /T = kill entire process tree (shell:true spawns cmd.exe → exe)
         execFile(taskkill, ['/T', '/PID', String(pid)], () => {});
       } else {
         process.kill(pid, 'SIGTERM');
@@ -105,6 +115,9 @@ async function killStart2stream() {
       finish();
     }
   });
+
+  activeProcess = null;
+  return killedDeviceId;
 }
 
 /**
@@ -146,7 +159,7 @@ function spawnStart2stream(exePath) {
 
     child.on('exit', (code, signal) => {
       if (code !== 0) console.error(`[start2stream] exited code=${code} signal=${signal}`);
-      if (start2streamProcess === child) start2streamProcess = null;
+      if (activeProcess?.child === child) activeProcess = null;
     });
 
     // If no error event fires within 500ms, consider the process started.
@@ -627,6 +640,8 @@ const server = createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         licenseFilePath: cfg?.licenseFilePath ?? '',
+        deviceExePaths: cfg?.deviceExePaths ?? {},
+        // Legacy fallback
         start2streamPath: cfg?.start2streamPath ?? '',
       });
       return;
@@ -792,14 +807,19 @@ const server = createServer(async (req, res) => {
     }
 
     // -----------------------------------------------------------------------
-    // POST /config/start2stream — set start2stream executable path
+    // POST /config/device-exe — set executable path for a specific device
     // -----------------------------------------------------------------------
-    if (req.method === 'POST' && req.url === '/config/start2stream') {
+    if (req.method === 'POST' && req.url === '/config/device-exe') {
       const body = await readBody(req);
-      const exePath = typeof body.start2streamPath === 'string' ? body.start2streamPath.trim() : '';
+      const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
+      const exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
 
+      if (!deviceId) {
+        sendJson(res, 400, { ok: false, error: 'deviceId is required' });
+        return;
+      }
       if (!exePath) {
-        sendJson(res, 400, { ok: false, error: 'start2streamPath is required' });
+        sendJson(res, 400, { ok: false, error: 'exePath is required' });
         return;
       }
 
@@ -816,12 +836,31 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      await writeConfig({ start2streamPath: resolved });
+      // Store per-device path under deviceExePaths.<deviceId>
+      const cfg = (await readConfig()) || {};
+      const deviceExePaths = cfg.deviceExePaths || {};
+      deviceExePaths[deviceId] = resolved;
+      await writeConfig({ deviceExePaths });
 
       sendJson(res, 200, {
         ok: true,
-        start2streamPath: resolved,
+        deviceId,
+        exePath: resolved,
         validation,
+      });
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /config/device-exe — get all per-device executable paths
+    // -----------------------------------------------------------------------
+    if (req.method === 'GET' && req.url === '/config/device-exe') {
+      const cfg = await readConfig();
+      sendJson(res, 200, {
+        ok: true,
+        deviceExePaths: cfg?.deviceExePaths ?? {},
+        // Legacy fallback
+        start2streamPath: cfg?.start2streamPath ?? '',
       });
       return;
     }
@@ -831,10 +870,14 @@ const server = createServer(async (req, res) => {
     // -----------------------------------------------------------------------
     if (req.method === 'POST' && req.url === '/config/validate-exe') {
       const body = await readBody(req);
-      const exePath = typeof body.start2streamPath === 'string' ? body.start2streamPath.trim() : '';
+      const exePath = typeof body.exePath === 'string'
+        ? body.exePath.trim()
+        : typeof body.start2streamPath === 'string'
+          ? body.start2streamPath.trim()
+          : '';
 
       if (!exePath) {
-        sendJson(res, 400, { ok: false, error: 'start2streamPath is required' });
+        sendJson(res, 400, { ok: false, error: 'exePath is required' });
         return;
       }
 
@@ -853,7 +896,7 @@ const server = createServer(async (req, res) => {
         const filePath = await openNativeExePicker();
 
         if (!filePath) {
-          sendJson(res, 200, { ok: true, cancelled: true, start2streamPath: null });
+          sendJson(res, 200, { ok: true, cancelled: true, exePath: null });
           return;
         }
 
@@ -863,7 +906,7 @@ const server = createServer(async (req, res) => {
         sendJson(res, 200, {
           ok: true,
           cancelled: false,
-          start2streamPath: resolved,
+          exePath: resolved,
           ...validation,
         });
       } catch (error) {
@@ -876,22 +919,23 @@ const server = createServer(async (req, res) => {
     }
 
     // -----------------------------------------------------------------------
-    // POST /process/restart — kill + re-spawn start2stream
+    // POST /process/start — start process for a device (kills previous if any)
     // -----------------------------------------------------------------------
-    if (req.method === 'POST' && req.url === '/process/restart') {
-      const cfg = await readConfig();
-      const exePath = cfg?.start2streamPath;
+    if (req.method === 'POST' && req.url === '/process/start') {
+      const body = await readBody(req);
+      const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
+      const exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
 
-      if (!exePath) {
+      if (!deviceId || !exePath) {
         sendJson(res, 400, {
           ok: false,
-          error: 'No start2stream path configured. Set it via POST /config/start2stream first.',
+          error: 'deviceId and exePath are required',
         });
         return;
       }
 
-      // Validate the exe still exists
-      const validation = await validateExecutable(exePath);
+      const resolved = path.resolve(exePath);
+      const validation = await validateExecutable(resolved);
       if (!validation.valid) {
         sendJson(res, 400, {
           ok: false,
@@ -901,13 +945,84 @@ const server = createServer(async (req, res) => {
       }
 
       try {
-        await killStart2stream();
-        start2streamProcess = await spawnStart2stream(exePath);
+        await killActiveProcess();
+        const child = await spawnStart2stream(resolved);
+        activeProcess = { deviceId, child };
 
         sendJson(res, 200, {
           ok: true,
-          pid: start2streamProcess.pid,
-          exePath,
+          deviceId,
+          pid: child.pid,
+          exePath: resolved,
+        });
+      } catch (error) {
+        console.error(`[process/start] ${error instanceof Error ? error.message : error}`);
+        sendJson(res, 500, {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /process/stop — stop the currently running process
+    // -----------------------------------------------------------------------
+    if (req.method === 'POST' && req.url === '/process/stop') {
+      const killedDeviceId = await killActiveProcess();
+
+      sendJson(res, 200, {
+        ok: true,
+        stoppedDeviceId: killedDeviceId,
+      });
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /process/restart — kill + re-spawn for current or specified device
+    // -----------------------------------------------------------------------
+    if (req.method === 'POST' && req.url === '/process/restart') {
+      const body = await readBody(req);
+      // Can optionally pass deviceId + exePath; otherwise restarts active process
+      let deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
+      let exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
+
+      // If no deviceId given, restart whatever is currently running
+      if (!deviceId && activeProcess) {
+        deviceId = activeProcess.deviceId;
+        // Look up exe path from config
+        const cfg = await readConfig();
+        exePath = cfg?.deviceExePaths?.[deviceId] ?? cfg?.start2streamPath ?? '';
+      }
+
+      if (!exePath) {
+        sendJson(res, 400, {
+          ok: false,
+          error: 'No executable path available for restart',
+        });
+        return;
+      }
+
+      const resolved = path.resolve(exePath);
+      const validation = await validateExecutable(resolved);
+      if (!validation.valid) {
+        sendJson(res, 400, {
+          ok: false,
+          error: `Executable invalid: ${validation.errors.join('; ')}`,
+        });
+        return;
+      }
+
+      try {
+        await killActiveProcess();
+        const child = await spawnStart2stream(resolved);
+        activeProcess = { deviceId, child };
+
+        sendJson(res, 200, {
+          ok: true,
+          deviceId,
+          pid: child.pid,
+          exePath: resolved,
         });
       } catch (error) {
         console.error(`[process/restart] ${error instanceof Error ? error.message : error}`);
@@ -920,14 +1035,16 @@ const server = createServer(async (req, res) => {
     }
 
     // -----------------------------------------------------------------------
-    // GET /process/status — check start2stream process status
+    // GET /process/status — check active process status
     // -----------------------------------------------------------------------
     if (req.method === 'GET' && req.url === '/process/status') {
-      const running = start2streamProcess !== null && start2streamProcess.exitCode === null;
+      const child = getStart2streamProcess();
+      const running = child !== null && child.exitCode === null;
       sendJson(res, 200, {
         ok: true,
         running,
-        pid: running ? start2streamProcess.pid : null,
+        pid: running ? child.pid : null,
+        deviceId: running ? activeProcess?.deviceId ?? null : null,
       });
       return;
     }
@@ -950,7 +1067,7 @@ server.listen(PORT, '127.0.0.1', () => {
 });
 
 async function shutdown() {
-  await killStart2stream();
+  await killActiveProcess();
   server.close(() => process.exit(0));
   // Force exit if server.close hangs (e.g. browse request waiting for dialog)
   setTimeout(() => process.exit(1), 5_000).unref();

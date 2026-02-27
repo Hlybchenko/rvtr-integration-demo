@@ -5,7 +5,15 @@ const ENV_WIDGET_URL = import.meta.env.VITE_DEFAULT_WIDGET_URL || '';
 const ENV_HOLOBOX_URL = import.meta.env.VITE_DEFAULT_HOLOBOX_URL || '';
 
 export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox' | 'keba-kiosk';
+/** Device IDs that require a dedicated start2stream executable */
+export type StreamDeviceId = 'holobox' | 'keba-kiosk' | 'kiosk';
 export type VoiceAgent = 'elevenlabs' | 'gemini-live';
+
+export const STREAM_DEVICE_IDS: StreamDeviceId[] = ['holobox', 'keba-kiosk', 'kiosk'];
+
+export function isStreamDevice(id: string): id is StreamDeviceId {
+  return (STREAM_DEVICE_IDS as string[]).includes(id);
+}
 type LegacyVoiceAgent = VoiceAgent | 'google-native-audio';
 
 
@@ -44,13 +52,13 @@ interface SettingsState {
   voiceAgent: VoiceAgent;
   /** Absolute path to the license file on the host machine */
   licenseFilePath: string;
-  /** Absolute path to start2stream executable on the host machine */
-  start2streamPath: string;
+  /** Per-device executable paths for start2stream instances */
+  deviceExePaths: Record<StreamDeviceId, string>;
 
   setDeviceUrl: (deviceId: DeviceId, url: string) => void;
   setVoiceAgent: (agent: VoiceAgent) => void;
   setLicenseFilePath: (filePath: string) => void;
-  setStart2streamPath: (filePath: string) => void;
+  setDeviceExePath: (deviceId: StreamDeviceId, path: string) => void;
 
   /** Resolved URL for a device (user input → env fallback) */
   getDeviceUrl: (deviceId: DeviceId) => string;
@@ -66,7 +74,7 @@ export const useSettingsStore = create<SettingsState>()(
       kebaKioskUrl: '',
       voiceAgent: 'elevenlabs',
       licenseFilePath: '',
-      start2streamPath: '',
+      deviceExePaths: { holobox: '', 'keba-kiosk': '', kiosk: '' },
 
       setDeviceUrl: (deviceId, url) => {
         if (deviceId === 'phone') set({ phoneUrl: url });
@@ -80,7 +88,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setLicenseFilePath: (filePath) => set({ licenseFilePath: filePath }),
 
-      setStart2streamPath: (filePath) => set({ start2streamPath: filePath }),
+      setDeviceExePath: (deviceId, path) =>
+        set((state) => ({
+          deviceExePaths: { ...state.deviceExePaths, [deviceId]: path },
+        })),
 
       getDeviceUrl: (deviceId) => {
         const state = get();
@@ -100,7 +111,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'rvtr-settings',
-      version: 7,
+      version: 8,
       migrate: (persistedState, version) => {
         const state = persistedState as
           | {
@@ -112,9 +123,17 @@ export const useSettingsStore = create<SettingsState>()(
               kebaKioskUrl?: string;
               voiceAgent?: LegacyVoiceAgent;
               licenseFilePath?: string;
+              /** Legacy single exe path (versions <= 7) */
               start2streamPath?: string;
+              deviceExePaths?: Record<string, string>;
             }
           | undefined;
+
+        const defaultExePaths: Record<StreamDeviceId, string> = {
+          holobox: '',
+          'keba-kiosk': '',
+          kiosk: '',
+        };
 
         if (!state) {
           return {
@@ -125,9 +144,25 @@ export const useSettingsStore = create<SettingsState>()(
             kebaKioskUrl: '',
             voiceAgent: 'elevenlabs' as VoiceAgent,
             licenseFilePath: '',
-            start2streamPath: '',
+            deviceExePaths: defaultExePaths,
           };
         }
+
+        // Migrate legacy single start2streamPath → deviceExePaths (v7 → v8)
+        const migratedExePaths: Record<StreamDeviceId, string> =
+          state.deviceExePaths
+            ? {
+                holobox: state.deviceExePaths.holobox ?? '',
+                'keba-kiosk': state.deviceExePaths['keba-kiosk'] ?? '',
+                kiosk: state.deviceExePaths.kiosk ?? '',
+              }
+            : state.start2streamPath
+              ? {
+                  holobox: state.start2streamPath,
+                  'keba-kiosk': state.start2streamPath,
+                  kiosk: state.start2streamPath,
+                }
+              : defaultExePaths;
 
         if (version < 2) {
           const legacyWidgetUrl = state.widgetUrl ?? '';
@@ -141,7 +176,7 @@ export const useSettingsStore = create<SettingsState>()(
             kebaKioskUrl: state.kebaKioskUrl ?? '',
             voiceAgent: normalizeVoiceAgent(state.voiceAgent),
             licenseFilePath: state.licenseFilePath ?? '',
-            start2streamPath: state.start2streamPath ?? '',
+            deviceExePaths: migratedExePaths,
           };
         }
 
@@ -153,7 +188,7 @@ export const useSettingsStore = create<SettingsState>()(
           kebaKioskUrl: state.kebaKioskUrl ?? '',
           voiceAgent: normalizeVoiceAgent(state.voiceAgent),
           licenseFilePath: state.licenseFilePath ?? '',
-          start2streamPath: state.start2streamPath ?? '',
+          deviceExePaths: migratedExePaths,
         };
       },
     },

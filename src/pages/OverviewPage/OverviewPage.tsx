@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
-import { useSettingsStore, type DeviceId, type VoiceAgent } from '@/stores/settingsStore';
+import {
+  useSettingsStore,
+  type DeviceId,
+  type VoiceAgent,
+  type StreamDeviceId,
+  STREAM_DEVICE_IDS,
+} from '@/stores/settingsStore';
 import {
   forceRewriteVoiceAgentFile,
   readVoiceAgentFromFile,
   setWriterFilePath,
   getWriterConfig,
   browseForFile,
-  setStart2streamPath,
+  setDeviceExePath,
   browseForExe,
   restartStart2stream,
   getProcessStatus,
@@ -20,6 +26,12 @@ const IS_WINDOWS =
   (/win/i.test(navigator.userAgent) ||
     (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ===
       'Windows');
+
+const STREAM_DEVICE_LABELS: Record<StreamDeviceId, string> = {
+  holobox: 'Holobox',
+  'keba-kiosk': 'Keba Kiosk',
+  kiosk: 'Info Kiosk',
+};
 
 const DEVICE_FIELDS: Array<{
   id: DeviceId;
@@ -59,11 +71,11 @@ export function OverviewPage() {
   const kebaKioskUrl = useSettingsStore((s) => s.kebaKioskUrl);
   const voiceAgent = useSettingsStore((s) => s.voiceAgent);
   const licenseFilePath = useSettingsStore((s) => s.licenseFilePath);
-  const start2streamPath = useSettingsStore((s) => s.start2streamPath);
+  const deviceExePaths = useSettingsStore((s) => s.deviceExePaths);
   const setDeviceUrl = useSettingsStore((s) => s.setDeviceUrl);
   const setVoiceAgent = useSettingsStore((s) => s.setVoiceAgent);
   const setLicenseFilePath = useSettingsStore((s) => s.setLicenseFilePath);
-  const setStart2streamPathStore = useSettingsStore((s) => s.setStart2streamPath);
+  const setDeviceExePathStore = useSettingsStore((s) => s.setDeviceExePath);
 
   // -- backend connectivity --
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -76,18 +88,44 @@ export function OverviewPage() {
   const [filePathError, setFilePathError] = useState<string | null>(null);
   const [filePathResolvedPath, setFilePathResolvedPath] = useState<string | null>(null);
 
-  // -- start2stream path state --
-  const [exePathInput, setExePathInput] = useState(start2streamPath);
-  const [isExePathSaving, setIsExePathSaving] = useState(false);
-  const [isExeBrowsing, setIsExeBrowsing] = useState(false);
-  const [exePathSaved, setExePathSaved] = useState(!!start2streamPath);
-  const [exePathError, setExePathError] = useState<string | null>(null);
-  const [exePathResolvedPath, setExePathResolvedPath] = useState<string | null>(null);
+  // -- per-device exe path state --
+  type ExeFieldState = {
+    input: string;
+    saving: boolean;
+    browsing: boolean;
+    saved: boolean;
+    error: string | null;
+    resolvedPath: string | null;
+  };
+
+  const initExeState = (path: string): ExeFieldState => ({
+    input: path,
+    saving: false,
+    browsing: false,
+    saved: !!path,
+    error: null,
+    resolvedPath: path || null,
+  });
+
+  const [exeStates, setExeStates] = useState<Record<StreamDeviceId, ExeFieldState>>(() => ({
+    holobox: initExeState(deviceExePaths.holobox),
+    'keba-kiosk': initExeState(deviceExePaths['keba-kiosk']),
+    kiosk: initExeState(deviceExePaths.kiosk),
+  }));
+
+  const updateExeState = useCallback(
+    (deviceId: StreamDeviceId, patch: Partial<ExeFieldState>) => {
+      setExeStates((prev) => ({
+        ...prev,
+        [deviceId]: { ...prev[deviceId], ...patch },
+      }));
+    },
+    [],
+  );
 
   // -- process status state --
   const [processRunning, setProcessRunning] = useState<boolean | null>(null);
-  const [isRestarting, setIsRestarting] = useState(false);
-  const [restartMessage, setRestartMessage] = useState<string | null>(null);
+  const [processDeviceId, setProcessDeviceId] = useState<string | null>(null);
 
   // -- voice agent state --
   /** Local voice agent selection — only written to file on Apply */
@@ -104,29 +142,25 @@ export function OverviewPage() {
   };
 
   const isFileConfigured = filePathSaved && !filePathError;
-  const isExeConfigured = exePathSaved && !exePathError;
+  const hasAnyExeConfigured = STREAM_DEVICE_IDS.some(
+    (id) => exeStates[id].saved && !exeStates[id].error,
+  );
 
-  /** Auto-restart start2stream after a successful voice agent write */
+  /** Restart the currently running process (if any) */
   const triggerRestart = useCallback(async () => {
-    if (!isExeConfigured) return;
-    setIsRestarting(true);
-    setRestartMessage(null);
+    if (!hasAnyExeConfigured) return;
     try {
       const result = await restartStart2stream();
       if (result.ok) {
         setProcessRunning(true);
-        setRestartMessage(`Restarted (PID ${result.pid ?? '?'})`);
+        setProcessDeviceId(result.pid ? null : null);
       } else {
         setProcessRunning(false);
-        setRestartMessage(result.error ?? 'Restart failed');
       }
-    } catch (err) {
+    } catch {
       setProcessRunning(false);
-      setRestartMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsRestarting(false);
     }
-  }, [isExeConfigured]);
+  }, [hasAnyExeConfigured]);
 
   // -- preload device assets --
   useEffect(() => {
@@ -168,26 +202,33 @@ export function OverviewPage() {
           }
         }
 
-        // Sync start2stream path
-        const backendExePath = cfg.start2streamPath || '';
-        const effectiveExePath = backendExePath || start2streamPath;
+        // Sync per-device exe paths
+        for (const did of STREAM_DEVICE_IDS) {
+          const backendPath = cfg.deviceExePaths[did] || '';
+          const storePath = deviceExePaths[did] || '';
+          const effectivePath = backendPath || storePath;
 
-        if (effectiveExePath) {
-          setExePathInput(effectiveExePath);
-          setExePathResolvedPath(effectiveExePath);
+          if (effectivePath) {
+            updateExeState(did, {
+              input: effectivePath,
+              resolvedPath: effectivePath,
+              saved: true,
+            });
 
-          if (!backendExePath && start2streamPath) {
-            const result = await setStart2streamPath(start2streamPath);
-            if (result.ok) {
-              setStart2streamPathStore(result.resolvedPath ?? start2streamPath);
-              setExePathSaved(true);
-            } else {
-              setExePathError(result.error ?? 'Saved exe path is no longer valid');
-              setExePathSaved(false);
+            if (!backendPath && storePath) {
+              // Zustand has a path but backend doesn't — push it
+              const result = await setDeviceExePath(did, storePath);
+              if (result.ok) {
+                setDeviceExePathStore(did, result.resolvedPath ?? storePath);
+              } else {
+                updateExeState(did, {
+                  error: result.error ?? 'Saved exe path is no longer valid',
+                  saved: false,
+                });
+              }
+            } else if (backendPath) {
+              setDeviceExePathStore(did, backendPath);
             }
-          } else {
-            setStart2streamPathStore(backendExePath);
-            setExePathSaved(true);
           }
         }
 
@@ -195,6 +236,7 @@ export function OverviewPage() {
         try {
           const status = await getProcessStatus();
           setProcessRunning(status.running);
+          setProcessDeviceId(status.deviceId);
         } catch {
           setProcessRunning(null);
         }
@@ -332,88 +374,101 @@ export function OverviewPage() {
     }
   }, [setLicenseFilePath]);
 
-  const handleSaveExePath = useCallback(async () => {
-    const trimmed = exePathInput.trim();
+  const handleSaveExePath = useCallback(async (deviceId: StreamDeviceId) => {
+    const trimmed = exeStates[deviceId].input.trim();
     if (!trimmed) {
-      setExePathError('Executable path is required');
+      updateExeState(deviceId, { error: 'Executable path is required' });
       return;
     }
 
-    setIsExePathSaving(true);
-    setExePathError(null);
-    setExePathResolvedPath(null);
+    updateExeState(deviceId, { saving: true, error: null, resolvedPath: null });
 
     try {
-      const result = await setStart2streamPath(trimmed);
+      const result = await setDeviceExePath(deviceId, trimmed);
 
       if (!result.ok) {
-        setExePathError(result.error ?? 'Validation failed');
-        setExePathResolvedPath(result.resolvedPath ?? null);
-        setExePathSaved(false);
+        updateExeState(deviceId, {
+          error: result.error ?? 'Validation failed',
+          resolvedPath: result.resolvedPath ?? null,
+          saved: false,
+          saving: false,
+        });
         return;
       }
 
-      setStart2streamPathStore(result.resolvedPath ?? trimmed);
-      setExePathResolvedPath(result.resolvedPath ?? null);
-      setExePathSaved(true);
-      setExePathError(null);
+      setDeviceExePathStore(deviceId, result.resolvedPath ?? trimmed);
+      updateExeState(deviceId, {
+        resolvedPath: result.resolvedPath ?? null,
+        saved: true,
+        error: null,
+        saving: false,
+      });
     } catch (error) {
-      setExePathError(error instanceof Error ? error.message : String(error));
-      setExePathSaved(false);
-    } finally {
-      setIsExePathSaving(false);
+      updateExeState(deviceId, {
+        error: error instanceof Error ? error.message : String(error),
+        saved: false,
+        saving: false,
+      });
     }
-  }, [exePathInput, setStart2streamPathStore]);
+  }, [exeStates, updateExeState, setDeviceExePathStore]);
 
-  const handleBrowseExe = useCallback(async () => {
-    setIsExeBrowsing(true);
-    setExePathError(null);
+  const handleBrowseExe = useCallback(async (deviceId: StreamDeviceId) => {
+    updateExeState(deviceId, { browsing: true, error: null });
 
     try {
       const result = await browseForExe();
 
-      if (result.cancelled) return;
-
-      if (!result.start2streamPath) {
-        setExePathError(result.errors.join('; ') || 'File picker failed — check backend logs');
+      if (result.cancelled) {
+        updateExeState(deviceId, { browsing: false });
         return;
       }
 
-      setExePathInput(result.start2streamPath);
+      if (!result.exePath) {
+        updateExeState(deviceId, {
+          error: result.errors.join('; ') || 'File picker failed — check backend logs',
+          browsing: false,
+        });
+        return;
+      }
+
+      updateExeState(deviceId, { input: result.exePath });
 
       if (result.valid) {
-        const saveResult = await setStart2streamPath(result.start2streamPath);
+        const saveResult = await setDeviceExePath(deviceId, result.exePath);
 
         if (saveResult.ok) {
-          setStart2streamPathStore(saveResult.resolvedPath ?? result.start2streamPath);
-          setExePathResolvedPath(saveResult.resolvedPath ?? result.start2streamPath);
-          setExePathSaved(true);
-          setExePathError(null);
+          setDeviceExePathStore(deviceId, saveResult.resolvedPath ?? result.exePath);
+          updateExeState(deviceId, {
+            resolvedPath: saveResult.resolvedPath ?? result.exePath,
+            saved: true,
+            error: null,
+            browsing: false,
+          });
         } else {
-          setExePathError(saveResult.error ?? 'Failed to save');
-          setExePathSaved(false);
+          updateExeState(deviceId, {
+            error: saveResult.error ?? 'Failed to save',
+            saved: false,
+            browsing: false,
+          });
         }
       } else {
-        setExePathError(result.errors.join('; ') || 'Selected file is not valid');
-        setExePathSaved(false);
+        updateExeState(deviceId, {
+          error: result.errors.join('; ') || 'Selected file is not valid',
+          saved: false,
+          browsing: false,
+        });
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
+      let errorMsg = msg;
       if (error instanceof DOMException && error.name === 'AbortError') {
-        setExePathError('Browse timed out — backend may be unresponsive');
+        errorMsg = 'Browse timed out — backend may be unresponsive';
       } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setExePathError('Cannot reach backend (http://127.0.0.1:3210). Is it running?');
-      } else {
-        setExePathError(msg);
+        errorMsg = 'Cannot reach backend (http://127.0.0.1:3210). Is it running?';
       }
-    } finally {
-      setIsExeBrowsing(false);
+      updateExeState(deviceId, { error: errorMsg, browsing: false });
     }
-  }, [setStart2streamPathStore]);
-
-  const handleManualRestart = useCallback(() => {
-    void triggerRestart();
-  }, [triggerRestart]);
+  }, [updateExeState, setDeviceExePathStore]);
 
   return (
     <div className={styles.settings}>
@@ -548,110 +603,101 @@ export function OverviewPage() {
           )}
         </section>
 
-        {/* ── Start2Stream executable ── */}
+        {/* ── Device Executables ── */}
         <section className={styles.settingsBlock}>
-          <h2 className={styles.settingsBlockTitle}>Start2Stream</h2>
+          <h2 className={styles.settingsBlockTitle}>Device Executables</h2>
 
-          <div className={styles.field}>
-            <div className={styles.fieldHeader}>
-              <label className={styles.label} htmlFor="start2stream-path">
-                Executable path
-              </label>
-              {exePathSaved && !exePathError && (
-                <span className={`${styles.badge} ${styles.badgeValid}`}>
-                  ✓ Configured
-                </span>
-              )}
-              {exePathError && (
-                <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                  ✗ Invalid
-                </span>
-              )}
-            </div>
+          {STREAM_DEVICE_IDS.map((did) => {
+            const st = exeStates[did];
+            return (
+              <div key={did} className={styles.field}>
+                <div className={styles.fieldHeader}>
+                  <label className={styles.label} htmlFor={`exe-path-${did}`}>
+                    {STREAM_DEVICE_LABELS[did]}
+                  </label>
+                  {st.saved && !st.error && (
+                    <span className={`${styles.badge} ${styles.badgeValid}`}>
+                      ✓ Configured
+                    </span>
+                  )}
+                  {st.error && (
+                    <span className={`${styles.badge} ${styles.badgeInvalid}`}>
+                      ✗ Invalid
+                    </span>
+                  )}
+                </div>
 
-            <div className={styles.filePathRow}>
-              <input
-                id="start2stream-path"
-                className={`${styles.input} ${exePathError ? styles.inputError : ''}`}
-                type="text"
-                placeholder={
-                  IS_WINDOWS
-                    ? 'C:\\Path\\To\\start2stream.exe'
-                    : '/path/to/start2stream'
-                }
-                value={exePathInput}
-                onChange={(e) => {
-                  setExePathInput(e.target.value);
-                  setExePathSaved(false);
-                  setExePathError(null);
-                }}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                className={styles.filePathAction}
-                onClick={() => {
-                  void handleBrowseExe();
-                }}
-                disabled={isExeBrowsing || isExePathSaving}
-              >
-                {isExeBrowsing ? 'Picking...' : 'Browse'}
-              </button>
-              <button
-                type="button"
-                className={styles.filePathAction}
-                onClick={() => {
-                  void handleSaveExePath();
-                }}
-                disabled={isExePathSaving || isExeBrowsing || !exePathInput.trim()}
-              >
-                {isExePathSaving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
+                <div className={styles.filePathRow}>
+                  <input
+                    id={`exe-path-${did}`}
+                    className={`${styles.input} ${st.error ? styles.inputError : ''}`}
+                    type="text"
+                    placeholder={
+                      IS_WINDOWS
+                        ? `C:\\Path\\To\\${did}.bat`
+                        : `/path/to/${did}.bat`
+                    }
+                    value={st.input}
+                    onChange={(e) => {
+                      updateExeState(did, {
+                        input: e.target.value,
+                        saved: false,
+                        error: null,
+                      });
+                    }}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className={styles.filePathAction}
+                    onClick={() => { void handleBrowseExe(did); }}
+                    disabled={st.browsing || st.saving}
+                  >
+                    {st.browsing ? 'Picking...' : 'Browse'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.filePathAction}
+                    onClick={() => { void handleSaveExePath(did); }}
+                    disabled={st.saving || st.browsing || !st.input.trim()}
+                  >
+                    {st.saving ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
 
-            <div className={styles.filePathValidation}>
-              {exePathError && (
-                <span className={styles.filePathValidationError}>{exePathError}</span>
-              )}
-              {exePathResolvedPath && !exePathError && (
-                <span className={styles.filePathResolvedPath}>
-                  {exePathResolvedPath}
-                </span>
-              )}
-            </div>
-          </div>
+                <div className={styles.filePathValidation}>
+                  {st.error && (
+                    <span className={styles.filePathValidationError}>{st.error}</span>
+                  )}
+                  {st.resolvedPath && !st.error && (
+                    <span className={styles.filePathResolvedPath}>
+                      {st.resolvedPath}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
 
-          {/* Process status & manual restart */}
-          {isExeConfigured && (
+          {/* Process status (read-only, managed by DevicePage) */}
+          {hasAnyExeConfigured && (
             <div className={styles.syncStatusBox}>
               <div className={styles.syncStatusRow}>
                 <span className={styles.syncStatusLabel}>Process</span>
                 {processRunning === null ? (
                   <span className={styles.syncStatusNeutral}>Unknown</span>
                 ) : processRunning ? (
-                  <span className={styles.syncStatusOk}>Running</span>
+                  <span className={styles.syncStatusOk}>
+                    Running{processDeviceId ? ` (${processDeviceId})` : ''}
+                  </span>
                 ) : (
                   <span className={styles.syncStatusNeutral}>Not running</span>
                 )}
               </div>
 
-              <div className={styles.syncActions}>
-                <button
-                  type="button"
-                  className={styles.forceRewriteButton}
-                  onClick={handleManualRestart}
-                  disabled={isRestarting}
-                >
-                  {isRestarting ? 'Restarting...' : 'Restart'}
-                </button>
-                {restartMessage && (
-                  <span className={styles.syncActionMessage}>{restartMessage}</span>
-                )}
-              </div>
-
               <p className={styles.hint}>
-                Process restarts automatically when voice agent is applied.
+                Processes start automatically when navigating to a device page.
               </p>
             </div>
           )}
