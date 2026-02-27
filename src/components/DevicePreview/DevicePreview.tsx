@@ -237,33 +237,27 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     const shouldRenderIframe = Boolean(url) && isGeometryReady;
     const showGlobalLoader = !isGeometryReady || (Boolean(url) && loading);
 
-    // Tear down iframe connections on unmount.
-    // Setting src to "about:blank" forces the browser to close any active
-    // WebSocket, HTTP, or media connections inside the iframe immediately,
-    // rather than waiting for GC or TCP keepalive timeout.
-    //
-    // NOTE: read iframeRef.current inside the cleanup, not at effect time,
-    // because at mount time the iframe hasn't rendered yet (shouldRenderIframe
-    // is initially false) so the ref would capture null.
+    // Keep focus on the iframe — re-focus whenever it loses it.
+    // Pixel Streaming relies on the iframe holding focus for WebRTC
+    // heartbeat / ICE keepalive. Without this, a blur (DevTools, parent
+    // click, etc.) can starve the PS client and freeze the stream.
     useEffect(() => {
-      return () => {
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: iframe renders conditionally, ref is null at mount time
-        const iframe = iframeRef.current;
-        if (iframe) {
+      const iframe = iframeRef.current;
+      if (!iframe || !url || isEmbedBlocked) return;
+
+      const refocus = () => {
+        requestAnimationFrame(() => {
           try {
-            iframe.src = 'about:blank';
+            iframeRef.current?.focus();
           } catch {
             // cross-origin — safe to ignore
           }
-        }
+        });
       };
-    }, []);
 
-    // NOTE: aggressive blur→refocus was removed because it creates a
-    // focus cycling loop during idle / tab-switch that interferes with
-    // Pixel Streaming's WebRTC heartbeat and can freeze the stream.
-    // The iframe is focused once on load (handleIframeLoad) and on
-    // mousedown (handleScreenMouseDown), which is sufficient.
+      iframe.addEventListener('blur', refocus);
+      return () => iframe.removeEventListener('blur', refocus);
+    }, [url, isEmbedBlocked, isGeometryReady]);
 
     return (
       <div className={styles.container} ref={containerRef}>

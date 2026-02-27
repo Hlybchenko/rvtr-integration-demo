@@ -23,7 +23,7 @@ const { DevicePage } = await import('./DevicePage');
 const mockedStart = vi.mocked(startDeviceProcess);
 const mockedStop = vi.mocked(stopProcess);
 
-/** Render DevicePage inside a data router (required for useBlocker). */
+/** Render DevicePage inside a data router. */
 function renderDevicePage(deviceId: string) {
   const router = createMemoryRouter(
     [
@@ -89,14 +89,14 @@ describe('DevicePage process lifecycle', () => {
       expect(mockedStart).toHaveBeenCalledTimes(1);
     });
 
-    // Navigate away — triggers the blocker which calls stopProcess
+    // Navigate away — unmount triggers cleanup which calls stopProcess
     router.navigate('/');
 
     await vi.waitFor(() => {
       expect(mockedStop).toHaveBeenCalledTimes(1);
     });
 
-    // After stop completes, navigation proceeds to settings page
+    // Navigation completed — settings page is visible
     await vi.waitFor(() => {
       expect(screen.queryByTestId('settings-page')).not.toBeNull();
     });
