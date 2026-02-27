@@ -17,6 +17,7 @@ import {
   setDeviceExePath,
   browseForExe,
   restartStart2stream,
+  stopProcess,
 } from '@/services/voiceAgentWriter';
 import styles from './OverviewPage.module.css';
 
@@ -96,6 +97,11 @@ export function OverviewPage() {
   const setVoiceAgent = useSettingsStore((s) => s.setVoiceAgent);
   const setLicenseFilePath = useSettingsStore((s) => s.setLicenseFilePath);
   const setDeviceExePathStore = useSettingsStore((s) => s.setDeviceExePath);
+
+  // Kill any running streaming process when entering the settings page
+  useEffect(() => {
+    void stopProcess().catch(() => {});
+  }, []);
 
   // -- backend connectivity --
   const [backendError, setBackendError] = useState<string | null>(null);
