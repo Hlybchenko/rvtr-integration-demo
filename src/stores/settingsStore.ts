@@ -17,7 +17,8 @@ export function isStreamDevice(id: string): id is StreamDeviceId {
 type LegacyVoiceAgent = VoiceAgent | 'google-native-audio';
 
 
-function normalizeVoiceAgent(value: LegacyVoiceAgent | undefined): VoiceAgent {
+/** @internal Exported for unit tests only */
+export function normalizeVoiceAgent(value: LegacyVoiceAgent | undefined): VoiceAgent {
   if (value === 'google-native-audio') return 'gemini-live';
   return value === 'gemini-live' || value === 'elevenlabs' ? value : 'elevenlabs';
 }
@@ -62,6 +63,90 @@ interface SettingsState {
 
   /** Resolved URL for a device (user input → env fallback) */
   getDeviceUrl: (deviceId: DeviceId) => string;
+}
+
+/** @internal Exported for unit tests only */
+export function migrateSettingsState(
+  persistedState: unknown,
+  version: number,
+): Omit<SettingsState, 'setDeviceUrl' | 'setVoiceAgent' | 'setLicenseFilePath' | 'setDeviceExePath' | 'getDeviceUrl'> {
+  const state = persistedState as
+    | {
+        widgetUrl?: string;
+        holoboxUrl?: string;
+        phoneUrl?: string;
+        laptopUrl?: string;
+        kioskUrl?: string;
+        kebaKioskUrl?: string;
+        voiceAgent?: LegacyVoiceAgent;
+        licenseFilePath?: string;
+        /** Legacy single exe path (versions <= 7) */
+        start2streamPath?: string;
+        deviceExePaths?: Record<string, string>;
+      }
+    | undefined;
+
+  const defaultExePaths: Record<StreamDeviceId, string> = {
+    holobox: '',
+    'keba-kiosk': '',
+    kiosk: '',
+  };
+
+  if (!state) {
+    return {
+      phoneUrl: '',
+      laptopUrl: '',
+      kioskUrl: '',
+      holoboxUrl: '',
+      kebaKioskUrl: '',
+      voiceAgent: 'elevenlabs' as VoiceAgent,
+      licenseFilePath: '',
+      deviceExePaths: defaultExePaths,
+    };
+  }
+
+  // Migrate legacy single start2streamPath → deviceExePaths (v7 → v8)
+  const migratedExePaths: Record<StreamDeviceId, string> =
+    state.deviceExePaths
+      ? {
+          holobox: state.deviceExePaths.holobox ?? '',
+          'keba-kiosk': state.deviceExePaths['keba-kiosk'] ?? '',
+          kiosk: state.deviceExePaths.kiosk ?? '',
+        }
+      : state.start2streamPath
+        ? {
+            holobox: state.start2streamPath,
+            'keba-kiosk': state.start2streamPath,
+            kiosk: state.start2streamPath,
+          }
+        : defaultExePaths;
+
+  if (version < 2) {
+    const legacyWidgetUrl = state.widgetUrl ?? '';
+    const legacyHoloboxUrl = state.holoboxUrl ?? '';
+
+    return {
+      phoneUrl: state.phoneUrl ?? legacyWidgetUrl,
+      laptopUrl: state.laptopUrl ?? legacyWidgetUrl,
+      kioskUrl: state.kioskUrl ?? legacyHoloboxUrl,
+      holoboxUrl: state.holoboxUrl ?? legacyHoloboxUrl,
+      kebaKioskUrl: state.kebaKioskUrl ?? '',
+      voiceAgent: normalizeVoiceAgent(state.voiceAgent),
+      licenseFilePath: state.licenseFilePath ?? '',
+      deviceExePaths: migratedExePaths,
+    };
+  }
+
+  return {
+    phoneUrl: state.phoneUrl ?? '',
+    laptopUrl: state.laptopUrl ?? '',
+    kioskUrl: state.kioskUrl ?? '',
+    holoboxUrl: state.holoboxUrl ?? '',
+    kebaKioskUrl: state.kebaKioskUrl ?? '',
+    voiceAgent: normalizeVoiceAgent(state.voiceAgent),
+    licenseFilePath: state.licenseFilePath ?? '',
+    deviceExePaths: migratedExePaths,
+  };
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -112,85 +197,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'rvtr-settings',
       version: 8,
-      migrate: (persistedState, version) => {
-        const state = persistedState as
-          | {
-              widgetUrl?: string;
-              holoboxUrl?: string;
-              phoneUrl?: string;
-              laptopUrl?: string;
-              kioskUrl?: string;
-              kebaKioskUrl?: string;
-              voiceAgent?: LegacyVoiceAgent;
-              licenseFilePath?: string;
-              /** Legacy single exe path (versions <= 7) */
-              start2streamPath?: string;
-              deviceExePaths?: Record<string, string>;
-            }
-          | undefined;
-
-        const defaultExePaths: Record<StreamDeviceId, string> = {
-          holobox: '',
-          'keba-kiosk': '',
-          kiosk: '',
-        };
-
-        if (!state) {
-          return {
-            phoneUrl: '',
-            laptopUrl: '',
-            kioskUrl: '',
-            holoboxUrl: '',
-            kebaKioskUrl: '',
-            voiceAgent: 'elevenlabs' as VoiceAgent,
-            licenseFilePath: '',
-            deviceExePaths: defaultExePaths,
-          };
-        }
-
-        // Migrate legacy single start2streamPath → deviceExePaths (v7 → v8)
-        const migratedExePaths: Record<StreamDeviceId, string> =
-          state.deviceExePaths
-            ? {
-                holobox: state.deviceExePaths.holobox ?? '',
-                'keba-kiosk': state.deviceExePaths['keba-kiosk'] ?? '',
-                kiosk: state.deviceExePaths.kiosk ?? '',
-              }
-            : state.start2streamPath
-              ? {
-                  holobox: state.start2streamPath,
-                  'keba-kiosk': state.start2streamPath,
-                  kiosk: state.start2streamPath,
-                }
-              : defaultExePaths;
-
-        if (version < 2) {
-          const legacyWidgetUrl = state.widgetUrl ?? '';
-          const legacyHoloboxUrl = state.holoboxUrl ?? '';
-
-          return {
-            phoneUrl: state.phoneUrl ?? legacyWidgetUrl,
-            laptopUrl: state.laptopUrl ?? legacyWidgetUrl,
-            kioskUrl: state.kioskUrl ?? legacyHoloboxUrl,
-            holoboxUrl: state.holoboxUrl ?? legacyHoloboxUrl,
-            kebaKioskUrl: state.kebaKioskUrl ?? '',
-            voiceAgent: normalizeVoiceAgent(state.voiceAgent),
-            licenseFilePath: state.licenseFilePath ?? '',
-            deviceExePaths: migratedExePaths,
-          };
-        }
-
-        return {
-          phoneUrl: state.phoneUrl ?? '',
-          laptopUrl: state.laptopUrl ?? '',
-          kioskUrl: state.kioskUrl ?? '',
-          holoboxUrl: state.holoboxUrl ?? '',
-          kebaKioskUrl: state.kebaKioskUrl ?? '',
-          voiceAgent: normalizeVoiceAgent(state.voiceAgent),
-          licenseFilePath: state.licenseFilePath ?? '',
-          deviceExePaths: migratedExePaths,
-        };
-      },
+      migrate: migrateSettingsState,
     },
   ),
 );
