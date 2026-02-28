@@ -1,6 +1,6 @@
 import type { DeviceTemplate } from '@/models/device';
 
-// Import device frame assets (SVG placeholders — replace with PNGs if needed)
+// Import PNG frame assets for each device type
 import phoneFrame from '@/assets/devices/phone.png';
 import laptopFrame from '@/assets/devices/laptop.png';
 import kioskFrame from '@/assets/devices/kiosk.png';

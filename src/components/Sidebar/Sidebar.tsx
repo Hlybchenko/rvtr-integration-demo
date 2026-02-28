@@ -3,6 +3,16 @@ import { NavLink } from 'react-router-dom';
 import { devices } from '@/config/devices';
 import styles from './Sidebar.module.css';
 
+/**
+ * App-wide navigation sidebar.
+ *
+ * Responsibilities:
+ *   - Shows links to Settings (/) and each device page (/:deviceId).
+ *   - Manages dark/light theme toggle (persisted to localStorage).
+ *   - Initially hidden off-screen via CSS transform; slides in when
+ *     the parent passes the `sidebarOpen` class from AppShell.
+ */
+
 type ThemeMode = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'rvtr-theme';
 

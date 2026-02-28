@@ -23,6 +23,14 @@ import styles from './UeControlPanel.module.css';
 
 const SLIDER_DEBOUNCE_MS = 200;
 
+/** Slider min/max ranges per camera axis. Zoom has a wider range than pan/pitch. */
+const SLIDER_RANGES = {
+  zoom:             { min: -1000, max: 1000 },
+  cameraVertical:   { min: -500,  max: 500  },
+  cameraHorizontal: { min: -500,  max: 500  },
+  cameraPitch:      { min: -500,  max: 500  },
+} as const;
+
 /** Slider key → UE command name mapping */
 const SLIDER_COMMANDS: Record<string, { command: string; param: string }> = {
   zoom: { command: 'zoom', param: 'offset' },
@@ -108,6 +116,13 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   // ── Debounced slider handler ──────────────────────────────────────────────
   // Per-key timers so concurrent slider movements don't cancel each other.
   // Accumulated pending deltas ensure rapid slider moves don't lose offset.
+  //
+  // NOTE: `useUeControlStore.getState()` is used inside setTimeout callbacks
+  // and onClick handlers instead of reading from hook state. In debounced
+  // callbacks this avoids stale closures — the timer fires after the closure
+  // was created, so hook-level state would be outdated. In onClick handlers
+  // the same pattern is used for consistency. `.getState()` reads the latest
+  // Zustand snapshot directly.
 
   const sliderTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   /** Accumulated delta not yet sent to UE, keyed by slider */
@@ -270,8 +285,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="range"
                 className={styles.slider}
-                min={-1000}
-                max={1000}
+                min={SLIDER_RANGES.zoom.min}
+                max={SLIDER_RANGES.zoom.max}
                 step={1}
                 value={settings.zoom}
                 onChange={(e) =>
@@ -286,8 +301,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="range"
                 className={styles.slider}
-                min={-500}
-                max={500}
+                min={SLIDER_RANGES.cameraVertical.min}
+                max={SLIDER_RANGES.cameraVertical.max}
                 step={1}
                 value={settings.cameraVertical}
                 onChange={(e) =>
@@ -302,8 +317,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="range"
                 className={styles.slider}
-                min={-500}
-                max={500}
+                min={SLIDER_RANGES.cameraHorizontal.min}
+                max={SLIDER_RANGES.cameraHorizontal.max}
                 step={1}
                 value={settings.cameraHorizontal}
                 onChange={(e) =>
@@ -318,8 +333,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="range"
                 className={styles.slider}
-                min={-500}
-                max={500}
+                min={SLIDER_RANGES.cameraPitch.min}
+                max={SLIDER_RANGES.cameraPitch.max}
                 step={1}
                 value={settings.cameraPitch}
                 onChange={(e) =>

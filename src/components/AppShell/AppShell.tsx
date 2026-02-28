@@ -5,6 +5,16 @@ import { PersistentPixelStreaming } from '@/components/PersistentPixelStreaming/
 import { useStatusPolling } from '@/hooks/useStatusPolling';
 import styles from './AppShell.module.css';
 
+/**
+ * Root layout component that wraps every route.
+ *
+ * Responsibilities:
+ *   - Renders the collapsible sidebar, burger toggle, and backdrop overlay.
+ *   - Mounts <PersistentPixelStreaming /> once so the WebRTC iframe
+ *     survives route transitions without reconnecting.
+ *   - Starts global status polling (process health, PS reachability, UE health).
+ *   - Auto-closes the sidebar on route change.
+ */
 export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();

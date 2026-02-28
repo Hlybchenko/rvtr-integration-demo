@@ -9,6 +9,7 @@ export type VoiceAgent = 'elevenlabs' | 'gemini-live';
 
 export const STREAMING_DEVICE_IDS: DeviceId[] = ['kiosk', 'keba-kiosk', 'holobox'];
 
+/** Returns true if the device uses Pixel Streaming (kiosk, keba-kiosk, holobox). */
 export function isStreamingDevice(id: string): boolean {
   return (STREAMING_DEVICE_IDS as string[]).includes(id);
 }

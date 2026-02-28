@@ -149,6 +149,13 @@ function detectScreenCutout(src: string): Promise<Rect | null> {
   });
 }
 
+/**
+ * Cached wrapper around `detectScreenCutout`.
+ *
+ * Returns a cached result instantly if the same `src` was analyzed before.
+ * De-duplicates concurrent calls for the same `src` — only one detection
+ * runs at a time; subsequent callers share the same Promise.
+ */
 function detectScreenCutoutCached(src: string): Promise<Rect | null> {
   if (detectedRectCache.has(src)) {
     return Promise.resolve(detectedRectCache.get(src) ?? null);
@@ -167,6 +174,13 @@ function detectScreenCutoutCached(src: string): Promise<Rect | null> {
   return task;
 }
 
+/**
+ * Pre-warms the screen cutout detection cache for a given frame image.
+ *
+ * Call this early (e.g. on the Settings page mount) so that by the time
+ * the user navigates to a device page, the detection result is already
+ * cached and `useDetectScreenRect` returns the rect synchronously.
+ */
 export function warmDetectScreenRect(src: string): void {
   if (!src) return;
   void detectScreenCutoutCached(src);

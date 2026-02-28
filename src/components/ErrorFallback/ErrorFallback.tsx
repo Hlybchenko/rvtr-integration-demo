@@ -1,6 +1,13 @@
 import { useRouteError, isRouteErrorResponse, useNavigate } from 'react-router-dom';
 import styles from './ErrorFallback.module.css';
 
+/**
+ * React Router error boundary fallback.
+ *
+ * Catches route-level errors (404, thrown exceptions) and renders
+ * a user-friendly card with the error title, detail message, optional
+ * stack trace, and actions to reload or navigate home.
+ */
 export function ErrorFallback() {
   const error = useRouteError();
   const navigate = useNavigate();

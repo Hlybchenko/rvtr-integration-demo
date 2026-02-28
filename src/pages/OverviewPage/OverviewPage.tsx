@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
+import { usePathConfig, type BrowseResult } from '@/hooks/usePathConfig';
 import { useSettingsStore, type VoiceAgent } from '@/stores/settingsStore';
 import { useUeControlStore } from '@/stores/ueControlStore';
 import { useStatusStore } from '@/stores/statusStore';
@@ -20,12 +21,34 @@ import {
 import { isValidUrl } from '@/utils/isValidUrl';
 import styles from './OverviewPage.module.css';
 
+/**
+ * Settings / overview page (route: `/`).
+ *
+ * This is the app's main configuration surface. It is divided into four sections
+ * rendered in a two-column layout:
+ *
+ *   **Left column**
+ *   1. Process — license file path + executable path + start/stop/restart controls.
+ *   2. Agent Provider — select ElevenLabs or Gemini Live and apply to the config file.
+ *
+ *   **Right column**
+ *   3. Widget — phone & laptop iframe URLs.
+ *   4. Pixel Streaming — PS URL, UE Remote API URL, connect/disconnect controls.
+ *
+ * Data flow:
+ *   - Persisted settings live in `settingsStore` and `ueControlStore` (Zustand + localStorage).
+ *   - Backend state (file paths, exe path) is synced to `agent-option-writer` on mount via
+ *     `getWriterConfig()` and reconciled with the frontend store.
+ *   - File/exe path inputs use debounced auto-save (400ms) to avoid excessive backend calls.
+ */
+
 const IS_WINDOWS =
   typeof navigator !== 'undefined' &&
   (/win/i.test(navigator.userAgent) ||
     (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ===
       'Windows');
 
+/** Descriptor for a non-streaming (widget) device URL field. */
 interface DeviceField {
   id: 'phone' | 'laptop';
   label: string;
@@ -37,11 +60,24 @@ const WIDGET_DEVICES: DeviceField[] = [
   { id: 'laptop', label: 'Laptop', placeholder: 'https://widget.example.com/laptop' },
 ];
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+// ── Browse adapters ──────────────────────────────────────────────────────────
+// Normalize browse results from voiceAgentWriter into the generic BrowseResult
+// shape expected by usePathConfig.
+
+async function browseForLicenseFile(): Promise<BrowseResult> {
+  const r = await browseForFile();
+  return { cancelled: r.cancelled, path: r.licenseFilePath, valid: r.valid, errors: r.errors };
+}
+
+async function browseForExeFile(): Promise<BrowseResult> {
+  const r = await browseForExe();
+  return { cancelled: r.cancelled, path: r.exePath, valid: r.valid, errors: r.errors };
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
+  // ── Store selectors ──────────────────────────────────────────────────────
   const phoneUrl = useSettingsStore((s) => s.phoneUrl);
   const laptopUrl = useSettingsStore((s) => s.laptopUrl);
   const pixelStreamingUrl = useSettingsStore((s) => s.pixelStreamingUrl);
@@ -54,24 +90,25 @@ export function OverviewPage() {
   const setLicenseFilePath = useSettingsStore((s) => s.setLicenseFilePath);
   const setExePathStore = useSettingsStore((s) => s.setExePath);
 
-  // -- backend connectivity --
+  // ── Path config hooks ──────────────────────────────────────────────────
+  const filePath = usePathConfig({
+    initialValue: licenseFilePath,
+    onSaved: setLicenseFilePath,
+    saveFn: setWriterFilePath,
+    browseFn: browseForLicenseFile,
+    notFoundMessage: 'Path not found or not readable',
+  });
+
+  const exePath = usePathConfig({
+    initialValue: storeExePath,
+    onSaved: setExePathStore,
+    saveFn: setGlobalExePath,
+    browseFn: browseForExeFile,
+    notFoundMessage: 'Path not found or not executable',
+  });
+
+  // ── Local state ──────────────────────────────────────────────────────────
   const [backendError, setBackendError] = useState<string | null>(null);
-
-  // -- file path state --
-  const [filePathInput, setFilePathInput] = useState(licenseFilePath);
-  const [isFilePathSaving, setIsFilePathSaving] = useState(false);
-  const [isBrowsing, setIsBrowsing] = useState(false);
-  const [filePathSaved, setFilePathSaved] = useState(!!licenseFilePath);
-  const [filePathError, setFilePathError] = useState<string | null>(null);
-  const [filePathResolvedPath, setFilePathResolvedPath] = useState<string | null>(null);
-
-  // -- exe path state --
-  const [exePathInput, setExePathInput] = useState(storeExePath);
-  const [isExeSaving, setIsExeSaving] = useState(false);
-  const [isExeBrowsing, setIsExeBrowsing] = useState(false);
-  const [exePathSaved, setExePathSaved] = useState(!!storeExePath);
-  const [exePathError, setExePathError] = useState<string | null>(null);
-  const [exePathResolvedPath, setExePathResolvedPath] = useState<string | null>(null);
 
   // -- pixel streaming URL local state --
   const [psUrlInput, setPsUrlInput] = useState(pixelStreamingUrl);
@@ -114,8 +151,8 @@ export function OverviewPage() {
     laptop: laptopUrl,
   };
 
-  const isFileConfigured = filePathSaved && !filePathError;
-  const isExeConfigured = exePathSaved && !exePathError;
+  const isFileConfigured = filePath.isConfigured;
+  const isExeConfigured = exePath.isConfigured;
 
   // Block-level validation for Widget
   const widgetHasError = WIDGET_DEVICES.some((d) => {
@@ -133,7 +170,9 @@ export function OverviewPage() {
   const psHasError = psHasUrl && !psUrlValid;
   const psAllGood = psHasUrl && psUrlValid;
 
-  // -- preload device assets --
+  // ── Side effects ─────────────────────────────────────────────────────────
+
+  // Preload device frame images and warm screen-cutout detection cache
   useEffect(() => {
     preloadDeviceFrameImages();
     devices.forEach((device) => {
@@ -142,9 +181,7 @@ export function OverviewPage() {
     });
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Init effect
-  // ---------------------------------------------------------------------------
+  // Reconcile frontend store with backend config on mount
   useEffect(() => {
     let cancelled = false;
 
@@ -154,50 +191,50 @@ export function OverviewPage() {
         if (cancelled) return;
         setBackendError(null);
 
-        // License file path
+        // License file path — prefer backend value, fall back to store
         const backendLicensePath = cfg.licenseFilePath || '';
         const effectiveLicensePath = backendLicensePath || licenseFilePath;
 
         if (effectiveLicensePath) {
-          setFilePathInput(effectiveLicensePath);
-          setFilePathResolvedPath(effectiveLicensePath);
-
           if (!backendLicensePath && licenseFilePath) {
             const result = await setWriterFilePath(licenseFilePath);
             if (cancelled) return;
             if (result.ok) {
               setLicenseFilePath(result.resolvedPath ?? licenseFilePath);
-              setFilePathSaved(true);
+              filePath.setFromBackend(effectiveLicensePath, true);
             } else {
-              setFilePathError(result.error ?? 'Previously saved path no longer exists');
-              setFilePathSaved(false);
+              filePath.setFromBackend(
+                effectiveLicensePath,
+                false,
+                result.error ?? 'Previously saved path no longer exists',
+              );
             }
           } else {
             setLicenseFilePath(backendLicensePath);
-            setFilePathSaved(true);
+            filePath.setFromBackend(effectiveLicensePath, true);
           }
         }
 
-        // Exe path
+        // Exe path — prefer backend value, fall back to store
         const backendExePath = cfg.exePath || '';
         const effectiveExePath = backendExePath || storeExePath;
         if (effectiveExePath) {
-          setExePathInput(effectiveExePath);
-          setExePathResolvedPath(effectiveExePath);
-
           if (!backendExePath && storeExePath) {
             const result = await setGlobalExePath(storeExePath);
             if (cancelled) return;
             if (result.ok) {
               setExePathStore(result.resolvedPath ?? storeExePath);
-              setExePathSaved(true);
+              exePath.setFromBackend(effectiveExePath, true);
             } else {
-              setExePathError(result.error ?? 'Previously saved path no longer exists');
-              setExePathSaved(false);
+              exePath.setFromBackend(
+                effectiveExePath,
+                false,
+                result.error ?? 'Previously saved path no longer exists',
+              );
             }
           } else if (backendExePath) {
             setExePathStore(backendExePath);
-            setExePathSaved(true);
+            exePath.setFromBackend(effectiveExePath, true);
           }
         }
 
@@ -242,75 +279,7 @@ export function OverviewPage() {
 
   const hasPendingAgentChange = pendingVoiceAgent !== voiceAgent;
 
-  // -- debounced auto-save for license file path --
-  useEffect(() => {
-    const trimmed = filePathInput.trim();
-    if (!trimmed || filePathSaved || isFilePathSaving || isBrowsing || filePathError)
-      return;
-
-    const timer = setTimeout(() => {
-      void (async () => {
-        setIsFilePathSaving(true);
-        setFilePathError(null);
-        setFilePathResolvedPath(null);
-
-        try {
-          const result = await setWriterFilePath(trimmed);
-          if (!result.ok) {
-            setFilePathError(result.error ?? 'Path not found or not readable');
-            setFilePathResolvedPath(result.resolvedPath ?? null);
-            setFilePathSaved(false);
-          } else {
-            setLicenseFilePath(result.resolvedPath ?? trimmed);
-            setFilePathResolvedPath(result.resolvedPath ?? null);
-            setFilePathSaved(true);
-            setFilePathError(null);
-          }
-        } catch (error) {
-          setFilePathError(error instanceof Error ? error.message : String(error));
-          setFilePathSaved(false);
-        } finally {
-          setIsFilePathSaving(false);
-        }
-      })();
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [filePathInput, filePathSaved, isFilePathSaving, isBrowsing, filePathError, setLicenseFilePath]);
-
-  // -- debounced auto-save for exe path --
-  useEffect(() => {
-    const trimmed = exePathInput.trim();
-    if (!trimmed || exePathSaved || isExeSaving || isExeBrowsing || exePathError) return;
-
-    const timer = setTimeout(() => {
-      void (async () => {
-        setIsExeSaving(true);
-        setExePathError(null);
-        setExePathResolvedPath(null);
-
-        try {
-          const result = await setGlobalExePath(trimmed);
-          if (!result.ok) {
-            setExePathError(result.error ?? 'Path not found or not executable');
-            setExePathSaved(false);
-          } else {
-            setExePathStore(result.resolvedPath ?? trimmed);
-            setExePathResolvedPath(result.resolvedPath ?? null);
-            setExePathSaved(true);
-            setExePathError(null);
-          }
-        } catch (error) {
-          setExePathError(error instanceof Error ? error.message : String(error));
-          setExePathSaved(false);
-        } finally {
-          setIsExeSaving(false);
-        }
-      })();
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [exePathInput, exePathSaved, isExeSaving, isExeBrowsing, exePathError, setExePathStore]);
+  // Debounced auto-save for file/exe paths is handled by usePathConfig hooks above.
 
   // -- debounced auto-save for Pixel Streaming URL --
   useEffect(() => {
@@ -341,7 +310,7 @@ export function OverviewPage() {
     return () => clearTimeout(timer);
   }, [ueApiUrlInput, ueApiUrl, setUeApiUrl, setUeReachable]);
 
-  // -- handlers --
+  // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleApplyAgent = useCallback(async () => {
     if (!isFileConfigured) return;
@@ -387,95 +356,7 @@ export function OverviewPage() {
     }
   }, [pendingVoiceAgent, isFileConfigured, isExeConfigured, setVoiceAgent, psConnected, psConnect, psDisconnect]);
 
-  const handleBrowse = useCallback(async () => {
-    setIsBrowsing(true);
-    setFilePathError(null);
-
-    try {
-      const result = await browseForFile();
-      if (result.cancelled) return;
-
-      if (!result.licenseFilePath) {
-        setFilePathError(
-          result.errors.join('; ') || 'File picker failed. Try again or enter the path manually.',
-        );
-        return;
-      }
-
-      setFilePathInput(result.licenseFilePath);
-
-      if (result.valid) {
-        const saveResult = await setWriterFilePath(result.licenseFilePath);
-        if (saveResult.ok) {
-          setLicenseFilePath(saveResult.resolvedPath ?? result.licenseFilePath);
-          setFilePathResolvedPath(saveResult.resolvedPath ?? result.licenseFilePath);
-          setFilePathSaved(true);
-          setFilePathError(null);
-        } else {
-          setFilePathError(saveResult.error ?? 'Could not save — file may be missing or locked');
-          setFilePathSaved(false);
-        }
-      } else {
-        setFilePathError(result.errors.join('; ') || 'Selected file is not a valid license file');
-        setFilePathSaved(false);
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        setFilePathError('Browse timed out — the local server may be unresponsive');
-      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setFilePathError('Cannot reach the local server. Make sure the backend is running.');
-      } else {
-        setFilePathError(msg);
-      }
-    } finally {
-      setIsBrowsing(false);
-    }
-  }, [setLicenseFilePath]);
-
-  const handleBrowseExe = useCallback(async () => {
-    setIsExeBrowsing(true);
-    setExePathError(null);
-
-    try {
-      const result = await browseForExe();
-      if (result.cancelled) return;
-
-      if (!result.exePath) {
-        setExePathError(result.errors.join('; ') || 'File picker failed. Try again or enter the path manually.');
-        return;
-      }
-
-      setExePathInput(result.exePath);
-
-      if (result.valid) {
-        const saveResult = await setGlobalExePath(result.exePath);
-        if (saveResult.ok) {
-          setExePathStore(saveResult.resolvedPath ?? result.exePath);
-          setExePathResolvedPath(saveResult.resolvedPath ?? result.exePath);
-          setExePathSaved(true);
-          setExePathError(null);
-        } else {
-          setExePathError(saveResult.error ?? 'Could not save — file may be missing or inaccessible');
-          setExePathSaved(false);
-        }
-      } else {
-        setExePathError(result.errors.join('; ') || 'Selected file is not a valid executable');
-        setExePathSaved(false);
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        setExePathError('Browse timed out');
-      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setExePathError('Cannot reach the local server. Make sure the backend is running.');
-      } else {
-        setExePathError(msg);
-      }
-    } finally {
-      setIsExeBrowsing(false);
-    }
-  }, [setExePathStore]);
+  // Browse handlers are now provided by usePathConfig (filePath.onBrowse, exePath.onBrowse).
 
   const handleStartProcess = useCallback(async () => {
     if (!isExeConfigured) return;
@@ -513,8 +394,9 @@ export function OverviewPage() {
     }
   }, []);
 
-  // Determine Voice Agent block validation state
-  const voiceAgentHasError = !!filePathError || !!exePathError;
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  const voiceAgentHasError = !!filePath.error || !!exePath.error;
 
   return (
     <div className={styles.settings}>
@@ -525,7 +407,7 @@ export function OverviewPage() {
       )}
 
       <div className={styles.form}>
-        {/* -- Left column: Voice Agent + Widget -- */}
+        {/* -- Left column: Process + Agent Provider -- */}
         <div className={styles.column}>
           {/* -- Process (License + Executable) -- */}
           <section
@@ -545,12 +427,12 @@ export function OverviewPage() {
                 <label className={styles.label} htmlFor="license-file-path">
                   License file path
                 </label>
-                {filePathSaved && !filePathError && (
+                {filePath.saved && !filePath.error && (
                   <span className={`${styles.badge} ${styles.badgeValid}`}>
                     ✓ Configured
                   </span>
                 )}
-                {filePathError && (
+                {filePath.error && (
                   <span className={`${styles.badge} ${styles.badgeInvalid}`}>
                     ✗ Path not found
                   </span>
@@ -560,34 +442,30 @@ export function OverviewPage() {
               <div className={styles.filePathRow}>
                 <input
                   id="license-file-path"
-                  className={`${styles.input} ${filePathError ? styles.inputError : ''}`}
+                  className={`${styles.input} ${filePath.error ? styles.inputError : ''}`}
                   type="text"
                   placeholder={IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'}
-                  value={filePathInput}
-                  onChange={(e) => {
-                    setFilePathInput(e.target.value);
-                    setFilePathSaved(false);
-                    setFilePathError(null);
-                  }}
+                  value={filePath.input}
+                  onChange={(e) => filePath.setInput(e.target.value)}
                   spellCheck={false}
                   autoComplete="off"
                 />
                 <button
                   type="button"
                   className={styles.filePathAction}
-                  onClick={() => void handleBrowse()}
-                  disabled={isBrowsing || isFilePathSaving}
+                  onClick={() => void filePath.onBrowse()}
+                  disabled={filePath.isBrowsing || filePath.isSaving}
                 >
-                  {isBrowsing ? 'Browsing...' : 'Browse'}
+                  {filePath.isBrowsing ? 'Browsing...' : 'Browse'}
                 </button>
               </div>
 
               <div className={styles.filePathValidation}>
-                {filePathError && (
-                  <span className={styles.filePathValidationError}>{filePathError}</span>
+                {filePath.error && (
+                  <span className={styles.filePathValidationError}>{filePath.error}</span>
                 )}
-                {filePathResolvedPath && !filePathError && (
-                  <span className={styles.filePathResolvedPath}>{filePathResolvedPath}</span>
+                {filePath.resolvedPath && !filePath.error && (
+                  <span className={styles.filePathResolvedPath}>{filePath.resolvedPath}</span>
                 )}
               </div>
             </div>
@@ -598,12 +476,12 @@ export function OverviewPage() {
                 <label className={styles.label} htmlFor="exe-path">
                   Executable
                 </label>
-                {exePathSaved && !exePathError && (
+                {exePath.saved && !exePath.error && (
                   <span className={`${styles.badge} ${styles.badgeValid}`}>
                     ✓ Configured
                   </span>
                 )}
-                {exePathError && (
+                {exePath.error && (
                   <span className={`${styles.badge} ${styles.badgeInvalid}`}>
                     ✗ Invalid
                   </span>
@@ -613,34 +491,30 @@ export function OverviewPage() {
               <div className={styles.filePathRow}>
                 <input
                   id="exe-path"
-                  className={`${styles.input} ${exePathError ? styles.inputError : ''}`}
+                  className={`${styles.input} ${exePath.error ? styles.inputError : ''}`}
                   type="text"
                   placeholder={IS_WINDOWS ? 'C:\\Path\\To\\start2stream.bat' : '/path/to/start2stream.sh'}
-                  value={exePathInput}
-                  onChange={(e) => {
-                    setExePathInput(e.target.value);
-                    setExePathSaved(false);
-                    setExePathError(null);
-                  }}
+                  value={exePath.input}
+                  onChange={(e) => exePath.setInput(e.target.value)}
                   spellCheck={false}
                   autoComplete="off"
                 />
                 <button
                   type="button"
                   className={styles.filePathAction}
-                  onClick={() => void handleBrowseExe()}
-                  disabled={isExeBrowsing || isExeSaving}
+                  onClick={() => void exePath.onBrowse()}
+                  disabled={exePath.isBrowsing || exePath.isSaving}
                 >
-                  {isExeBrowsing ? 'Browsing...' : 'Browse'}
+                  {exePath.isBrowsing ? 'Browsing...' : 'Browse'}
                 </button>
               </div>
 
               <div className={styles.filePathValidation}>
-                {exePathError && (
-                  <span className={styles.filePathValidationError}>{exePathError}</span>
+                {exePath.error && (
+                  <span className={styles.filePathValidationError}>{exePath.error}</span>
                 )}
-                {exePathResolvedPath && !exePathError && (
-                  <span className={styles.filePathResolvedPath}>{exePathResolvedPath}</span>
+                {exePath.resolvedPath && !exePath.error && (
+                  <span className={styles.filePathResolvedPath}>{exePath.resolvedPath}</span>
                 )}
               </div>
             </div>
