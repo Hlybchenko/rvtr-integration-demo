@@ -112,6 +112,32 @@ export function setLanguage(baseUrl: string, language: string): Promise<boolean>
   return sendUeCommand(baseUrl, { command: 'SetLanguage', Language: language });
 }
 
+// ─── Camera reset ────────────────────────────────────────────────────────────
+
+/**
+ * Send negative offsets to bring UE camera back to its default (0) position.
+ * Call this before applying a different device's settings so the offsets
+ * don't stack on top of the previous device's camera position.
+ */
+export async function resetCameraToZero(
+  baseUrl: string,
+  currentSettings: Pick<UeDeviceSettings, 'zoom' | 'cameraVertical' | 'cameraHorizontal' | 'cameraPitch'>,
+): Promise<void> {
+  if (!baseUrl) return;
+
+  const ops: Array<Promise<boolean>> = [];
+  if (currentSettings.zoom !== 0)
+    ops.push(setZoom(baseUrl, -currentSettings.zoom));
+  if (currentSettings.cameraVertical !== 0)
+    ops.push(setCameraVertical(baseUrl, -currentSettings.cameraVertical));
+  if (currentSettings.cameraHorizontal !== 0)
+    ops.push(setCameraHorizontal(baseUrl, -currentSettings.cameraHorizontal));
+  if (currentSettings.cameraPitch !== 0)
+    ops.push(setCameraPitch(baseUrl, -currentSettings.cameraPitch));
+
+  await Promise.allSettled(ops);
+}
+
 // ─── Batch apply ─────────────────────────────────────────────────────────────
 
 /**

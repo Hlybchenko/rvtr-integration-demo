@@ -4,7 +4,7 @@ import { devicesMap } from '@/config/devices';
 import { useResolvedUrl, isStreamingDevice } from '@/stores/settingsStore';
 import { useStreamingStore } from '@/stores/streamingStore';
 import { useUeControlStore, getDeviceSettingsSnapshot } from '@/stores/ueControlStore';
-import { applyDeviceSettings } from '@/services/ueRemoteApi';
+import { applyDeviceSettings, resetCameraToZero } from '@/services/ueRemoteApi';
 import { DevicePreview } from '@/components/DevicePreview/DevicePreview';
 import { UeControlPanel } from '@/components/UeControlPanel/UeControlPanel';
 import styles from './DevicePage.module.css';
@@ -57,20 +57,32 @@ export function DevicePage() {
   }, [isStreaming, connected, show, hide]);
 
   // Auto-apply saved UE settings when switching to a streaming device.
+  // On switch: reset the previous device's camera offsets to zero, then apply the new device's settings.
   // Uses a ref for ueApiUrl so the effect only fires on displayedDeviceId change,
   // not when the user edits the URL on the settings page.
   const ueApiUrlRef = useRef(ueApiUrl);
   ueApiUrlRef.current = ueApiUrl;
 
   const ueReachable = useUeControlStore((s) => s.ueReachable);
+  const prevDeviceIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const url = ueApiUrlRef.current;
     // Skip batch apply when UE API is known to be unreachable — commands would fail silently
     if (!isStreaming || !url || !displayedDeviceId || ueReachable === false) return;
 
-    const saved = getDeviceSettingsSnapshot(displayedDeviceId);
-    void applyDeviceSettings(url, saved);
+    void (async () => {
+      // Reset camera from previous device's offsets before applying new ones
+      const prevId = prevDeviceIdRef.current;
+      if (prevId && prevId !== displayedDeviceId) {
+        const prevSettings = getDeviceSettingsSnapshot(prevId);
+        await resetCameraToZero(url, prevSettings);
+      }
+
+      const saved = getDeviceSettingsSnapshot(displayedDeviceId);
+      await applyDeviceSettings(url, saved);
+      prevDeviceIdRef.current = displayedDeviceId;
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ueReachable intentionally excluded to avoid re-apply on health change
   }, [isStreaming, displayedDeviceId]);
 
