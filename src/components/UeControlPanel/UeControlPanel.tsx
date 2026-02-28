@@ -147,14 +147,24 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     sliderTimersRef.current.forEach((t) => clearTimeout(t));
     sliderTimersRef.current.clear();
     pendingDeltaRef.current.clear();
+
+    const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
+
+    // Seed baselines with the saved values so that subsequent slider drags
+    // compute deltas from the auto-applied position. Without this, a failed
+    // UE command would leave sentValueRef empty and the fallback to the
+    // (optimistically updated) deviceSettings would produce wrong deltas.
     sentValueRef.current.clear();
+    sentValueRef.current.set('zoom', desired.zoom);
+    sentValueRef.current.set('cameraVertical', desired.cameraVertical);
+    sentValueRef.current.set('cameraHorizontal', desired.cameraHorizontal);
+    sentValueRef.current.set('cameraPitch', desired.cameraPitch);
 
     const url = useUeControlStore.getState().ueApiUrl;
     if (!url) return;
 
     const gen = ++applyGenRef.current;
     const committed = useUeControlStore.getState().ueCommittedCamera;
-    const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
 
     void (async () => {
       // Reset camera to zero from current committed position
