@@ -3,8 +3,6 @@ import { useParams, Link } from 'react-router';
 import { devicesMap } from '@/config/devices';
 import { useResolvedUrl, isStreamingDevice } from '@/stores/settingsStore';
 import { useStreamingStore } from '@/stores/streamingStore';
-import { useUeControlStore, getDeviceSettingsSnapshot, getCommittedCameraSnapshot, type UeDeviceSettings } from '@/stores/ueControlStore';
-import { applyDeviceSettings } from '@/services/ueRemoteApi';
 import { DevicePreview } from '@/components/DevicePreview/DevicePreview';
 import { UeControlPanel } from '@/components/UeControlPanel/UeControlPanel';
 import styles from './DevicePage.module.css';
@@ -20,12 +18,8 @@ type TransitionPhase = 'idle' | 'exiting' | 'entering';
  * Responsibilities:
  *   1. Resolves the device template from URL params (phone/laptop/kiosk/holobox/keba-kiosk).
  *   2. For streaming devices — shows/hides the persistent PS iframe and renders UeControlPanel.
- *   3. On device switch — runs a crossfade transition (exit → swap → enter) and auto-applies
- *      saved UE settings via `applyDeviceSettings` (deltas from committed camera position).
+ *   3. On device switch — runs a crossfade transition (exit → swap → enter).
  *   4. For non-streaming devices — renders an `<iframe>` with the widget URL inside DevicePreview.
- *
- * Key invariant: the auto-apply effect uses an AbortController so rapid device switches
- * cancel in-flight UE commands, preventing camera drift from partial resets.
  */
 export function DevicePage() {
   const { deviceId } = useParams<{ deviceId: string }>();
@@ -56,8 +50,6 @@ export function DevicePage() {
     };
   }, []);
 
-  const ueApiUrl = useUeControlStore((s) => s.ueApiUrl);
-
   // Show/hide persistent iframe when entering/leaving a streaming device page.
   // The iframe is already mounted if user clicked Connect on Settings.
   // Hide during crossfade transitions to avoid expensive browser recomposites
@@ -76,77 +68,6 @@ export function DevicePage() {
       hide();
     };
   }, [isStreaming, connected, transitionPhase, show, hide]);
-
-  // Auto-apply saved UE settings when switching to a streaming device.
-  // On switch: reset the previous device's camera offsets to zero, then apply the new device's settings.
-  // Uses a ref for ueApiUrl so the effect only fires on displayedDeviceId change,
-  // not when the user edits the URL on the settings page.
-  const ueApiUrlRef = useRef(ueApiUrl);
-  ueApiUrlRef.current = ueApiUrl;
-
-  const ueReachable = useUeControlStore((s) => s.ueReachable);
-  const applyAbortRef = useRef<AbortController | null>(null);
-  /** Last settings successfully applied to UE — used to skip unchanged absolute commands */
-  const lastAppliedRef = useRef<UeDeviceSettings | undefined>(undefined);
-
-  useEffect(() => {
-    const url = ueApiUrlRef.current;
-    // Skip batch apply when UE API is known to be unreachable — commands would fail silently
-    if (!isStreaming || !url || !displayedDeviceId || ueReachable === false) return;
-
-    // Cancel any in-flight apply from a previous device switch
-    applyAbortRef.current?.abort();
-    const controller = new AbortController();
-    applyAbortRef.current = controller;
-
-    void (async () => {
-      const committed = getCommittedCameraSnapshot();
-      const desired = getDeviceSettingsSnapshot(displayedDeviceId);
-      const isPageRefresh = !lastAppliedRef.current;
-
-      // On page refresh: lastAppliedRef is empty, so fall back to `desired` —
-      // this makes prev === desired, skipping all absolute commands (level, logo, etc.)
-      // that would otherwise reload the scene and freeze the PS stream.
-      // On device switch: lastAppliedRef holds the previous device's settings,
-      // so only commands whose values actually changed are sent.
-      const prev = lastAppliedRef.current ?? desired;
-
-      // Never auto-change level on device switch — changeLevel causes UE to
-      // reload the scene which kills the PS WebRTC stream. The user can change
-      // the level manually via UeControlPanel if needed.
-      const safePrev = { ...prev, level: desired.level };
-
-      // On page refresh: UE's actual camera state is unknown (it may have
-      // restarted while the browser was closed), so pass desired as committed
-      // to produce zero camera deltas. On device switch within a session:
-      // use the real committed camera to compute correct deltas.
-      const effectiveCommitted = isPageRefresh
-        ? { zoom: desired.zoom, cameraVertical: desired.cameraVertical,
-            cameraHorizontal: desired.cameraHorizontal, cameraPitch: desired.cameraPitch }
-        : committed;
-
-      const { newCommitted } = await applyDeviceSettings(
-        url,
-        desired,
-        effectiveCommitted,
-        controller.signal,
-        safePrev,
-      );
-
-      // Always update committed — even if aborted mid-sequence.
-      // newCommitted only advances axes that succeeded, so it accurately
-      // reflects UE's actual camera state. Skipping this update would
-      // leave committed stale and cause drift on the next apply.
-      useUeControlStore.getState().setUeCommittedCamera(newCommitted);
-
-      if (!controller.signal.aborted) {
-        lastAppliedRef.current = desired;
-      }
-    })();
-
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- ueReachable intentionally excluded to avoid re-apply on health change
-  }, [isStreaming, displayedDeviceId]);
 
   // ── Crossfade transition on device switch ─────────────────────────────────
   // Sequence: idle → exiting (220ms fade-out) → entering (swap ID, 1500ms fade-in) → idle.

@@ -178,14 +178,3 @@ export const useUeControlStore = create<UeControlState>()(
     },
   ),
 );
-
-/** Non-reactive selector for device settings (use outside React) */
-export function getDeviceSettingsSnapshot(deviceId: string): UeDeviceSettings {
-  const stored = useUeControlStore.getState().deviceSettings[deviceId];
-  return stored ?? { ...DEFAULT_DEVICE_SETTINGS };
-}
-
-/** Non-reactive snapshot of committed camera (use outside React) */
-export function getCommittedCameraSnapshot(): CameraPosition {
-  return { ...useUeControlStore.getState().ueCommittedCamera };
-}
