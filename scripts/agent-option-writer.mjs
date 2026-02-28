@@ -958,12 +958,16 @@ const server = createServer(async (req, res) => {
       let deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
       let exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
 
-      // If no deviceId given, restart whatever is currently running
-      if (!deviceId && activeProcess) {
-        deviceId = activeProcess.deviceId;
-        // Look up exe path from config
+      // Resolve exe path from active process or saved config
+      if (!exePath) {
+        if (!deviceId && activeProcess) {
+          deviceId = activeProcess.deviceId;
+        }
         const cfg = await readConfig();
-        exePath = cfg?.deviceExePaths?.[deviceId] ?? cfg?.exePath ?? cfg?.start2streamPath ?? '';
+        exePath = (deviceId && cfg?.deviceExePaths?.[deviceId])
+          || cfg?.exePath
+          || cfg?.start2streamPath
+          || '';
       }
 
       if (!exePath) {
