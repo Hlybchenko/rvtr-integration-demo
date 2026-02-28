@@ -133,6 +133,10 @@ const CAMERA_KEYS: (keyof CameraPosition)[] = [
   'cameraPitch',
 ];
 
+/** Maximum per-axis camera delta sent in one command.
+ *  Prevents UE crashes from oversized offsets (e.g. stale committed camera). */
+const MAX_CAMERA_DELTA = 500;
+
 /** Map camera key → UE send function */
 const CAMERA_SENDERS: Record<
   keyof CameraPosition,
@@ -165,18 +169,22 @@ export async function applyCameraTransition(
   for (const key of CAMERA_KEYS) {
     if (signal?.aborted) break;
 
-    const delta = desired[key] - committed[key];
-    if (delta === 0) {
+    const rawDelta = desired[key] - committed[key];
+    if (rawDelta === 0) {
       newCommitted[key] = desired[key];
       continue;
     }
+
+    // Clamp to prevent UE crashes from oversized offsets
+    const delta = Math.max(-MAX_CAMERA_DELTA, Math.min(MAX_CAMERA_DELTA, rawDelta));
 
     const sendFn = CAMERA_SENDERS[key];
     let ok = await sendFn(baseUrl, delta);
     if (!ok && !signal?.aborted) ok = await sendFn(baseUrl, delta);
 
     if (ok) {
-      newCommitted[key] = desired[key];
+      // Use committed + clamped delta (not desired) when delta was clamped
+      newCommitted[key] = committed[key] + delta;
     }
   }
 

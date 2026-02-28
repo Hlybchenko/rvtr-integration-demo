@@ -129,7 +129,9 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
 
     // Report screen slot viewport geometry to streamingStore (rAF-debounced).
     // Uses a 1px threshold to avoid unnecessary store updates on sub-pixel changes.
-    // `size` is intentionally excluded — ResizeObserver already fires on geometry changes.
+    // `device.id` is included so the effect re-runs on device switch — the
+    // screenSlotRef may point to a different DOM element (e.g. fullscreen ↔
+    // non-fullscreen) and the ResizeObserver must observe the new element.
     useEffect(() => {
       if (!isStreaming) return;
 
@@ -185,8 +187,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
         window.removeEventListener('scroll', scheduleUpdate);
         window.removeEventListener('resize', scheduleUpdate);
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- size excluded: ResizeObserver handles geometry changes
-    }, [isStreaming, setViewport]);
+    }, [isStreaming, setViewport, device.id]);
 
     // Reset loading / blocked state when url or device changes (non-streaming only)
     useEffect(() => {

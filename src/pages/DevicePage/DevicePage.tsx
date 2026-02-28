@@ -60,14 +60,22 @@ export function DevicePage() {
 
   // Show/hide persistent iframe when entering/leaving a streaming device page.
   // The iframe is already mounted if user clicked Connect on Settings.
+  // Hide during crossfade transitions to avoid expensive browser recomposites
+  // when the viewport geometry changes (position/size/borderRadius) — this
+  // prevents WebRTC video freezes during rapid device navigation.
   useEffect(() => {
     if (!isStreaming || !connected) return;
+
+    if (transitionPhase === 'exiting') {
+      hide();
+      return;
+    }
 
     show();
     return () => {
       hide();
     };
-  }, [isStreaming, connected, show, hide]);
+  }, [isStreaming, connected, transitionPhase, show, hide]);
 
   // Auto-apply saved UE settings when switching to a streaming device.
   // On switch: reset the previous device's camera offsets to zero, then apply the new device's settings.
@@ -94,11 +102,11 @@ export function DevicePage() {
     void (async () => {
       const committed = getCommittedCameraSnapshot();
       const desired = getDeviceSettingsSnapshot(displayedDeviceId);
+      const isPageRefresh = !lastAppliedRef.current;
 
       // On page refresh: lastAppliedRef is empty, so fall back to `desired` —
       // this makes prev === desired, skipping all absolute commands (level, logo, etc.)
       // that would otherwise reload the scene and freeze the PS stream.
-      // Camera deltas are still computed from committed → desired (zero on refresh).
       // On device switch: lastAppliedRef holds the previous device's settings,
       // so only commands whose values actually changed are sent.
       const prev = lastAppliedRef.current ?? desired;
@@ -108,10 +116,19 @@ export function DevicePage() {
       // the level manually via UeControlPanel if needed.
       const safePrev = { ...prev, level: desired.level };
 
+      // On page refresh: UE's actual camera state is unknown (it may have
+      // restarted while the browser was closed), so pass desired as committed
+      // to produce zero camera deltas. On device switch within a session:
+      // use the real committed camera to compute correct deltas.
+      const effectiveCommitted = isPageRefresh
+        ? { zoom: desired.zoom, cameraVertical: desired.cameraVertical,
+            cameraHorizontal: desired.cameraHorizontal, cameraPitch: desired.cameraPitch }
+        : committed;
+
       const { newCommitted } = await applyDeviceSettings(
         url,
         desired,
-        committed,
+        effectiveCommitted,
         controller.signal,
         safePrev,
       );

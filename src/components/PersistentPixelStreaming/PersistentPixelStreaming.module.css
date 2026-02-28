@@ -2,6 +2,9 @@
   width: 100%;
   height: 100%;
   border: none;
+  /* Force GPU compositing layer — prevents WebRTC video freeze
+     when the wrapper changes position/size/borderRadius on device switch. */
+  will-change: transform;
 }
 
 .persistentIframe:focus {
