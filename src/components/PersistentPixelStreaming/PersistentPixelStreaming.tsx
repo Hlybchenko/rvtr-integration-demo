@@ -139,9 +139,11 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const shouldShow = isVisible && !!viewport;
   const resolvedSandbox = SANDBOX === 'none' ? undefined : SANDBOX;
 
-  // Wrapper handles positioning + border-radius clipping.
-  // border-radius is NOT applied to the iframe itself because it causes
-  // browser compositing issues that freeze the WebRTC video stream.
+  // Wrapper handles positioning only.
+  // border-radius is intentionally NOT applied — even on the wrapper — because
+  // the rounded clip + overflow:hidden forces the browser to recomposite the
+  // WebRTC video layer, which freezes the stream (observed on keba-kiosk).
+  // The device frame image (z-index 2) visually masks the corners anyway.
   const wrapperStyle = useMemo<CSSProperties>(
     () =>
       viewport
@@ -151,7 +153,6 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
             top: viewport.top,
             width: viewport.width,
             height: viewport.height,
-            borderRadius: viewport.borderRadius,
             overflow: 'hidden',
             zIndex: 3,
             background: '#0a0c14',
