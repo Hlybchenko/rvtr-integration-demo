@@ -6,7 +6,6 @@
 
 .main {
   flex: 1;
-  margin-left: var(--sidebar-width);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -22,9 +21,9 @@
   overflow-x: hidden;
 }
 
-/* ── Burger button (mobile only) ── */
+/* ── Burger button ── */
 .burger {
-  display: none;
+  display: flex;
   position: fixed;
   top: 14px;
   left: 14px;
@@ -89,9 +88,9 @@
   transform: rotate(-45deg);
 }
 
-/* ── Backdrop (mobile only) ── */
+/* ── Backdrop ── */
 .backdrop {
-  display: none;
+  display: block;
   position: fixed;
   inset: 0;
   z-index: 14;
@@ -108,21 +107,6 @@
   pointer-events: auto;
 }
 
-/* ── Mobile overrides ── */
-@media (max-width: 767px) {
-  .main {
-    margin-left: 0;
-  }
-
-  .burger {
-    display: flex;
-  }
-
-  .backdrop {
-    display: block;
-  }
-
-  .sidebarOpen {
-    transform: translateX(0);
-  }
+.sidebarOpen {
+  transform: translateX(0);
 }

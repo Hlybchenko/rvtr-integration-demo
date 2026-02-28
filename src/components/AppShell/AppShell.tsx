@@ -5,8 +5,6 @@ import { PersistentPixelStreaming } from '@/components/PersistentPixelStreaming/
 import { useStatusPolling } from '@/hooks/useStatusPolling';
 import styles from './AppShell.module.css';
 
-const MOBILE_BREAKPOINT = 768;
-
 export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
@@ -14,27 +12,17 @@ export function AppShell() {
   // Global status polling (process, PS reachability, UE health)
   useStatusPolling();
 
-  // Close sidebar on route change (mobile)
+  // Close sidebar on route change
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
-
-  // Close sidebar if window resizes above mobile breakpoint
-  useEffect(() => {
-    const mq = window.matchMedia(`(min-width: ${MOBILE_BREAKPOINT}px)`);
-    const handler = (e: MediaQueryListEvent) => {
-      if (e.matches) setSidebarOpen(false);
-    };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
 
   const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   return (
     <div className={styles.layout}>
-      {/* Mobile burger button */}
+      {/* Burger button */}
       <button
         type="button"
         className={styles.burger}
@@ -47,7 +35,7 @@ export function AppShell() {
         />
       </button>
 
-      {/* Backdrop (mobile only, when sidebar open) */}
+      {/* Backdrop (when sidebar open) */}
       <div
         className={`${styles.backdrop} ${sidebarOpen ? styles.backdropVisible : ''}`}
         onClick={closeSidebar}
