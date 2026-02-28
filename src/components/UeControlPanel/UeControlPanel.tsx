@@ -4,6 +4,7 @@ import {
   UE_LEVELS,
   DEFAULT_DEVICE_SETTINGS,
   ZERO_CAMERA,
+  type CameraPosition,
   type UeDeviceSettings,
   type UeLevelId,
 } from '@/stores/ueControlStore';
@@ -138,27 +139,27 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     };
   }, []);
 
+  // Cancel pending slider timers and seed baselines at the given camera
+  // values. After this call, slider drags compute deltas from `camera`
+  // which must reflect what we believe UE currently has.
+  const resetSliderState = (camera: CameraPosition) => {
+    sliderTimersRef.current.forEach((t) => clearTimeout(t));
+    sliderTimersRef.current.clear();
+    pendingDeltaRef.current.clear();
+    sentValueRef.current.clear();
+    sentValueRef.current.set('zoom', camera.zoom);
+    sentValueRef.current.set('cameraVertical', camera.cameraVertical);
+    sentValueRef.current.set('cameraHorizontal', camera.cameraHorizontal);
+    sentValueRef.current.set('cameraPitch', camera.cameraPitch);
+  };
+
   // ── Auto-apply saved settings on device switch ──────────────────────────
   // Generation counter ensures rapid device switches don't overlap: only the
   // latest switch's commands run to completion.
   const applyGenRef = useRef(0);
   useEffect(() => {
-    // Clear slider state for the new device
-    sliderTimersRef.current.forEach((t) => clearTimeout(t));
-    sliderTimersRef.current.clear();
-    pendingDeltaRef.current.clear();
-
     const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
-
-    // Seed baselines with the saved values so that subsequent slider drags
-    // compute deltas from the auto-applied position. Without this, a failed
-    // UE command would leave sentValueRef empty and the fallback to the
-    // (optimistically updated) deviceSettings would produce wrong deltas.
-    sentValueRef.current.clear();
-    sentValueRef.current.set('zoom', desired.zoom);
-    sentValueRef.current.set('cameraVertical', desired.cameraVertical);
-    sentValueRef.current.set('cameraHorizontal', desired.cameraHorizontal);
-    sentValueRef.current.set('cameraPitch', desired.cameraPitch);
+    resetSliderState(desired);
 
     const url = useUeControlStore.getState().ueApiUrl;
     if (!url) return;
@@ -251,11 +252,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   );
 
   const handleReset = useCallback(() => {
-    // Clear accumulated slider state so next move starts from defaults
-    pendingDeltaRef.current.clear();
-    sentValueRef.current.clear();
-    sliderTimersRef.current.forEach((t) => clearTimeout(t));
-    sliderTimersRef.current.clear();
+    // Seed baselines at zero — defaults have all camera values at 0
+    resetSliderState(ZERO_CAMERA);
 
     // Reset device settings in store (UI immediately shows defaults)
     resetSettings(deviceId);
@@ -268,8 +266,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
       void (async () => {
         const newCommitted = await resetCameraToZero(url, committed);
         useUeControlStore.getState().setUeCommittedCamera(newCommitted);
-        // Apply absolute defaults; camera values are zeros and committed is now
-        // zeros (on success), so no spurious camera commands are sent.
         await applyDeviceSettings(url, DEFAULT_DEVICE_SETTINGS, newCommitted);
       })();
     }
@@ -470,9 +466,10 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               className={styles.resetButton}
               onClick={() => {
                 // Assume UE is at zero (fresh start), then re-apply current settings
+                const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
+                resetSliderState(desired);
                 useUeControlStore.getState().resetUeCommittedCamera();
                 const url = useUeControlStore.getState().ueApiUrl;
-                const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
                 if (url) {
                   void applyDeviceSettings(url, desired, ZERO_CAMERA).then(({ newCommitted }) => {
                     useUeControlStore.getState().setUeCommittedCamera(newCommitted);
