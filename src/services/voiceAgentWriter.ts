@@ -458,6 +458,38 @@ export function startProcess(exePath: string): Promise<ProcessStartResult> {
   });
 }
 
+export interface ProcessStopResult {
+  ok: boolean;
+  error?: string;
+}
+
+/** POST /process/stop — stop the running process. Serialized via async queue. */
+export function stopProcess(): Promise<ProcessStopResult> {
+  return enqueueProcessOp(async () => {
+    const response = await fetchWithTimeout(
+      `${WRITER_BASE_URL}/process/stop`,
+      { method: 'POST' },
+      10_000,
+    );
+
+    const payload = await parseJsonSafely(response);
+    const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
+      string,
+      unknown
+    >;
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          typeof record.error === 'string' ? record.error : 'Failed to stop process',
+      };
+    }
+
+    return { ok: true };
+  });
+}
+
 export interface ProcessRestartResult {
   ok: boolean;
   pid?: number;

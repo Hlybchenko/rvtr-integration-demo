@@ -232,9 +232,9 @@ export async function checkUeApiHealth(baseUrl: string): Promise<boolean> {
       body: JSON.stringify({ command: 'ping' }),
       signal: controller.signal,
     });
-    // Any response (even 404 for unknown command) means UE is up.
-    // 502/504 from our proxy means UE is unreachable.
-    return res.status < 500;
+    // Any response from UE (including 500 for unknown commands) means UE is up.
+    // Only 502/504 from our Vite proxy mean UE is truly unreachable.
+    return res.status < 502;
   } catch {
     return false;
   } finally {

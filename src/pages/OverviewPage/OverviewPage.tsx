@@ -14,6 +14,7 @@ import {
   setGlobalExePath,
   browseForExe,
   startProcess,
+  stopProcess,
   restartProcess,
 } from '@/services/voiceAgentWriter';
 import { isValidUrl } from '@/utils/isValidUrl';
@@ -496,6 +497,22 @@ export function OverviewPage() {
     }
   }, [isExeConfigured, processRunning, storeExePath]);
 
+  const handleStopProcess = useCallback(async () => {
+    setIsStartingProcess(true);
+    setProcessError(null);
+
+    try {
+      const result = await stopProcess();
+      if (!result.ok) {
+        setProcessError(result.error ?? 'Failed to stop process');
+      }
+    } catch (err) {
+      setProcessError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsStartingProcess(false);
+    }
+  }, []);
+
   // Determine Voice Agent block validation state
   const voiceAgentHasError = !!filePathError || !!exePathError;
 
@@ -591,17 +608,6 @@ export function OverviewPage() {
                     ✗ Invalid
                   </span>
                 )}
-                {/* Process status badge */}
-                {processRunning === true && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>
-                    ● Running
-                  </span>
-                )}
-                {processRunning === false && isExeConfigured && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>
-                    ○ Stopped
-                  </span>
-                )}
               </div>
 
               <div className={styles.filePathRow}>
@@ -639,20 +645,42 @@ export function OverviewPage() {
               </div>
             </div>
 
-            {/* Start / Restart button */}
-            <div className={styles.processActions}>
-              <button
-                type="button"
-                className={styles.applyButton}
-                onClick={() => void handleStartProcess()}
-                disabled={!isExeConfigured || isStartingProcess}
-              >
-                {isStartingProcess
-                  ? 'Starting...'
-                  : processRunning
-                    ? 'Restart'
-                    : 'Start'}
-              </button>
+            {/* Process status bar + actions */}
+            <div className={styles.processStatusBar}>
+              <div className={styles.processStatusInfo}>
+                <span
+                  className={`${styles.processStatusDot} ${
+                    processRunning ? styles.processStatusDotRunning : styles.processStatusDotStopped
+                  }`}
+                />
+                <span className={`${styles.processStatusText} ${processRunning ? styles.processStatusTextRunning : ''}`}>
+                  {processRunning ? 'Running' : isExeConfigured ? 'Not running — click Start' : 'Configure executable to start'}
+                </span>
+              </div>
+              <div className={styles.processActions}>
+                {processRunning && (
+                  <button
+                    type="button"
+                    className={styles.stopButton}
+                    onClick={() => void handleStopProcess()}
+                    disabled={isStartingProcess}
+                  >
+                    Stop
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={styles.applyButton}
+                  onClick={() => void handleStartProcess()}
+                  disabled={!isExeConfigured || isStartingProcess}
+                >
+                  {isStartingProcess
+                    ? 'Starting...'
+                    : processRunning
+                      ? 'Restart'
+                      : 'Start'}
+                </button>
+              </div>
             </div>
 
             {processError && <p className={styles.filePathValidationError}>{processError}</p>}
@@ -742,37 +770,29 @@ export function OverviewPage() {
               const urlValue = valuesByDevice[field.id];
               const hasUrl = urlValue.trim().length > 0;
               const urlValid = !hasUrl || isValidUrl(urlValue);
-              const hasError = hasUrl && !urlValid;
-              const allGood = hasUrl && urlValid;
 
               return (
-                <div
-                  key={field.id}
-                  className={`${styles.deviceCard} ${
-                    hasError ? styles.deviceCardError : allGood ? styles.deviceCardValid : ''
-                  }`}
-                >
-                  <h3 className={styles.deviceCardTitle}>{field.label}</h3>
-                  <div className={styles.field}>
-                    <div className={styles.fieldHeader}>
-                      <label className={styles.label} htmlFor={`${field.id}-url`}>URL</label>
-                      {hasUrl && (
-                        <span className={`${styles.badge} ${urlValid ? styles.badgeValid : styles.badgeInvalid}`}>
-                          {urlValid ? '✓ Valid' : '✗ Invalid URL'}
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      id={`${field.id}-url`}
-                      className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
-                      type="url"
-                      placeholder={field.placeholder}
-                      value={urlValue}
-                      onChange={(e) => setDeviceUrl(field.id, e.target.value)}
-                      spellCheck={false}
-                      autoComplete="url"
-                    />
+                <div key={field.id} className={styles.field}>
+                  <div className={styles.fieldHeader}>
+                    <label className={styles.label} htmlFor={`${field.id}-url`}>
+                      {field.label}
+                    </label>
+                    {hasUrl && (
+                      <span className={`${styles.badge} ${urlValid ? styles.badgeValid : styles.badgeInvalid}`}>
+                        {urlValid ? '✓ Valid' : '✗ Invalid URL'}
+                      </span>
+                    )}
                   </div>
+                  <input
+                    id={`${field.id}-url`}
+                    className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
+                    type="url"
+                    placeholder={field.placeholder}
+                    value={urlValue}
+                    onChange={(e) => setDeviceUrl(field.id, e.target.value)}
+                    spellCheck={false}
+                    autoComplete="url"
+                  />
                 </div>
               );
             })}
@@ -798,7 +818,6 @@ export function OverviewPage() {
                     {psUrlValid ? '✓ Valid' : '✗ Invalid URL'}
                   </span>
                 )}
-                {/* PS server reachability badge */}
                 {psReachable === true && psAllGood && (
                   <span className={`${styles.badge} ${styles.badgeRunning}`}>● Reachable</span>
                 )}
@@ -816,19 +835,6 @@ export function OverviewPage() {
                 spellCheck={false}
                 autoComplete="url"
               />
-              <div className={styles.connectRow}>
-                <button
-                  type="button"
-                  className={`${styles.connectButton} ${psConnected ? styles.connectButtonDisconnect : ''}`}
-                  onClick={() => (psConnected ? psDisconnect() : psConnect())}
-                  disabled={!psAllGood}
-                >
-                  {psConnected ? 'Disconnect' : 'Connect'}
-                </button>
-                {psConnected && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Session active</span>
-                )}
-              </div>
               <p className={styles.hint}>
                 Shared URL for all streaming devices. Session persists across page navigation.
               </p>
@@ -868,6 +874,21 @@ export function OverviewPage() {
               <p className={styles.hint}>
                 UE app built-in HTTP server for runtime control (camera, levels, avatars).
               </p>
+            </div>
+
+            {/* Connect / Disconnect — at bottom of block */}
+            <div className={styles.connectRow}>
+              <button
+                type="button"
+                className={`${styles.connectButton} ${psConnected ? styles.connectButtonDisconnect : ''}`}
+                onClick={() => (psConnected ? psDisconnect() : psConnect())}
+                disabled={!psAllGood}
+              >
+                {psConnected ? 'Disconnect' : 'Connect'}
+              </button>
+              {psConnected && (
+                <span className={`${styles.badge} ${styles.badgeRunning}`}>● Session active</span>
+              )}
             </div>
           </section>
         </div>

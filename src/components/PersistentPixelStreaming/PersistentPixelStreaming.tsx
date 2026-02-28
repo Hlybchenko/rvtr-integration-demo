@@ -139,7 +139,10 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const shouldShow = isVisible && !!viewport;
   const resolvedSandbox = SANDBOX === 'none' ? undefined : SANDBOX;
 
-  const iframeStyle = useMemo<CSSProperties>(
+  // Wrapper handles positioning + border-radius clipping.
+  // border-radius is NOT applied to the iframe itself because it causes
+  // browser compositing issues that freeze the WebRTC video stream.
+  const wrapperStyle = useMemo<CSSProperties>(
     () =>
       viewport
         ? {
@@ -149,8 +152,8 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
             width: viewport.width,
             height: viewport.height,
             borderRadius: viewport.borderRadius,
+            overflow: 'hidden',
             zIndex: 3,
-            border: 'none',
             background: '#0a0c14',
             pointerEvents: shouldShow ? 'auto' : 'none',
             opacity: shouldShow && !loading ? 1 : 0,
@@ -164,6 +167,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
             height: 1,
             opacity: 0,
             pointerEvents: 'none',
+            overflow: 'hidden',
           },
     [viewport, shouldShow, loading],
   );
@@ -174,19 +178,20 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
 
   return (
     <>
-      <iframe
-        ref={iframeRef}
-        className={styles.persistentIframe}
-        data-ps-iframe
-        style={iframeStyle}
-        src={url}
-        title="Pixel Streaming"
-        tabIndex={0}
-        sandbox={resolvedSandbox}
-        onLoad={handleLoad}
-        onError={handleError}
-        allow="autoplay; microphone; fullscreen"
-      />
+      <div style={wrapperStyle}>
+        <iframe
+          ref={iframeRef}
+          className={styles.persistentIframe}
+          data-ps-iframe
+          src={url}
+          title="Pixel Streaming"
+          tabIndex={0}
+          sandbox={resolvedSandbox}
+          onLoad={handleLoad}
+          onError={handleError}
+          allow="autoplay; microphone; fullscreen"
+        />
+      </div>
       {shouldShow && isEmbedBlocked ? (
         <div
           className={styles.embedError}
