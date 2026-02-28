@@ -174,13 +174,16 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       const ro = new ResizeObserver(scheduleUpdate);
       ro.observe(el);
 
-      // Also update on scroll (in case parent scrolls)
+      // Also update on scroll (in case parent scrolls) and resize
+      // (position may shift due to flex centering without size change).
       window.addEventListener('scroll', scheduleUpdate, { passive: true });
+      window.addEventListener('resize', scheduleUpdate, { passive: true });
 
       return () => {
         if (rafId !== null) cancelAnimationFrame(rafId);
         ro.disconnect();
         window.removeEventListener('scroll', scheduleUpdate);
+        window.removeEventListener('resize', scheduleUpdate);
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps -- size excluded: ResizeObserver handles geometry changes
     }, [isStreaming, setViewport]);

@@ -206,7 +206,7 @@ export async function checkUeApiHealth(baseUrl: string): Promise<boolean> {
 
   const normalizedBase = baseUrl.replace(/\/+$/, '');
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 3_000);
+  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const res = await fetch('/ue-api/ravatar', {

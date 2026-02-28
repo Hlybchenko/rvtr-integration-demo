@@ -208,8 +208,13 @@
 }
 
 .select option {
-  background: var(--card-nested-bg, #1a1c2e);
-  color: var(--text-primary, #e2e4f0);
+  background: #1a1c2e;
+  color: #e2e4f0;
+}
+
+.select option:checked {
+  background: var(--accent, #6c5ce7);
+  color: #fff;
 }
 
 .select:hover {

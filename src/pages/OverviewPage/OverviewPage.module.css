@@ -317,6 +317,14 @@
   word-break: break-all;
 }
 
+/* Process actions row */
+.processActions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
 /* Radio group disabled */
 .radioGroupDisabled {
   opacity: 0.45;

@@ -13,6 +13,7 @@ import {
   browseForFile,
   setGlobalExePath,
   browseForExe,
+  startProcess,
   restartProcess,
 } from '@/services/voiceAgentWriter';
 import { isValidUrl } from '@/utils/isValidUrl';
@@ -78,6 +79,10 @@ export function OverviewPage() {
   const [pendingVoiceAgent, setPendingVoiceAgent] = useState<VoiceAgent>(voiceAgent);
   const [isApplying, setIsApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+
+  // -- process start/restart --
+  const [isStartingProcess, setIsStartingProcess] = useState(false);
+  const [processError, setProcessError] = useState<string | null>(null);
 
   // -- UE API URL state (health stored centrally in ueControlStore) --
   const ueApiUrl = useUeControlStore((s) => s.ueApiUrl);
@@ -471,10 +476,28 @@ export function OverviewPage() {
     }
   }, [setExePathStore]);
 
+  const handleStartProcess = useCallback(async () => {
+    if (!isExeConfigured) return;
+    setIsStartingProcess(true);
+    setProcessError(null);
+
+    try {
+      const result = processRunning
+        ? await restartProcess()
+        : await startProcess(storeExePath);
+
+      if (!result.ok) {
+        setProcessError(result.error ?? 'Failed to start process');
+      }
+    } catch (err) {
+      setProcessError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsStartingProcess(false);
+    }
+  }, [isExeConfigured, processRunning, storeExePath]);
+
   // Determine Voice Agent block validation state
   const voiceAgentHasError = !!filePathError || !!exePathError;
-  const voiceAgentAllGood =
-    isFileConfigured && !hasPendingAgentChange && isExeConfigured;
 
   return (
     <div className={styles.settings}>
@@ -487,17 +510,17 @@ export function OverviewPage() {
       <div className={styles.form}>
         {/* -- Left column: Voice Agent + Widget -- */}
         <div className={styles.column}>
-          {/* -- Voice Agent -- */}
+          {/* -- Process (License + Executable) -- */}
           <section
             className={`${styles.settingsBlock} ${
-              voiceAgentHasError || (isFileConfigured && hasPendingAgentChange)
+              voiceAgentHasError
                 ? styles.settingsBlockError
-                : voiceAgentAllGood
+                : isFileConfigured && isExeConfigured
                   ? styles.settingsBlockValid
                   : ''
             }`}
           >
-            <h2 className={styles.settingsBlockTitle}>Voice Agent</h2>
+            <h2 className={styles.settingsBlockTitle}>Process</h2>
 
             {/* License file path */}
             <div className={styles.field}>
@@ -616,9 +639,40 @@ export function OverviewPage() {
               </div>
             </div>
 
+            {/* Start / Restart button */}
+            <div className={styles.processActions}>
+              <button
+                type="button"
+                className={styles.applyButton}
+                onClick={() => void handleStartProcess()}
+                disabled={!isExeConfigured || isStartingProcess}
+              >
+                {isStartingProcess
+                  ? 'Starting...'
+                  : processRunning
+                    ? 'Restart'
+                    : 'Start'}
+              </button>
+            </div>
+
+            {processError && <p className={styles.filePathValidationError}>{processError}</p>}
+          </section>
+
+          {/* -- Agent Provider -- */}
+          <section
+            className={`${styles.settingsBlock} ${
+              isFileConfigured && hasPendingAgentChange
+                ? styles.settingsBlockError
+                : isFileConfigured && !hasPendingAgentChange && voiceAgent
+                  ? styles.settingsBlockValid
+                  : ''
+            }`}
+          >
+            <h2 className={styles.settingsBlockTitle}>Agent Provider</h2>
+
             {/* Voice agent selector */}
             <div className={styles.fieldHeader}>
-              <label className={styles.label}>Agent provider</label>
+              <label className={styles.label}>Provider</label>
               {isFileConfigured && !hasPendingAgentChange && voiceAgent && (
                 <span className={`${styles.badge} ${styles.badgeValid}`}>✓ Applied</span>
               )}
