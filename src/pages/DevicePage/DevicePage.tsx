@@ -93,8 +93,8 @@ export function DevicePage() {
     void (async () => {
       // Reset camera from previous device's offsets before applying new ones
       const prevId = prevDeviceIdRef.current;
-      if (prevId && prevId !== displayedDeviceId) {
-        const prevSettings = getDeviceSettingsSnapshot(prevId);
+      const prevSettings = prevId ? getDeviceSettingsSnapshot(prevId) : undefined;
+      if (prevId && prevId !== displayedDeviceId && prevSettings) {
         await resetCameraToZero(url, prevSettings);
       }
 
@@ -102,7 +102,7 @@ export function DevicePage() {
       if (controller.signal.aborted) return;
 
       const saved = getDeviceSettingsSnapshot(displayedDeviceId);
-      await applyDeviceSettings(url, saved, controller.signal);
+      await applyDeviceSettings(url, saved, controller.signal, prevSettings);
 
       if (!controller.signal.aborted) {
         prevDeviceIdRef.current = displayedDeviceId;

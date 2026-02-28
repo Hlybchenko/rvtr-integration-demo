@@ -152,6 +152,9 @@ export async function resetCameraToZero(
  * On device switch we assume UE is at its default (0) position, so the stored
  * value IS the delta. For non-offset commands (level, toggles) the value is absolute.
  *
+ * When `prev` is supplied, only commands whose value actually changed are sent.
+ * This avoids unnecessary UE work (e.g. reloading a scene that's already active).
+ *
  * Accepts an optional AbortSignal to bail out early when the device switches
  * again before the batch finishes. Each failed command gets one retry.
  *
@@ -161,17 +164,28 @@ export async function applyDeviceSettings(
   baseUrl: string,
   settings: UeDeviceSettings,
   signal?: AbortSignal,
+  prev?: UeDeviceSettings,
 ): Promise<number> {
   if (!baseUrl) return 0;
 
-  const commands: Array<() => Promise<boolean>> = [
-    // Absolute commands — safe to apply directly
-    () => changeLevel(baseUrl, settings.level),
-    () => setLogo(baseUrl, settings.showLogo),
-    () => setAllowAvatarChange(baseUrl, settings.allowAvatarChange),
-    () => setInterruption(baseUrl, settings.allowInterruption),
-    () => setOutputAudioFormat(baseUrl, settings.isPcm),
-  ];
+  const commands: Array<() => Promise<boolean>> = [];
+
+  // Absolute commands — skip if value unchanged from previous device
+  if (!prev || prev.level !== settings.level) {
+    commands.push(() => changeLevel(baseUrl, settings.level));
+  }
+  if (!prev || prev.showLogo !== settings.showLogo) {
+    commands.push(() => setLogo(baseUrl, settings.showLogo));
+  }
+  if (!prev || prev.allowAvatarChange !== settings.allowAvatarChange) {
+    commands.push(() => setAllowAvatarChange(baseUrl, settings.allowAvatarChange));
+  }
+  if (!prev || prev.allowInterruption !== settings.allowInterruption) {
+    commands.push(() => setInterruption(baseUrl, settings.allowInterruption));
+  }
+  if (!prev || prev.isPcm !== settings.isPcm) {
+    commands.push(() => setOutputAudioFormat(baseUrl, settings.isPcm));
+  }
 
   // Offset-based commands — only send if non-zero
   if (settings.zoom !== 0) commands.push(() => setZoom(baseUrl, settings.zoom));
@@ -179,8 +193,8 @@ export async function applyDeviceSettings(
   if (settings.cameraHorizontal !== 0) commands.push(() => setCameraHorizontal(baseUrl, settings.cameraHorizontal));
   if (settings.cameraPitch !== 0) commands.push(() => setCameraPitch(baseUrl, settings.cameraPitch));
 
-  // Apply avatar only if ID is specified
-  if (settings.avatarId.trim()) {
+  // Apply avatar only if ID is specified and changed
+  if (settings.avatarId.trim() && (!prev || prev.avatarId !== settings.avatarId)) {
     commands.push(() => changeAvatarById(baseUrl, settings.avatarId));
   }
 
