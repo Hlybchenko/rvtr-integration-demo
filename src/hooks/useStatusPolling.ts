@@ -22,13 +22,15 @@ const UE_MAX_BACKOFF_MS = 30_000;
  * Results go into statusStore (process, PS) and ueControlStore (UE health).
  */
 export function useStatusPolling(): void {
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Consecutive UE health check failures — drives backoff */
   const ueFailCountRef = useRef(0);
   /** Tick counter to compare against backoff interval */
   const tickRef = useRef(0);
 
   useEffect(() => {
+    let cancelled = false;
+
     const poll = async () => {
       const { pixelStreamingUrl } = useSettingsStore.getState();
       const { ueApiUrl, setUeReachable } = useUeControlStore.getState();
@@ -77,11 +79,20 @@ export function useStatusPolling(): void {
       ]);
     };
 
-    void poll();
-    timerRef.current = setInterval(() => void poll(), STATUS_POLL_MS);
+    // Recursive setTimeout: next poll starts only after current one finishes.
+    // Prevents overlapping polls when a fetch hangs longer than STATUS_POLL_MS.
+    const loop = async () => {
+      await poll();
+      if (!cancelled) {
+        timerRef.current = setTimeout(() => void loop(), STATUS_POLL_MS);
+      }
+    };
+
+    void loop();
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      cancelled = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
 }

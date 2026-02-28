@@ -458,19 +458,6 @@ export function startProcess(exePath: string): Promise<ProcessStartResult> {
   });
 }
 
-/** Stop the currently running process. Serialized via async queue. */
-export function stopProcess(): Promise<{ ok: boolean }> {
-  return enqueueProcessOp(async () => {
-    const response = await fetchWithTimeout(
-      `${WRITER_BASE_URL}/process/stop`,
-      { method: 'POST' },
-      10_000,
-    );
-
-    return { ok: response.ok };
-  });
-}
-
 export interface ProcessRestartResult {
   ok: boolean;
   pid?: number;
@@ -532,10 +519,18 @@ export async function checkPixelStreamingStatus(
   if (!url.trim()) return { reachable: false };
 
   try {
-    const response = await fetchWithTimeout(url, { method: 'HEAD', mode: 'no-cors' }, 3_000);
-    // no-cors gives opaque response with status 0 — that's still "reachable"
-    return { reachable: response.status === 0 || response.ok };
+    // Try CORS first — gives a definitive ok/not-ok answer
+    const response = await fetchWithTimeout(url, { method: 'HEAD', mode: 'cors' }, 3_000);
+    return { reachable: response.ok };
   } catch {
-    return { reachable: false };
+    // CORS error or network error — fall back to no-cors.
+    // Opaque response (status 0) means server is alive but blocks CORS.
+    // True network failure throws here too.
+    try {
+      await fetchWithTimeout(url, { method: 'HEAD', mode: 'no-cors' }, 3_000);
+      return { reachable: true };
+    } catch {
+      return { reachable: false };
+    }
   }
 }

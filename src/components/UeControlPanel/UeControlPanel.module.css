@@ -48,14 +48,29 @@
   line-height: 1;
 }
 
-/* Status dot on trigger */
-.statusDot {
+/* ── Status label — bottom-right corner ── */
+.statusLabel {
+  pointer-events: auto;
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
+  bottom: 12px;
+  right: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 100px;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .statusDotConnected {
@@ -65,6 +80,13 @@
 
 .statusDotDisconnected {
   background: var(--danger);
+}
+
+.statusText {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
 }
 
 /* ── Panel ── */
@@ -181,6 +203,13 @@
   outline: none;
   cursor: pointer;
   transition: border-color var(--transition-fast);
+  /* Force dark dropdown on Windows (native <select> ignores parent theme) */
+  color-scheme: dark;
+}
+
+.select option {
+  background: var(--card-nested-bg, #1a1c2e);
+  color: var(--text-primary, #e2e4f0);
 }
 
 .select:hover {
@@ -188,24 +217,6 @@
 }
 
 .select:focus {
-  border-color: var(--accent);
-}
-
-/* ── Small input ── */
-.smallInput {
-  flex: 1;
-  padding: 4px 8px;
-  font-size: var(--font-sm);
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  outline: none;
-  transition: border-color var(--transition-fast);
-}
-
-.smallInput:focus {
   border-color: var(--accent);
 }
 

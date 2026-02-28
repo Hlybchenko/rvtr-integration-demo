@@ -7,11 +7,23 @@
   max-width: 1100px;
 }
 
-/* Start step content — simple vertical layout */
-.startStepContent {
+/* Form — 2-column grid layout */
+.form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+.column {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-5);
+}
+
+/* Stretch last block to fill remaining column height */
+.column > .settingsBlock:last-child {
+  flex: 1;
 }
 
 /* Nested device card inside a group block */
@@ -371,6 +383,13 @@
   background: var(--danger-soft);
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: var(--radius-md);
+}
+
+/* ── Responsive: collapse to 1 column ── */
+@media (max-width: 860px) {
+  .form {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Mobile adjustments ── */

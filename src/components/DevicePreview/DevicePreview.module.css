@@ -74,11 +74,6 @@
   pointer-events: none;
 }
 
-.deviceBootHidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
 .loaderMinimal {
   display: flex;
   flex-direction: column;

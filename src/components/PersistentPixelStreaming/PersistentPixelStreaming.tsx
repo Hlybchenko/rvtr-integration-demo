@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useState, type CSSProperties } from 'react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useStreamingStore, type StreamingViewport } from '@/stores/streamingStore';
 import styles from './PersistentPixelStreaming.module.css';
@@ -53,8 +53,13 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
+    let rafId: number | null = null;
+
     const refocus = () => {
-      requestAnimationFrame(() => {
+      // Cancel any pending rAF to avoid duplicate focus attempts
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
         // Don't steal focus from overlay UI elements
         const active = document.activeElement;
         if (
@@ -74,7 +79,10 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     };
 
     iframe.addEventListener('blur', refocus);
-    return () => iframe.removeEventListener('blur', refocus);
+    return () => {
+      iframe.removeEventListener('blur', refocus);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, [url, isEmbedBlocked]);
 
   const handleLoad = useCallback(() => {
@@ -131,30 +139,34 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const shouldShow = isVisible && !!viewport;
   const resolvedSandbox = SANDBOX === 'none' ? undefined : SANDBOX;
 
-  const iframeStyle: CSSProperties = viewport
-    ? {
-        position: 'fixed',
-        left: viewport.left,
-        top: viewport.top,
-        width: viewport.width,
-        height: viewport.height,
-        borderRadius: viewport.borderRadius,
-        zIndex: 3,
-        border: 'none',
-        background: '#0a0c14',
-        pointerEvents: shouldShow ? 'auto' : 'none',
-        opacity: shouldShow && !loading ? 1 : 0,
-        transition: 'opacity 300ms ease',
-      }
-    : {
-        position: 'fixed',
-        left: -9999,
-        top: -9999,
-        width: 1,
-        height: 1,
-        opacity: 0,
-        pointerEvents: 'none',
-      };
+  const iframeStyle = useMemo<CSSProperties>(
+    () =>
+      viewport
+        ? {
+            position: 'fixed',
+            left: viewport.left,
+            top: viewport.top,
+            width: viewport.width,
+            height: viewport.height,
+            borderRadius: viewport.borderRadius,
+            zIndex: 3,
+            border: 'none',
+            background: '#0a0c14',
+            pointerEvents: shouldShow ? 'auto' : 'none',
+            opacity: shouldShow && !loading ? 1 : 0,
+            transition: 'opacity 300ms ease',
+          }
+        : {
+            position: 'fixed',
+            left: -9999,
+            top: -9999,
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: 'none',
+          },
+    [viewport, shouldShow, loading],
+  );
 
   if (!url) {
     return null;
@@ -165,6 +177,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
       <iframe
         ref={iframeRef}
         className={styles.persistentIframe}
+        data-ps-iframe
         style={iframeStyle}
         src={url}
         title="Pixel Streaming"

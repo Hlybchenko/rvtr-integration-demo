@@ -127,40 +127,63 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       return () => ro.disconnect();
     }, [computeSize]);
 
-    // Report screen slot viewport geometry to streamingStore
+    // Report screen slot viewport geometry to streamingStore (rAF-debounced).
+    // Uses a 1px threshold to avoid unnecessary store updates on sub-pixel changes.
+    // `size` is intentionally excluded — ResizeObserver already fires on geometry changes.
     useEffect(() => {
       if (!isStreaming) return;
 
       const el = screenSlotRef.current;
       if (!el) return;
 
-      const updateViewport = () => {
-        const rect = el.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return;
+      let rafId: number | null = null;
+      let prev = { left: 0, top: 0, width: 0, height: 0 };
 
-        const computedStyle = getComputedStyle(el);
-        setViewport({
-          left: rect.left,
-          top: rect.top,
-          width: rect.width,
-          height: rect.height,
-          borderRadius: computedStyle.borderRadius,
+      const scheduleUpdate = () => {
+        if (rafId !== null) return; // already scheduled
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return;
+
+          // Skip update if geometry changed by less than 1px
+          if (
+            Math.abs(rect.left - prev.left) < 1 &&
+            Math.abs(rect.top - prev.top) < 1 &&
+            Math.abs(rect.width - prev.width) < 1 &&
+            Math.abs(rect.height - prev.height) < 1
+          ) {
+            return;
+          }
+          prev = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+
+          const computedStyle = getComputedStyle(el);
+          setViewport({
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+            borderRadius: computedStyle.borderRadius,
+          });
         });
       };
 
-      updateViewport();
+      // Initial measurement
+      scheduleUpdate();
 
-      const ro = new ResizeObserver(updateViewport);
+      const ro = new ResizeObserver(scheduleUpdate);
       ro.observe(el);
 
       // Also update on scroll (in case parent scrolls)
-      window.addEventListener('scroll', updateViewport, { passive: true });
+      window.addEventListener('scroll', scheduleUpdate, { passive: true });
 
       return () => {
+        if (rafId !== null) cancelAnimationFrame(rafId);
         ro.disconnect();
-        window.removeEventListener('scroll', updateViewport);
+        window.removeEventListener('scroll', scheduleUpdate);
       };
-    }, [isStreaming, setViewport, size]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- size excluded: ResizeObserver handles geometry changes
+    }, [isStreaming, setViewport]);
 
     // Reset loading / blocked state when url or device changes (non-streaming only)
     useEffect(() => {

@@ -1,3 +1,15 @@
+/**
+ * UE Remote API client.
+ *
+ * All commands are routed through a Vite dev-server proxy (`/ue-api/ravatar`)
+ * to avoid CORS issues. The actual UE host is passed in `X-Ue-Target` header.
+ *
+ * Two kinds of commands exist:
+ *   - **Absolute** (level, logo, avatar, toggles) — idempotent, safe to re-send.
+ *   - **Offset-based** (zoom, cameraVertical/Horizontal, cameraPitch) —
+ *     cumulative deltas, NOT idempotent. Must be paired with `resetCameraToZero`
+ *     on device switch to prevent camera drift.
+ */
 import type { UeDeviceSettings, UeLevelId } from '@/stores/ueControlStore';
 
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -47,7 +59,11 @@ export async function sendUeCommand(
 }
 
 // ─── Individual commands ─────────────────────────────────────────────────────
+// Each function maps to a single UE HTTP command.
+// Offset commands (zoom, camera*) send deltas — UE adds them to current state.
+// Absolute commands (level, logo, avatar, toggles) set the value directly.
 
+/** @group Offset commands */
 export function setZoom(baseUrl: string, offset: number): Promise<boolean> {
   return sendUeCommand(baseUrl, { command: 'zoom', offset: String(offset) });
 }
@@ -64,6 +80,7 @@ export function setCameraPitch(baseUrl: string, angle: number): Promise<boolean>
   return sendUeCommand(baseUrl, { command: 'cameraPitch', angle: String(angle) });
 }
 
+/** @group Absolute commands */
 export function changeLevel(baseUrl: string, level: UeLevelId): Promise<boolean> {
   return sendUeCommand(baseUrl, { command: 'ChangeLevel', Level: level });
 }
@@ -88,6 +105,7 @@ export function setOutputAudioFormat(baseUrl: string, isPcm: boolean): Promise<b
   return sendUeCommand(baseUrl, { command: 'OutputAudioFormat', IsPcm: String(isPcm) });
 }
 
+/** @group Action commands (fire-and-forget, no stored state) */
 export function lightUp(baseUrl: string): Promise<boolean> {
   return sendUeCommand(baseUrl, { command: 'LightUp' });
 }
@@ -102,14 +120,6 @@ export function changeLight(baseUrl: string): Promise<boolean> {
 
 export function stopAnswer(baseUrl: string): Promise<boolean> {
   return sendUeCommand(baseUrl, { command: 'StopAnswer' });
-}
-
-export function uiSwitch(baseUrl: string): Promise<boolean> {
-  return sendUeCommand(baseUrl, { command: 'UISwitch' });
-}
-
-export function setLanguage(baseUrl: string, language: string): Promise<boolean> {
-  return sendUeCommand(baseUrl, { command: 'SetLanguage', Language: language });
 }
 
 // ─── Camera reset ────────────────────────────────────────────────────────────
@@ -142,11 +152,15 @@ export async function resetCameraToZero(
  * On device switch we assume UE is at its default (0) position, so the stored
  * value IS the delta. For non-offset commands (level, toggles) the value is absolute.
  *
+ * Accepts an optional AbortSignal to bail out early when the device switches
+ * again before the batch finishes. Each failed command gets one retry.
+ *
  * Returns the number of successfully applied commands.
  */
 export async function applyDeviceSettings(
   baseUrl: string,
   settings: UeDeviceSettings,
+  signal?: AbortSignal,
 ): Promise<number> {
   if (!baseUrl) return 0;
 
@@ -172,7 +186,11 @@ export async function applyDeviceSettings(
 
   let success = 0;
   for (const cmd of commands) {
-    if (await cmd()) success++;
+    if (signal?.aborted) break;
+    let ok = await cmd();
+    // One retry for transient failures
+    if (!ok && !signal?.aborted) ok = await cmd();
+    if (ok) success++;
   }
   return success;
 }

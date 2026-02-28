@@ -14,6 +14,19 @@ const ENTER_TRANSITION_MS = 1500;
 
 type TransitionPhase = 'idle' | 'exiting' | 'entering';
 
+/**
+ * Full-screen device preview page (route: `/:deviceId`).
+ *
+ * Responsibilities:
+ *   1. Resolves the device template from URL params (phone/laptop/kiosk/holobox/keba-kiosk).
+ *   2. For streaming devices — shows/hides the persistent PS iframe and renders UeControlPanel.
+ *   3. On device switch — runs a crossfade transition (exit → swap → enter) and auto-applies
+ *      saved UE settings via `resetCameraToZero` + `applyDeviceSettings`.
+ *   4. For non-streaming devices — renders an `<iframe>` with the widget URL inside DevicePreview.
+ *
+ * Key invariant: the auto-apply effect uses an AbortController so rapid device switches
+ * cancel in-flight UE commands, preventing camera drift from partial resets.
+ */
 export function DevicePage() {
   const { deviceId } = useParams<{ deviceId: string }>();
   const targetDevice = deviceId ? devicesMap.get(deviceId) : undefined;
@@ -65,11 +78,17 @@ export function DevicePage() {
 
   const ueReachable = useUeControlStore((s) => s.ueReachable);
   const prevDeviceIdRef = useRef<string | null>(null);
+  const applyAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const url = ueApiUrlRef.current;
     // Skip batch apply when UE API is known to be unreachable — commands would fail silently
     if (!isStreaming || !url || !displayedDeviceId || ueReachable === false) return;
+
+    // Cancel any in-flight apply from a previous device switch
+    applyAbortRef.current?.abort();
+    const controller = new AbortController();
+    applyAbortRef.current = controller;
 
     void (async () => {
       // Reset camera from previous device's offsets before applying new ones
@@ -79,13 +98,24 @@ export function DevicePage() {
         await resetCameraToZero(url, prevSettings);
       }
 
+      // Bail out if a newer device switch happened while we were resetting
+      if (controller.signal.aborted) return;
+
       const saved = getDeviceSettingsSnapshot(displayedDeviceId);
-      await applyDeviceSettings(url, saved);
-      prevDeviceIdRef.current = displayedDeviceId;
+      await applyDeviceSettings(url, saved, controller.signal);
+
+      if (!controller.signal.aborted) {
+        prevDeviceIdRef.current = displayedDeviceId;
+      }
     })();
+
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ueReachable intentionally excluded to avoid re-apply on health change
   }, [isStreaming, displayedDeviceId]);
 
+  // ── Crossfade transition on device switch ─────────────────────────────────
+  // Sequence: idle → exiting (220ms fade-out) → entering (swap ID, 1500ms fade-in) → idle.
+  // Respects prefers-reduced-motion by skipping the animation entirely.
   useEffect(() => {
     if (!deviceId || !targetDevice || displayedDeviceId === deviceId) return;
 

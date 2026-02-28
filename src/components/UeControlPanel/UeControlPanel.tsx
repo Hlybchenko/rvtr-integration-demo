@@ -9,11 +9,8 @@ import {
 import {
   sendUeCommand,
   changeLevel,
-  changeAvatarById,
   setLogo,
-  setAllowAvatarChange,
   setInterruption,
-  setOutputAudioFormat,
   lightUp,
   lightDown,
   changeLight,
@@ -39,6 +36,24 @@ interface UeControlPanelProps {
   deviceId: string;
 }
 
+/**
+ * Floating UE Remote Control panel, rendered on streaming device pages.
+ *
+ * Features:
+ *   - Camera sliders (zoom, vertical, horizontal, pitch) — debounced at 200ms,
+ *     accumulates deltas so rapid drags don't lose offset.
+ *   - Scene (level) selector, logo toggle, lighting controls, audio interruption toggle.
+ *   - "Reset to defaults" — reverses camera offsets via `resetCameraToZero`,
+ *     then applies `DEFAULT_DEVICE_SETTINGS`.
+ *   - UE connection status badge (bottom-right pill).
+ *   - Auto-closes on outside click; returns focus to PS iframe when closed.
+ *
+ * Slider delta tracking:
+ *   `sentValueRef` holds the last baseline successfully sent to UE.
+ *   `pendingDeltaRef` accumulates the difference (current slider value − baseline).
+ *   On debounce timeout, the accumulated delta is sent as one UE command.
+ *   If the command fails, baseline stays — next delta will include the missed offset.
+ */
 export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -98,16 +113,12 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const pendingDeltaRef = useRef(new Map<string, number>());
   /** Last value that was sent (or initial) — used to track the "sent" baseline */
   const sentValueRef = useRef(new Map<string, number>());
-  /** Timer for debounced avatar ID change */
-  const avatarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Clean up all pending timers on unmount.
   // Copy ref to local var so cleanup captures the same Map instance.
   useEffect(() => {
     const timers = sliderTimersRef.current;
     return () => {
       timers.forEach((t) => clearTimeout(t));
-      if (avatarTimerRef.current) clearTimeout(avatarTimerRef.current);
     };
   }, []);
 
@@ -169,7 +180,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
   const handleToggle = useCallback(
     (
-      key: keyof Pick<UeDeviceSettings, 'showLogo' | 'allowAvatarChange' | 'allowInterruption' | 'isPcm'>,
+      key: keyof Pick<UeDeviceSettings, 'showLogo' | 'allowInterruption'>,
       value: boolean,
       sendFn: (baseUrl: string, val: boolean) => Promise<boolean>,
     ) => {
@@ -187,23 +198,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
       updateSettings(deviceId, { level });
       const url = useUeControlStore.getState().ueApiUrl;
       if (url) void changeLevel(url, level);
-    },
-    [deviceId, updateSettings],
-  );
-
-  // ── Avatar handler ────────────────────────────────────────────────────────
-
-  const handleAvatarId = useCallback(
-    (avatarId: string) => {
-      updateSettings(deviceId, { avatarId });
-
-      if (avatarTimerRef.current) clearTimeout(avatarTimerRef.current);
-      if (avatarId.trim()) {
-        avatarTimerRef.current = setTimeout(() => {
-          const url = useUeControlStore.getState().ueApiUrl;
-          if (url) void changeAvatarById(url, avatarId);
-        }, 600);
-      }
     },
     [deviceId, updateSettings],
   );
@@ -234,6 +228,20 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
   return (
     <div ref={panelRef} className={styles.wrapper} data-ue-panel>
+      {/* Status label — centered at top */}
+      {ueConnected !== null && (
+        <div className={styles.statusLabel}>
+          <span
+            className={`${styles.statusDot} ${
+              ueConnected ? styles.statusDotConnected : styles.statusDotDisconnected
+            }`}
+          />
+          <span className={styles.statusText}>
+            {ueConnected ? 'UE Connected' : 'UE Offline'}
+          </span>
+        </div>
+      )}
+
       {/* Trigger button */}
       <button
         type="button"
@@ -242,13 +250,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
         title="UE Remote Control"
       >
         <span className={styles.triggerIcon}>&#9881;</span>
-        {ueConnected !== null && (
-          <span
-            className={`${styles.statusDot} ${
-              ueConnected ? styles.statusDotConnected : styles.statusDotDisconnected
-            }`}
-          />
-        )}
       </button>
 
       {/* Dropdown panel */}
@@ -344,34 +345,12 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
             <h3 className={styles.sectionTitle}>Avatar</h3>
 
             <div className={styles.controlRow}>
-              <span className={styles.controlLabel}>ID</span>
-              <input
-                type="text"
-                className={styles.smallInput}
-                placeholder="e.g. avatar_01"
-                value={settings.avatarId}
-                onChange={(e) => handleAvatarId(e.target.value)}
-                spellCheck={false}
-              />
-            </div>
-
-            <div className={styles.controlRow}>
               <span className={styles.controlLabel}>Show logo</span>
               <input
                 type="checkbox"
                 className={styles.toggle}
                 checked={settings.showLogo}
                 onChange={(e) => handleToggle('showLogo', e.target.checked, setLogo)}
-              />
-            </div>
-
-            <div className={styles.controlRow}>
-              <span className={styles.controlLabel}>Allow avatar switch</span>
-              <input
-                type="checkbox"
-                className={styles.toggle}
-                checked={settings.allowAvatarChange}
-                onChange={(e) => handleToggle('allowAvatarChange', e.target.checked, setAllowAvatarChange)}
               />
             </div>
 
@@ -386,9 +365,9 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
             </div>
           </div>
 
-          {/* ── Lighting & Audio ── */}
+          {/* ── Lighting ── */}
           <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>Lighting & Audio</h3>
+            <h3 className={styles.sectionTitle}>Lighting</h3>
 
             <div className={styles.buttonRow}>
               <button
@@ -413,6 +392,11 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 Toggle type
               </button>
             </div>
+          </div>
+
+          {/* ── Audio ── */}
+          <div className={styles.section}>
+            <h3 className={styles.sectionTitle}>Audio</h3>
 
             <div className={styles.controlRow}>
               <span className={styles.controlLabel}>Allow interruption</span>
@@ -421,16 +405,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 className={styles.toggle}
                 checked={settings.allowInterruption}
                 onChange={(e) => handleToggle('allowInterruption', e.target.checked, setInterruption)}
-              />
-            </div>
-
-            <div className={styles.controlRow}>
-              <span className={styles.controlLabel}>Raw audio (PCM)</span>
-              <input
-                type="checkbox"
-                className={styles.toggle}
-                checked={settings.isPcm}
-                onChange={(e) => handleToggle('isPcm', e.target.checked, setOutputAudioFormat)}
               />
             </div>
           </div>

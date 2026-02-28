@@ -1,3 +1,16 @@
+/**
+ * UE Remote Control store (persisted to localStorage as `rvtr-ue-control`).
+ *
+ * Stores per-device UE settings (camera offsets, level, avatar, toggles)
+ * and the UE API URL. Settings are keyed by DeviceId so each streaming device
+ * (kiosk, keba-kiosk, holobox) remembers its own camera position independently.
+ *
+ * `ueReachable` is runtime-only (excluded from persist) — set by useStatusPolling.
+ *
+ * Important: camera values (zoom, cameraVertical/Horizontal, cameraPitch) are
+ * cumulative offsets, NOT absolute positions. The UE API adds them to its current
+ * state. See `resetCameraToZero` in ueRemoteApi.ts for the reversal strategy.
+ */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
