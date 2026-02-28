@@ -65,9 +65,15 @@ export function useStatusPolling(): void {
         shouldCheckUe && ueApiUrl && isValidUrl(ueApiUrl)
           ? checkUeApiHealth(ueApiUrl)
               .then((ok) => {
+                const prevReachable = useUeControlStore.getState().ueReachable;
                 setUeReachable(ok);
                 // Reset backoff on success, increase on failure
                 ueFailCountRef.current = ok ? 0 : ueFailCountRef.current + 1;
+                // UE came back after being unreachable → likely restarted →
+                // reset committed camera so next device apply sends full offsets.
+                if (ok && prevReachable === false) {
+                  useUeControlStore.getState().resetUeCommittedCamera();
+                }
               })
               .catch(() => {
                 setUeReachable(null);

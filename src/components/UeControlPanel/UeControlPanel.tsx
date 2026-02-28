@@ -3,6 +3,7 @@ import {
   useUeControlStore,
   UE_LEVELS,
   DEFAULT_DEVICE_SETTINGS,
+  ZERO_CAMERA,
   type UeDeviceSettings,
   type UeLevelId,
 } from '@/stores/ueControlStore';
@@ -167,6 +168,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
             if (ok) {
               // Only advance baseline on successful send
               sentValueRef.current.set(key, value);
+              // Keep committed camera in sync for cross-session persistence
+              useUeControlStore.getState().patchUeCommittedCamera({ [key]: value });
             }
             // On failure: baseline stays — next delta will include the missed offset
           });
@@ -203,23 +206,26 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   );
 
   const handleReset = useCallback(() => {
-    // Capture current settings before resetting store — needed for reverse deltas
-    const current = useUeControlStore.getState().deviceSettings[deviceId];
-
-    resetSettings(deviceId);
-
     // Clear accumulated slider state so next move starts from defaults
     pendingDeltaRef.current.clear();
     sentValueRef.current.clear();
     sliderTimersRef.current.forEach((t) => clearTimeout(t));
     sliderTimersRef.current.clear();
 
-    // Send reverse camera deltas + default absolute commands to UE
+    // Reset device settings in store (UI immediately shows defaults)
+    resetSettings(deviceId);
+
+    // Send reverse camera deltas from committed position + default absolute commands
     const url = useUeControlStore.getState().ueApiUrl;
-    if (url && current) {
+    const committed = useUeControlStore.getState().ueCommittedCamera;
+
+    if (url) {
       void (async () => {
-        await resetCameraToZero(url, current);
-        await applyDeviceSettings(url, DEFAULT_DEVICE_SETTINGS);
+        const newCommitted = await resetCameraToZero(url, committed);
+        useUeControlStore.getState().setUeCommittedCamera(newCommitted);
+        // Apply absolute defaults; camera values are zeros and committed is now
+        // zeros (on success), so no spurious camera commands are sent.
+        await applyDeviceSettings(url, DEFAULT_DEVICE_SETTINGS, newCommitted);
       })();
     }
   }, [deviceId, resetSettings]);
@@ -409,10 +415,29 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
             </div>
           </div>
 
-          {/* Reset */}
-          <button type="button" className={styles.resetButton} onClick={handleReset}>
-            Reset to defaults
-          </button>
+          {/* Reset / Re-sync */}
+          <div className={styles.buttonRow}>
+            <button type="button" className={styles.resetButton} onClick={handleReset}>
+              Reset to defaults
+            </button>
+            <button
+              type="button"
+              className={styles.resetButton}
+              onClick={() => {
+                // Assume UE is at zero (fresh start), then re-apply current settings
+                useUeControlStore.getState().resetUeCommittedCamera();
+                const url = useUeControlStore.getState().ueApiUrl;
+                const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
+                if (url) {
+                  void applyDeviceSettings(url, desired, ZERO_CAMERA).then(({ newCommitted }) => {
+                    useUeControlStore.getState().setUeCommittedCamera(newCommitted);
+                  });
+                }
+              }}
+            >
+              Re-sync UE
+            </button>
+          </div>
         </div>
       )}
     </div>

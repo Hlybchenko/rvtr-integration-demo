@@ -3,8 +3,8 @@ import { useParams, Link } from 'react-router';
 import { devicesMap } from '@/config/devices';
 import { useResolvedUrl, isStreamingDevice } from '@/stores/settingsStore';
 import { useStreamingStore } from '@/stores/streamingStore';
-import { useUeControlStore, getDeviceSettingsSnapshot } from '@/stores/ueControlStore';
-import { applyDeviceSettings, resetCameraToZero } from '@/services/ueRemoteApi';
+import { useUeControlStore, getDeviceSettingsSnapshot, getCommittedCameraSnapshot } from '@/stores/ueControlStore';
+import { applyDeviceSettings } from '@/services/ueRemoteApi';
 import { DevicePreview } from '@/components/DevicePreview/DevicePreview';
 import { UeControlPanel } from '@/components/UeControlPanel/UeControlPanel';
 import styles from './DevicePage.module.css';
@@ -21,7 +21,7 @@ type TransitionPhase = 'idle' | 'exiting' | 'entering';
  *   1. Resolves the device template from URL params (phone/laptop/kiosk/holobox/keba-kiosk).
  *   2. For streaming devices — shows/hides the persistent PS iframe and renders UeControlPanel.
  *   3. On device switch — runs a crossfade transition (exit → swap → enter) and auto-applies
- *      saved UE settings via `resetCameraToZero` + `applyDeviceSettings`.
+ *      saved UE settings via `applyDeviceSettings` (deltas from committed camera position).
  *   4. For non-streaming devices — renders an `<iframe>` with the widget URL inside DevicePreview.
  *
  * Key invariant: the auto-apply effect uses an AbortController so rapid device switches
@@ -77,7 +77,6 @@ export function DevicePage() {
   ueApiUrlRef.current = ueApiUrl;
 
   const ueReachable = useUeControlStore((s) => s.ueReachable);
-  const prevDeviceIdRef = useRef<string | null>(null);
   const applyAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -91,22 +90,24 @@ export function DevicePage() {
     applyAbortRef.current = controller;
 
     void (async () => {
-      // Reset camera from previous device's offsets before applying new ones
-      const prevId = prevDeviceIdRef.current;
-      const prevSettings = prevId ? getDeviceSettingsSnapshot(prevId) : undefined;
-      if (prevId && prevId !== displayedDeviceId && prevSettings) {
-        await resetCameraToZero(url, prevSettings);
-      }
+      const committed = getCommittedCameraSnapshot();
+      const desired = getDeviceSettingsSnapshot(displayedDeviceId);
 
-      // Bail out if a newer device switch happened while we were resetting
-      if (controller.signal.aborted) return;
+      // Camera deltas are computed internally from committed → desired.
+      // On page refresh: committed matches UE state (persisted), so deltas are correct.
+      // On device switch: deltas transition camera from current position to new device.
+      const { newCommitted } = await applyDeviceSettings(
+        url,
+        desired,
+        committed,
+        controller.signal,
+      );
 
-      const saved = getDeviceSettingsSnapshot(displayedDeviceId);
-      await applyDeviceSettings(url, saved, controller.signal, prevSettings);
-
-      if (!controller.signal.aborted) {
-        prevDeviceIdRef.current = displayedDeviceId;
-      }
+      // Always update committed — even if aborted mid-sequence.
+      // newCommitted only advances axes that succeeded, so it accurately
+      // reflects UE's actual camera state. Skipping this update would
+      // leave committed stale and cause drift on the next apply.
+      useUeControlStore.getState().setUeCommittedCamera(newCommitted);
     })();
 
     return () => controller.abort();

@@ -7,10 +7,11 @@
  * Two kinds of commands exist:
  *   - **Absolute** (level, logo, avatar, toggles) — idempotent, safe to re-send.
  *   - **Offset-based** (zoom, cameraVertical/Horizontal, cameraPitch) —
- *     cumulative deltas, NOT idempotent. Must be paired with `resetCameraToZero`
- *     on device switch to prevent camera drift.
+ *     cumulative deltas, NOT idempotent. Transitions use `applyCameraTransition`
+ *     to compute per-axis deltas from the committed camera position.
  */
-import type { UeDeviceSettings, UeLevelId } from '@/stores/ueControlStore';
+import type { UeDeviceSettings, UeLevelId, CameraPosition } from '@/stores/ueControlStore';
+import { ZERO_CAMERA } from '@/stores/ueControlStore';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 
@@ -122,24 +123,77 @@ export function stopAnswer(baseUrl: string): Promise<boolean> {
   return sendUeCommand(baseUrl, { command: 'StopAnswer' });
 }
 
-// ─── Camera reset ────────────────────────────────────────────────────────────
+// ─── Camera transition ───────────────────────────────────────────────────────
+
+/** Camera axis keys in send order */
+const CAMERA_KEYS: (keyof CameraPosition)[] = [
+  'zoom',
+  'cameraVertical',
+  'cameraHorizontal',
+  'cameraPitch',
+];
+
+/** Map camera key → UE send function */
+const CAMERA_SENDERS: Record<
+  keyof CameraPosition,
+  (baseUrl: string, delta: number) => Promise<boolean>
+> = {
+  zoom: setZoom,
+  cameraVertical: setCameraVertical,
+  cameraHorizontal: setCameraHorizontal,
+  cameraPitch: setCameraPitch,
+};
 
 /**
- * Send negative offsets to bring UE camera back to its default (0) position.
- * Call this before applying a different device's settings so the offsets
- * don't stack on top of the previous device's camera position.
+ * Transition UE camera from `committed` position to `desired` position
+ * by computing per-axis deltas and sending only non-zero ones.
+ *
+ * Returns the new committed position: axes that succeeded advance to
+ * desired; axes that failed stay at their previous committed value.
+ * This prevents phantom drift on partial failure.
+ */
+export async function applyCameraTransition(
+  baseUrl: string,
+  committed: CameraPosition,
+  desired: CameraPosition,
+  signal?: AbortSignal,
+): Promise<CameraPosition> {
+  if (!baseUrl) return { ...committed };
+
+  const newCommitted = { ...committed };
+
+  for (const key of CAMERA_KEYS) {
+    if (signal?.aborted) break;
+
+    const delta = desired[key] - committed[key];
+    if (delta === 0) {
+      newCommitted[key] = desired[key];
+      continue;
+    }
+
+    const sendFn = CAMERA_SENDERS[key];
+    let ok = await sendFn(baseUrl, delta);
+    if (!ok && !signal?.aborted) ok = await sendFn(baseUrl, delta);
+
+    if (ok) {
+      newCommitted[key] = desired[key];
+    }
+  }
+
+  return newCommitted;
+}
+
+/**
+ * Send offsets to bring UE camera back to its default (0) position
+ * from the given committed position.
+ *
+ * Returns the new committed position (zeros on full success).
  */
 export async function resetCameraToZero(
   baseUrl: string,
-  currentSettings: Pick<UeDeviceSettings, 'zoom' | 'cameraVertical' | 'cameraHorizontal' | 'cameraPitch'>,
-): Promise<void> {
-  if (!baseUrl) return;
-
-  // Sequential — UE processes one command at a time
-  if (currentSettings.zoom !== 0) await setZoom(baseUrl, -currentSettings.zoom);
-  if (currentSettings.cameraVertical !== 0) await setCameraVertical(baseUrl, -currentSettings.cameraVertical);
-  if (currentSettings.cameraHorizontal !== 0) await setCameraHorizontal(baseUrl, -currentSettings.cameraHorizontal);
-  if (currentSettings.cameraPitch !== 0) await setCameraPitch(baseUrl, -currentSettings.cameraPitch);
+  committed: CameraPosition,
+): Promise<CameraPosition> {
+  return applyCameraTransition(baseUrl, committed, ZERO_CAMERA);
 }
 
 // ─── Batch apply ─────────────────────────────────────────────────────────────
@@ -148,65 +202,72 @@ export async function resetCameraToZero(
  * Apply full device settings to UE in a single batch.
  * Sends commands sequentially to avoid overwhelming the UE HTTP server.
  *
- * Camera/zoom values are sent as **offsets** (deltas from UE's current position).
- * On device switch we assume UE is at its default (0) position, so the stored
- * value IS the delta. For non-offset commands (level, toggles) the value is absolute.
+ * Camera commands are computed as deltas from `committed` to the target
+ * `settings` camera values. Non-camera commands (level, toggles) are
+ * absolute and only sent if changed from `prev`.
  *
- * When `prev` is supplied, only commands whose value actually changed are sent.
- * This avoids unnecessary UE work (e.g. reloading a scene that's already active).
+ * Accepts an optional AbortSignal to bail out early when the device
+ * switches again before the batch finishes. Each failed command gets
+ * one retry.
  *
- * Accepts an optional AbortSignal to bail out early when the device switches
- * again before the batch finishes. Each failed command gets one retry.
- *
- * Returns the number of successfully applied commands.
+ * Returns the number of successfully applied commands and the new
+ * committed camera position.
  */
 export async function applyDeviceSettings(
   baseUrl: string,
   settings: UeDeviceSettings,
+  committed: CameraPosition,
   signal?: AbortSignal,
   prev?: UeDeviceSettings,
-): Promise<number> {
-  if (!baseUrl) return 0;
-
-  const commands: Array<() => Promise<boolean>> = [];
-
-  // Absolute commands — skip if value unchanged from previous device
-  if (!prev || prev.level !== settings.level) {
-    commands.push(() => changeLevel(baseUrl, settings.level));
-  }
-  if (!prev || prev.showLogo !== settings.showLogo) {
-    commands.push(() => setLogo(baseUrl, settings.showLogo));
-  }
-  if (!prev || prev.allowAvatarChange !== settings.allowAvatarChange) {
-    commands.push(() => setAllowAvatarChange(baseUrl, settings.allowAvatarChange));
-  }
-  if (!prev || prev.allowInterruption !== settings.allowInterruption) {
-    commands.push(() => setInterruption(baseUrl, settings.allowInterruption));
-  }
-  if (!prev || prev.isPcm !== settings.isPcm) {
-    commands.push(() => setOutputAudioFormat(baseUrl, settings.isPcm));
-  }
-
-  // Offset-based commands — only send if non-zero
-  if (settings.zoom !== 0) commands.push(() => setZoom(baseUrl, settings.zoom));
-  if (settings.cameraVertical !== 0) commands.push(() => setCameraVertical(baseUrl, settings.cameraVertical));
-  if (settings.cameraHorizontal !== 0) commands.push(() => setCameraHorizontal(baseUrl, settings.cameraHorizontal));
-  if (settings.cameraPitch !== 0) commands.push(() => setCameraPitch(baseUrl, settings.cameraPitch));
-
-  // Apply avatar only if ID is specified and changed
-  if (settings.avatarId.trim() && (!prev || prev.avatarId !== settings.avatarId)) {
-    commands.push(() => changeAvatarById(baseUrl, settings.avatarId));
-  }
+): Promise<{ successCount: number; newCommitted: CameraPosition }> {
+  if (!baseUrl) return { successCount: 0, newCommitted: { ...committed } };
 
   let success = 0;
-  for (const cmd of commands) {
+
+  // Absolute commands — skip if value unchanged from previous device
+  const absoluteCommands: Array<() => Promise<boolean>> = [];
+
+  if (!prev || prev.level !== settings.level) {
+    absoluteCommands.push(() => changeLevel(baseUrl, settings.level));
+  }
+  if (!prev || prev.showLogo !== settings.showLogo) {
+    absoluteCommands.push(() => setLogo(baseUrl, settings.showLogo));
+  }
+  if (!prev || prev.allowAvatarChange !== settings.allowAvatarChange) {
+    absoluteCommands.push(() => setAllowAvatarChange(baseUrl, settings.allowAvatarChange));
+  }
+  if (!prev || prev.allowInterruption !== settings.allowInterruption) {
+    absoluteCommands.push(() => setInterruption(baseUrl, settings.allowInterruption));
+  }
+  if (!prev || prev.isPcm !== settings.isPcm) {
+    absoluteCommands.push(() => setOutputAudioFormat(baseUrl, settings.isPcm));
+  }
+  if (settings.avatarId.trim() && (!prev || prev.avatarId !== settings.avatarId)) {
+    absoluteCommands.push(() => changeAvatarById(baseUrl, settings.avatarId));
+  }
+
+  for (const cmd of absoluteCommands) {
     if (signal?.aborted) break;
     let ok = await cmd();
-    // One retry for transient failures
     if (!ok && !signal?.aborted) ok = await cmd();
     if (ok) success++;
   }
-  return success;
+
+  // Camera offset commands — delta from committed to desired
+  const desired: CameraPosition = {
+    zoom: settings.zoom,
+    cameraVertical: settings.cameraVertical,
+    cameraHorizontal: settings.cameraHorizontal,
+    cameraPitch: settings.cameraPitch,
+  };
+
+  const newCommitted = await applyCameraTransition(baseUrl, committed, desired, signal);
+
+  for (const key of CAMERA_KEYS) {
+    if (newCommitted[key] !== committed[key]) success++;
+  }
+
+  return { successCount: success, newCommitted };
 }
 
 // ─── Health check ────────────────────────────────────────────────────────────
