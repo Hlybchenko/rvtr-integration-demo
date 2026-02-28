@@ -890,17 +890,17 @@ const server = createServer(async (req, res) => {
     }
 
     // -----------------------------------------------------------------------
-    // POST /process/start — start process for a device (kills previous if any)
+    // POST /process/start — start process (kills previous if any)
     // -----------------------------------------------------------------------
     if (req.method === 'POST' && req.url === '/process/start') {
       const body = await readBody(req);
       const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
       const exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
 
-      if (!deviceId || !exePath) {
+      if (!exePath) {
         sendJson(res, 400, {
           ok: false,
-          error: 'deviceId and exePath are required',
+          error: 'exePath is required',
         });
         return;
       }
@@ -922,7 +922,6 @@ const server = createServer(async (req, res) => {
 
         sendJson(res, 200, {
           ok: true,
-          deviceId,
           pid: child.pid,
           exePath: resolved,
         });
