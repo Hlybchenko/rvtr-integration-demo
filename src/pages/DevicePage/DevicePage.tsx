@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router';
 import { devicesMap } from '@/config/devices';
 import { useResolvedUrl, isStreamingDevice } from '@/stores/settingsStore';
 import { useStreamingStore } from '@/stores/streamingStore';
-import { useUeControlStore, getDeviceSettingsSnapshot, getCommittedCameraSnapshot } from '@/stores/ueControlStore';
+import { useUeControlStore, getDeviceSettingsSnapshot, getCommittedCameraSnapshot, type UeDeviceSettings } from '@/stores/ueControlStore';
 import { applyDeviceSettings } from '@/services/ueRemoteApi';
 import { DevicePreview } from '@/components/DevicePreview/DevicePreview';
 import { UeControlPanel } from '@/components/UeControlPanel/UeControlPanel';
@@ -78,6 +78,8 @@ export function DevicePage() {
 
   const ueReachable = useUeControlStore((s) => s.ueReachable);
   const applyAbortRef = useRef<AbortController | null>(null);
+  /** Last settings successfully applied to UE — used to skip unchanged absolute commands */
+  const lastAppliedRef = useRef<UeDeviceSettings | undefined>(undefined);
 
   useEffect(() => {
     const url = ueApiUrlRef.current;
@@ -93,14 +95,20 @@ export function DevicePage() {
       const committed = getCommittedCameraSnapshot();
       const desired = getDeviceSettingsSnapshot(displayedDeviceId);
 
-      // Camera deltas are computed internally from committed → desired.
-      // On page refresh: committed matches UE state (persisted), so deltas are correct.
-      // On device switch: deltas transition camera from current position to new device.
+      // On page refresh: lastAppliedRef is empty, so fall back to `desired` —
+      // this makes prev === desired, skipping all absolute commands (level, logo, etc.)
+      // that would otherwise reload the scene and freeze the PS stream.
+      // Camera deltas are still computed from committed → desired (zero on refresh).
+      // On device switch: lastAppliedRef holds the previous device's settings,
+      // so only commands whose values actually changed are sent.
+      const prev = lastAppliedRef.current ?? desired;
+
       const { newCommitted } = await applyDeviceSettings(
         url,
         desired,
         committed,
         controller.signal,
+        prev,
       );
 
       // Always update committed — even if aborted mid-sequence.
@@ -108,6 +116,10 @@ export function DevicePage() {
       // reflects UE's actual camera state. Skipping this update would
       // leave committed stale and cause drift on the next apply.
       useUeControlStore.getState().setUeCommittedCamera(newCommitted);
+
+      if (!controller.signal.aborted) {
+        lastAppliedRef.current = desired;
+      }
     })();
 
     return () => controller.abort();

@@ -83,69 +83,26 @@ function stopKnownProcesses() {
   run('pkill', ['-f', 'agent-option-writer.mjs'], { shell: false });
 }
 
-function closeDevTabsMacos() {
-  if (process.platform !== 'darwin') return;
+function closeUnsafeChrome() {
+  const marker = 'ChromeDevSession-rvtr';
 
-  const apps = [
-    'Google Chrome',
-    'Google Chrome for Testing',
-    'Chromium',
-    'Brave Browser',
-    'Arc',
-  ];
-
-  const lines = [
-    'if running then',
-    'set wCount to count windows',
-    'if wCount > 0 then',
-    'repeat with w from wCount to 1 by -1',
-    'try',
-    'set tCount to count tabs of window w',
-    'repeat with t from tCount to 1 by -1',
-    'set u to ""',
-    'try',
-    'set u to URL of tab t of window w',
-    'end try',
-    'if u starts with "http://localhost:5173" then close tab t of window w',
-    'if u starts with "https://localhost:5173" then close tab t of window w',
-    'if u starts with "http://127.0.0.1:5173" then close tab t of window w',
-    'if u starts with "https://127.0.0.1:5173" then close tab t of window w',
-    'end repeat',
-    'if (count of tabs of window w) = 0 then close window w',
-    'end try',
-    'end repeat',
-    'end if',
-    'end if',
-  ];
-
-  for (const appName of apps) {
-    const probe = run('pgrep', ['-x', appName], { shell: false });
-    if (probe.status !== 0) continue;
-
-    const args = [`tell application "${appName}"`];
-    for (const line of lines) {
-      args.push(line);
-    }
-    args.push('end tell');
-
-    const scriptArgs = args.flatMap((line) => ['-e', line]);
-    const result = run('/usr/bin/osascript', scriptArgs, { shell: false });
-
-    if (result.status !== 0) {
-      const details = (result.stderr || result.stdout || '').trim();
-      console.warn(
-        `Note: couldn't auto-close browser tab for localhost:5173 (${details || 'unknown error'}).`,
-      );
-      console.warn(
-        'Tip: macOS may require Automation permission for Terminal -> browser in System Settings > Privacy & Security > Automation.',
-      );
-      break;
-    }
+  if (process.platform === 'win32') {
+    run('wmic', [
+      'process',
+      'where',
+      `CommandLine like '%${marker}%'`,
+      'call',
+      'terminate',
+    ]);
+    return;
   }
+
+  // macOS / Linux — kill all Chrome processes launched with the dev user-data-dir
+  run('pkill', ['-f', marker], { shell: false });
 }
 
 function main() {
-  closeDevTabsMacos();
+  closeUnsafeChrome();
   stopPortListener(DEV_PORT);
   stopPortListener(WRITER_PORT);
   stopKnownProcesses();
