@@ -48,7 +48,7 @@ export const useStreamingStore = create<StreamingState>()((set) => ({
   mountGeneration: 0,
 
   show: () => set({ isVisible: true }),
-  hide: () => set({ isVisible: false }),
+  hide: () => set({ isVisible: false, viewport: null }),
   setViewport: (viewport) => set({ viewport }),
   remount: () => {
     // Best-effort: notify current PS iframe to gracefully close WebRTC

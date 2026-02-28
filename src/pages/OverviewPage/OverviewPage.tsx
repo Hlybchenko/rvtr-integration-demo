@@ -272,10 +272,12 @@ export function OverviewPage() {
   // Debounced auto-save for file/exe paths is handled by usePathConfig hooks above.
 
   // -- debounced auto-save for Pixel Streaming URL --
+  // Allows clearing (empty string) or setting a valid URL
   useEffect(() => {
     const trimmed = psUrlInput.trim();
-    if (!trimmed || trimmed === pixelStreamingUrl) return;
-    if (!isValidUrl(trimmed)) return;
+    if (trimmed === pixelStreamingUrl) return;
+    // Allow empty (clear) or valid URL only
+    if (trimmed && !isValidUrl(trimmed)) return;
 
     const timer = setTimeout(() => {
       setPixelStreamingUrl(trimmed);
@@ -330,7 +332,9 @@ export function OverviewPage() {
         }
 
         // Force PS iframe remount so it picks up the new agent provider
-        psRemount();
+        if (useSettingsStore.getState().pixelStreamingUrl) {
+          psRemount();
+        }
       } else {
         setApplyError('Agent config saved, but file verification failed. Try applying again.');
       }

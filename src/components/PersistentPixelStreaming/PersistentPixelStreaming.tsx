@@ -104,6 +104,8 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
           blocked = true;
         }
       } catch {
+        // Cross-origin: can't inspect iframe content. Assume not blocked —
+        // PS URLs are typically same-origin or CORS-friendly.
         blocked = false;
       }
     }

@@ -27,6 +27,8 @@ export function useStatusPolling(): void {
   const ueFailCountRef = useRef(0);
   /** Tick counter to compare against backoff interval */
   const tickRef = useRef(0);
+  /** Previous UE API URL — used to reset backoff when URL changes */
+  const prevUeUrlRef = useRef('');
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +36,12 @@ export function useStatusPolling(): void {
     const poll = async () => {
       const { pixelStreamingUrl } = useSettingsStore.getState();
       const { ueApiUrl, setUeReachable } = useUeControlStore.getState();
+
+      // Reset backoff when UE URL changes so we check immediately
+      if (ueApiUrl !== prevUeUrlRef.current) {
+        ueFailCountRef.current = 0;
+        prevUeUrlRef.current = ueApiUrl;
+      }
       const { setProcessRunning, setPsReachable } = useStatusStore.getState();
 
       tickRef.current += 1;
