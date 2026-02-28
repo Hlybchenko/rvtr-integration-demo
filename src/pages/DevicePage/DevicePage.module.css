@@ -14,7 +14,6 @@
   transition-property: opacity;
   transition-duration: var(--preview-transition-ms, 500ms);
   transition-timing-function: var(--preview-transition-easing, ease-in-out);
-  will-change: opacity;
 }
 
 .previewIdle {

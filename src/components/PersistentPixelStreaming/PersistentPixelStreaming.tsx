@@ -157,8 +157,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
             zIndex: 3,
             background: '#0a0c14',
             pointerEvents: shouldShow ? 'auto' : 'none',
-            opacity: shouldShow && !loading ? 1 : 0,
-            transition: 'opacity 300ms ease',
+            visibility: shouldShow && !loading ? 'visible' : 'hidden',
           }
         : {
             position: 'fixed',
