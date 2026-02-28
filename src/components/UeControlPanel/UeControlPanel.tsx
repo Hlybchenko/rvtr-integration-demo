@@ -25,7 +25,7 @@ const SLIDER_DEBOUNCE_MS = 200;
 
 /** Slider min/max ranges per camera axis. Zoom has a wider range than pan/pitch. */
 const SLIDER_RANGES = {
-  zoom:             { min: -1000, max: 1000 },
+  zoom:             { min: -500,  max: 500  },
   cameraVertical:   { min: -500,  max: 500  },
   cameraHorizontal: { min: -500,  max: 500  },
   cameraPitch:      { min: -500,  max: 500  },
