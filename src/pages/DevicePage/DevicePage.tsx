@@ -103,12 +103,17 @@ export function DevicePage() {
       // so only commands whose values actually changed are sent.
       const prev = lastAppliedRef.current ?? desired;
 
+      // Never auto-change level on device switch — changeLevel causes UE to
+      // reload the scene which kills the PS WebRTC stream. The user can change
+      // the level manually via UeControlPanel if needed.
+      const safePrev = { ...prev, level: desired.level };
+
       const { newCommitted } = await applyDeviceSettings(
         url,
         desired,
         committed,
         controller.signal,
-        prev,
+        safePrev,
       );
 
       // Always update committed — even if aborted mid-sequence.
