@@ -1,0 +1,171 @@
+/* ── Vertical setup stepper ── */
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Single step row ── */
+.step {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 0 var(--space-3);
+  position: relative;
+}
+
+/* ── Left rail: circle + connector line ── */
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.circle {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: var(--font-sm);
+  font-weight: 700;
+  border: 2px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--muted);
+  transition:
+    border-color var(--transition-normal),
+    background var(--transition-normal),
+    color var(--transition-normal),
+    box-shadow var(--transition-normal);
+  z-index: 1;
+}
+
+/* Active step circle */
+.circleActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--glass-bg));
+  color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* Completed step circle */
+.circleComplete {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 20%, var(--glass-bg));
+  color: var(--success);
+}
+
+/* Locked step circle */
+.circleLocked {
+  opacity: 0.4;
+}
+
+/* Connector line between steps */
+.connector {
+  width: 2px;
+  flex: 1;
+  min-height: 12px;
+  background: var(--glass-border);
+  transition: background var(--transition-normal);
+}
+
+.connectorComplete {
+  background: color-mix(in srgb, var(--success) 45%, var(--glass-border));
+}
+
+/* Hide connector on last step */
+.step:last-child .connector {
+  display: none;
+}
+
+/* ── Right side: step content ── */
+.body {
+  padding-bottom: var(--space-4);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  cursor: default;
+}
+
+.headerClickable {
+  cursor: pointer;
+}
+
+.headerClickable:hover .title {
+  color: var(--text-primary);
+}
+
+.title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  transition: color var(--transition-fast);
+}
+
+.titleLocked {
+  color: var(--muted);
+}
+
+.summary {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
+  font-family: var(--font-mono);
+}
+
+/* ── Expandable content panel ── */
+.content {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  background: var(--glass-highlight), var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glass-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: slideDown 200ms ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Locked content ── */
+.contentLocked {
+  display: none;
+}
+
+/* ── Mobile ── */
+@media (max-width: 767px) {
+  .step {
+    grid-template-columns: 28px 1fr;
+    gap: 0 var(--space-2);
+  }
+
+  .circle {
+    width: 26px;
+    height: 26px;
+    font-size: var(--font-xs);
+  }
+
+  .summary {
+    max-width: 200px;
+  }
+}

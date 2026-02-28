@@ -16,6 +16,7 @@ import {
   restartProcess,
 } from '@/services/voiceAgentWriter';
 import { isValidUrl } from '@/utils/isValidUrl';
+import { SetupStepper, type StepConfig } from '@/components/SetupStepper/SetupStepper';
 import styles from './OverviewPage.module.css';
 
 const IS_WINDOWS =
@@ -95,11 +96,19 @@ export function OverviewPage() {
   const psConnect = useStreamingStore((s) => s.connect);
   const psDisconnect = useStreamingStore((s) => s.disconnect);
 
+  // -- Step 5: Start process --
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [startCountdown, setStartCountdown] = useState(0);
+  const [needsRestart, setNeedsRestart] = useState(false);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Timer for auto-reconnect PS after agent change — cleaned up on unmount
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     return () => {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
   }, []);
 
@@ -236,6 +245,9 @@ export function OverviewPage() {
 
   const hasPendingAgentChange = pendingVoiceAgent !== voiceAgent;
 
+  // Agent applied state (step 3 complete)
+  const isAgentApplied = isFileConfigured && !hasPendingAgentChange && !!voiceAgent;
+
   // -- debounced auto-save for license file path --
   useEffect(() => {
     const trimmed = filePathInput.trim();
@@ -320,11 +332,9 @@ export function OverviewPage() {
   }, [psUrlInput, pixelStreamingUrl, setPixelStreamingUrl]);
 
   // -- debounced auto-save for UE API URL --
-  // Allows clearing (empty string) or setting a valid URL
   useEffect(() => {
     const trimmed = ueApiUrlInput.trim();
     if (trimmed === ueApiUrl) return;
-    // Allow empty (clear) or valid URL only
     if (trimmed && !isValidUrl(trimmed)) return;
 
     const timer = setTimeout(() => {
@@ -348,26 +358,14 @@ export function OverviewPage() {
       if (result.matched) {
         setVoiceAgent(pendingVoiceAgent);
 
-        // Restart process after applying agent change
-        if (isExeConfigured) {
-          try {
-            const restart = await restartProcess();
-            if (!restart.ok) {
-              setApplyError(
-                `Agent applied, but process restart failed: ${restart.error ?? 'unknown error'}`,
-              );
-            }
-          } catch (err) {
-            setApplyError(
-              `Agent applied, but process restart failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
+        // Flag restart needed if process was already running
+        if (isExeConfigured && processRunning === true) {
+          setNeedsRestart(true);
         }
 
         // Auto-reconnect Pixel Streaming when agent provider changes
         if (psConnected) {
           psDisconnect();
-          // Small delay to let iframe unmount before reconnecting
           reconnectTimerRef.current = setTimeout(() => psConnect(), 300);
         }
       } else {
@@ -378,7 +376,7 @@ export function OverviewPage() {
     } finally {
       setIsApplying(false);
     }
-  }, [pendingVoiceAgent, isFileConfigured, isExeConfigured, setVoiceAgent, psConnected, psConnect, psDisconnect]);
+  }, [pendingVoiceAgent, isFileConfigured, isExeConfigured, processRunning, setVoiceAgent, psConnected, psConnect, psDisconnect, setNeedsRestart]);
 
   const handleBrowse = useCallback(async () => {
     setIsBrowsing(true);
@@ -470,10 +468,387 @@ export function OverviewPage() {
     }
   }, [setExePathStore]);
 
-  // Determine Voice Agent block validation state
-  const voiceAgentHasError = !!filePathError || !!exePathError;
-  const voiceAgentAllGood =
-    isFileConfigured && !hasPendingAgentChange && isExeConfigured;
+  // -- Step 5: Start / Restart process --
+  const handleStartProcess = useCallback(async () => {
+    setIsStarting(true);
+    setStartError(null);
+    setStartCountdown(5);
+
+    // Clean up any previous countdown
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+    const startTime = Date.now();
+    countdownTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const remaining = Math.max(0, 5 - elapsed);
+      setStartCountdown(remaining);
+      if (remaining <= 0 && countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+    }, 500);
+
+    try {
+      const result = await restartProcess();
+      if (!result.ok) {
+        setStartError(`Process start failed: ${result.error ?? 'unknown error'}`);
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+        setStartCountdown(0);
+        setIsStarting(false);
+        return;
+      }
+
+      // Wait remaining time from the 5s window (minus time already spent on restartProcess)
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 5000 - elapsed);
+      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+
+      // Clear restart-needed flag after successful (re)start
+      setNeedsRestart(false);
+    } catch (err) {
+      setStartError(`Process start failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+      setStartCountdown(0);
+      setIsStarting(false);
+    }
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Stepper step configs
+  // -------------------------------------------------------------------------
+
+  const isUrlsConfigured = psAllGood; // PS URL is required; UE is optional
+  const isProcessReady = processRunning === true;
+
+  const steps: StepConfig[] = [
+    // Step 1: License file
+    {
+      label: 'License file',
+      summary: isFileConfigured ? (filePathResolvedPath ?? filePathInput) : undefined,
+      isComplete: !!isFileConfigured,
+      isLocked: false,
+      content: (
+        <div className={styles.field}>
+          <div className={styles.fieldHeader}>
+            <label className={styles.label} htmlFor="license-file-path">
+              Path to license file
+            </label>
+            {filePathSaved && !filePathError && (
+              <span className={`${styles.badge} ${styles.badgeValid}`}>Configured</span>
+            )}
+            {filePathError && (
+              <span className={`${styles.badge} ${styles.badgeInvalid}`}>Path not found</span>
+            )}
+          </div>
+          <div className={styles.filePathRow}>
+            <input
+              id="license-file-path"
+              className={`${styles.input} ${filePathError ? styles.inputError : ''}`}
+              type="text"
+              placeholder={IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'}
+              value={filePathInput}
+              onChange={(e) => {
+                setFilePathInput(e.target.value);
+                setFilePathSaved(false);
+                setFilePathError(null);
+              }}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className={styles.filePathAction}
+              onClick={() => void handleBrowse()}
+              disabled={isBrowsing || isFilePathSaving}
+            >
+              {isBrowsing ? 'Browsing...' : 'Browse'}
+            </button>
+          </div>
+          <div className={styles.filePathValidation}>
+            {filePathError && (
+              <span className={styles.filePathValidationError}>{filePathError}</span>
+            )}
+            {filePathResolvedPath && !filePathError && (
+              <span className={styles.filePathResolvedPath}>{filePathResolvedPath}</span>
+            )}
+          </div>
+        </div>
+      ),
+    },
+
+    // Step 2: Executable
+    {
+      label: 'Executable',
+      summary: isExeConfigured ? (exePathResolvedPath ?? exePathInput) : undefined,
+      isComplete: !!isExeConfigured,
+      isLocked: !isFileConfigured,
+      content: (
+        <div className={styles.field}>
+          <div className={styles.fieldHeader}>
+            <label className={styles.label} htmlFor="exe-path">
+              Path to start2stream executable
+            </label>
+            {exePathSaved && !exePathError && (
+              <span className={`${styles.badge} ${styles.badgeValid}`}>Configured</span>
+            )}
+            {exePathError && (
+              <span className={`${styles.badge} ${styles.badgeInvalid}`}>Invalid</span>
+            )}
+          </div>
+          <div className={styles.filePathRow}>
+            <input
+              id="exe-path"
+              className={`${styles.input} ${exePathError ? styles.inputError : ''}`}
+              type="text"
+              placeholder={IS_WINDOWS ? 'C:\\Path\\To\\start2stream.bat' : '/path/to/start2stream.sh'}
+              value={exePathInput}
+              onChange={(e) => {
+                setExePathInput(e.target.value);
+                setExePathSaved(false);
+                setExePathError(null);
+              }}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className={styles.filePathAction}
+              onClick={() => void handleBrowseExe()}
+              disabled={isExeBrowsing || isExeSaving}
+            >
+              {isExeBrowsing ? 'Browsing...' : 'Browse'}
+            </button>
+          </div>
+          <div className={styles.filePathValidation}>
+            {exePathError && (
+              <span className={styles.filePathValidationError}>{exePathError}</span>
+            )}
+            {exePathResolvedPath && !exePathError && (
+              <span className={styles.filePathResolvedPath}>{exePathResolvedPath}</span>
+            )}
+          </div>
+        </div>
+      ),
+    },
+
+    // Step 3: Agent provider
+    {
+      label: 'Agent provider',
+      summary: isAgentApplied ? voiceAgent : undefined,
+      isComplete: isAgentApplied,
+      isLocked: !isExeConfigured,
+      content: (
+        <>
+          <div className={styles.fieldHeader}>
+            <label className={styles.label}>Select voice agent</label>
+            {isFileConfigured && !hasPendingAgentChange && voiceAgent && (
+              <span className={`${styles.badge} ${styles.badgeValid}`}>Applied</span>
+            )}
+            {isFileConfigured && hasPendingAgentChange && (
+              <span className={`${styles.badge} ${styles.badgeInvalid}`}>Unsaved changes</span>
+            )}
+          </div>
+
+          <div
+            className={`${styles.radioGroup} ${!isFileConfigured ? styles.radioGroupDisabled : ''}`}
+            role="radiogroup"
+            aria-label="Voice agent"
+          >
+            <label className={styles.radioOption}>
+              <input
+                type="radio"
+                name="voice-agent"
+                value="elevenlabs"
+                checked={pendingVoiceAgent === 'elevenlabs'}
+                onChange={() => setPendingVoiceAgent('elevenlabs')}
+                disabled={!isFileConfigured || isApplying}
+              />
+              <span>ElevenLabs</span>
+            </label>
+
+            <label className={styles.radioOption}>
+              <input
+                type="radio"
+                name="voice-agent"
+                value="gemini-live"
+                checked={pendingVoiceAgent === 'gemini-live'}
+                onChange={() => setPendingVoiceAgent('gemini-live')}
+                disabled={!isFileConfigured || isApplying}
+              />
+              <span>Gemini Live</span>
+            </label>
+          </div>
+
+          <button
+            type="button"
+            className={styles.applyButton}
+            onClick={() => void handleApplyAgent()}
+            disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
+          >
+            {isApplying ? 'Applying...' : 'Apply'}
+          </button>
+
+          {applyError && <p className={styles.filePathValidationError}>{applyError}</p>}
+        </>
+      ),
+    },
+
+    // Step 4: Streaming URLs
+    {
+      label: 'Streaming URLs',
+      summary: isUrlsConfigured ? psUrlInput : undefined,
+      isComplete: isUrlsConfigured,
+      isLocked: !isAgentApplied,
+      content: (
+        <>
+          {/* Pixel Streaming URL */}
+          <div className={styles.field}>
+            <div className={styles.fieldHeader}>
+              <label className={styles.label} htmlFor="pixel-streaming-url">
+                Pixel Streaming URL
+              </label>
+              {psHasUrl && (
+                <span className={`${styles.badge} ${psUrlValid ? styles.badgeValid : styles.badgeInvalid}`}>
+                  {psUrlValid ? 'Valid' : 'Invalid URL'}
+                </span>
+              )}
+              {psReachable === true && psAllGood && (
+                <span className={`${styles.badge} ${styles.badgeRunning}`}>Reachable</span>
+              )}
+              {psReachable === false && psAllGood && (
+                <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
+              )}
+            </div>
+            <input
+              id="pixel-streaming-url"
+              className={`${styles.input} ${psHasError ? styles.inputError : ''}`}
+              type="url"
+              placeholder="https://stream.example.com"
+              value={psUrlInput}
+              onChange={(e) => setPsUrlInput(e.target.value)}
+              spellCheck={false}
+              autoComplete="url"
+            />
+          </div>
+
+          {/* UE Remote API URL */}
+          <div className={styles.field}>
+            <div className={styles.fieldHeader}>
+              <label className={styles.label} htmlFor="ue-api-url">
+                UE Remote API
+              </label>
+              {ueApiUrlInput.trim() && isValidUrl(ueApiUrlInput) && (
+                <span className={`${styles.badge} ${styles.badgeValid}`}>Valid</span>
+              )}
+              {ueApiUrlInput.trim() && !isValidUrl(ueApiUrlInput) && (
+                <span className={`${styles.badge} ${styles.badgeInvalid}`}>Invalid URL</span>
+              )}
+              {ueReachable === true && ueApiUrl && (
+                <span className={`${styles.badge} ${styles.badgeRunning}`}>Reachable</span>
+              )}
+              {ueReachable === false && ueApiUrl && (
+                <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
+              )}
+            </div>
+            <input
+              id="ue-api-url"
+              className={`${styles.input} ${ueApiUrlInput.trim() && !isValidUrl(ueApiUrlInput) ? styles.inputError : ''}`}
+              type="url"
+              placeholder="http://127.0.0.1:8081"
+              value={ueApiUrlInput}
+              onChange={(e) => setUeApiUrlInput(e.target.value)}
+              spellCheck={false}
+              autoComplete="url"
+            />
+            <p className={styles.hint}>
+              Optional. UE HTTP server for runtime control (camera, levels, avatars).
+            </p>
+          </div>
+        </>
+      ),
+    },
+
+    // Step 5: Start process
+    {
+      label: 'Start process',
+      summary: needsRestart
+        ? 'Restart required'
+        : isProcessReady
+          ? 'Running'
+          : undefined,
+      isComplete: isProcessReady && !needsRestart,
+      isLocked: !isUrlsConfigured,
+      content: (
+        <div className={styles.startStepContent}>
+          {needsRestart && (
+            <p className={styles.hint}>
+              Agent provider changed. Restart the process to apply the new configuration.
+            </p>
+          )}
+          {!needsRestart && (
+            <p className={styles.hint}>
+              Launch the start2stream executable. The process needs a few seconds to initialize.
+            </p>
+          )}
+          <div className={styles.connectRow}>
+            <button
+              type="button"
+              className={styles.applyButton}
+              onClick={() => void handleStartProcess()}
+              disabled={isStarting}
+            >
+              {isStarting
+                ? `Starting... ${startCountdown > 0 ? `(${startCountdown}s)` : ''}`
+                : needsRestart || processRunning === true
+                  ? 'Restart'
+                  : 'Start'}
+            </button>
+            {needsRestart && (
+              <span className={`${styles.badge} ${styles.badgeInvalid}`}>Restart required</span>
+            )}
+            {!needsRestart && processRunning === true && (
+              <span className={`${styles.badge} ${styles.badgeRunning}`}>Running</span>
+            )}
+            {!needsRestart && processRunning === false && (
+              <span className={`${styles.badge} ${styles.badgeStopped}`}>Stopped</span>
+            )}
+          </div>
+          {startError && <p className={styles.filePathValidationError}>{startError}</p>}
+        </div>
+      ),
+    },
+
+    // Step 6: Connect PS
+    {
+      label: 'Connect',
+      summary: psConnected ? 'Session active' : undefined,
+      isComplete: psConnected,
+      isLocked: !isProcessReady,
+      content: (
+        <div className={styles.startStepContent}>
+          <p className={styles.hint}>
+            Mount the Pixel Streaming session. It persists across device page navigation.
+          </p>
+          <div className={styles.connectRow}>
+            <button
+              type="button"
+              className={`${styles.connectButton} ${psConnected ? styles.connectButtonDisconnect : ''}`}
+              onClick={() => (psConnected ? psDisconnect() : psConnect())}
+              disabled={!psAllGood}
+            >
+              {psConnected ? 'Disconnect' : 'Connect'}
+            </button>
+            {psConnected && (
+              <span className={`${styles.badge} ${styles.badgeRunning}`}>Session active</span>
+            )}
+          </div>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className={styles.settings}>
@@ -483,340 +858,60 @@ export function OverviewPage() {
         </div>
       )}
 
-      <div className={styles.form}>
-        {/* -- Left column: Voice Agent + Widget -- */}
-        <div className={styles.column}>
-          {/* -- Voice Agent -- */}
-          <section
-            className={`${styles.settingsBlock} ${
-              voiceAgentHasError || (isFileConfigured && hasPendingAgentChange)
-                ? styles.settingsBlockError
-                : voiceAgentAllGood
-                  ? styles.settingsBlockValid
-                  : ''
-            }`}
-          >
-            <h2 className={styles.settingsBlockTitle}>Voice Agent</h2>
+      {/* Setup stepper */}
+      <SetupStepper steps={steps} />
 
-            {/* License file path */}
-            <div className={styles.field}>
-              <div className={styles.fieldHeader}>
-                <label className={styles.label} htmlFor="license-file-path">
-                  License file path
-                </label>
-                {filePathSaved && !filePathError && (
-                  <span className={`${styles.badge} ${styles.badgeValid}`}>
-                    ✓ Configured
-                  </span>
-                )}
-                {filePathError && (
-                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                    ✗ Path not found
-                  </span>
-                )}
-              </div>
+      {/* Widget URLs — separate section below stepper */}
+      <section
+        className={`${styles.settingsBlock} ${
+          widgetHasError
+            ? styles.settingsBlockError
+            : widgetAllGood
+              ? styles.settingsBlockValid
+              : ''
+        }`}
+      >
+        <h2 className={styles.settingsBlockTitle}>Widget</h2>
 
-              <div className={styles.filePathRow}>
-                <input
-                  id="license-file-path"
-                  className={`${styles.input} ${filePathError ? styles.inputError : ''}`}
-                  type="text"
-                  placeholder={IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'}
-                  value={filePathInput}
-                  onChange={(e) => {
-                    setFilePathInput(e.target.value);
-                    setFilePathSaved(false);
-                    setFilePathError(null);
-                  }}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                <button
-                  type="button"
-                  className={styles.filePathAction}
-                  onClick={() => void handleBrowse()}
-                  disabled={isBrowsing || isFilePathSaving}
-                >
-                  {isBrowsing ? 'Browsing...' : 'Browse'}
-                </button>
-              </div>
+        {WIDGET_DEVICES.map((field) => {
+          const urlValue = valuesByDevice[field.id];
+          const hasUrl = urlValue.trim().length > 0;
+          const urlValid = !hasUrl || isValidUrl(urlValue);
+          const hasError = hasUrl && !urlValid;
+          const allGood = hasUrl && urlValid;
 
-              <div className={styles.filePathValidation}>
-                {filePathError && (
-                  <span className={styles.filePathValidationError}>{filePathError}</span>
-                )}
-                {filePathResolvedPath && !filePathError && (
-                  <span className={styles.filePathResolvedPath}>{filePathResolvedPath}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Executable path */}
-            <div className={styles.field}>
-              <div className={styles.fieldHeader}>
-                <label className={styles.label} htmlFor="exe-path">
-                  Executable
-                </label>
-                {exePathSaved && !exePathError && (
-                  <span className={`${styles.badge} ${styles.badgeValid}`}>
-                    ✓ Configured
-                  </span>
-                )}
-                {exePathError && (
-                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                    ✗ Invalid
-                  </span>
-                )}
-                {/* Process status badge */}
-                {processRunning === true && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>
-                    ● Running
-                  </span>
-                )}
-                {processRunning === false && isExeConfigured && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>
-                    ○ Stopped
-                  </span>
-                )}
-              </div>
-
-              <div className={styles.filePathRow}>
-                <input
-                  id="exe-path"
-                  className={`${styles.input} ${exePathError ? styles.inputError : ''}`}
-                  type="text"
-                  placeholder={IS_WINDOWS ? 'C:\\Path\\To\\start2stream.bat' : '/path/to/start2stream.sh'}
-                  value={exePathInput}
-                  onChange={(e) => {
-                    setExePathInput(e.target.value);
-                    setExePathSaved(false);
-                    setExePathError(null);
-                  }}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                <button
-                  type="button"
-                  className={styles.filePathAction}
-                  onClick={() => void handleBrowseExe()}
-                  disabled={isExeBrowsing || isExeSaving}
-                >
-                  {isExeBrowsing ? 'Browsing...' : 'Browse'}
-                </button>
-              </div>
-
-              <div className={styles.filePathValidation}>
-                {exePathError && (
-                  <span className={styles.filePathValidationError}>{exePathError}</span>
-                )}
-                {exePathResolvedPath && !exePathError && (
-                  <span className={styles.filePathResolvedPath}>{exePathResolvedPath}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Voice agent selector */}
-            <div className={styles.fieldHeader}>
-              <label className={styles.label}>Agent provider</label>
-              {isFileConfigured && !hasPendingAgentChange && voiceAgent && (
-                <span className={`${styles.badge} ${styles.badgeValid}`}>✓ Applied</span>
-              )}
-              {isFileConfigured && hasPendingAgentChange && (
-                <span className={`${styles.badge} ${styles.badgeInvalid}`}>Unsaved changes</span>
-              )}
-            </div>
-
+          return (
             <div
-              className={`${styles.radioGroup} ${!isFileConfigured ? styles.radioGroupDisabled : ''}`}
-              role="radiogroup"
-              aria-label="Voice agent"
+              key={field.id}
+              className={`${styles.deviceCard} ${
+                hasError ? styles.deviceCardError : allGood ? styles.deviceCardValid : ''
+              }`}
             >
-              <label className={styles.radioOption}>
-                <input
-                  type="radio"
-                  name="voice-agent"
-                  value="elevenlabs"
-                  checked={pendingVoiceAgent === 'elevenlabs'}
-                  onChange={() => setPendingVoiceAgent('elevenlabs')}
-                  disabled={!isFileConfigured || isApplying}
-                />
-                <span>ElevenLabs</span>
-              </label>
-
-              <label className={styles.radioOption}>
-                <input
-                  type="radio"
-                  name="voice-agent"
-                  value="gemini-live"
-                  checked={pendingVoiceAgent === 'gemini-live'}
-                  onChange={() => setPendingVoiceAgent('gemini-live')}
-                  disabled={!isFileConfigured || isApplying}
-                />
-                <span>Gemini Live</span>
-              </label>
-            </div>
-
-            <button
-              type="button"
-              className={styles.applyButton}
-              onClick={() => void handleApplyAgent()}
-              disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
-            >
-              {isApplying ? 'Applying...' : 'Apply & restart'}
-            </button>
-
-            {applyError && <p className={styles.filePathValidationError}>{applyError}</p>}
-          </section>
-        </div>
-
-        {/* -- Right column: Widget + Pixel Streaming -- */}
-        <div className={styles.column}>
-          {/* -- Widget: Phone + Laptop -- */}
-          <section
-            className={`${styles.settingsBlock} ${
-              widgetHasError
-                ? styles.settingsBlockError
-                : widgetAllGood
-                  ? styles.settingsBlockValid
-                  : ''
-            }`}
-          >
-            <h2 className={styles.settingsBlockTitle}>Widget</h2>
-
-            {WIDGET_DEVICES.map((field) => {
-              const urlValue = valuesByDevice[field.id];
-              const hasUrl = urlValue.trim().length > 0;
-              const urlValid = !hasUrl || isValidUrl(urlValue);
-              const hasError = hasUrl && !urlValid;
-              const allGood = hasUrl && urlValid;
-
-              return (
-                <div
-                  key={field.id}
-                  className={`${styles.deviceCard} ${
-                    hasError ? styles.deviceCardError : allGood ? styles.deviceCardValid : ''
-                  }`}
-                >
-                  <h3 className={styles.deviceCardTitle}>{field.label}</h3>
-                  <div className={styles.field}>
-                    <div className={styles.fieldHeader}>
-                      <label className={styles.label} htmlFor={`${field.id}-url`}>URL</label>
-                      {hasUrl && (
-                        <span className={`${styles.badge} ${urlValid ? styles.badgeValid : styles.badgeInvalid}`}>
-                          {urlValid ? '✓ Valid' : '✗ Invalid URL'}
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      id={`${field.id}-url`}
-                      className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
-                      type="url"
-                      placeholder={field.placeholder}
-                      value={urlValue}
-                      onChange={(e) => setDeviceUrl(field.id, e.target.value)}
-                      spellCheck={false}
-                      autoComplete="url"
-                    />
-                  </div>
+              <h3 className={styles.deviceCardTitle}>{field.label}</h3>
+              <div className={styles.field}>
+                <div className={styles.fieldHeader}>
+                  <label className={styles.label} htmlFor={`${field.id}-url`}>URL</label>
+                  {hasUrl && (
+                    <span className={`${styles.badge} ${urlValid ? styles.badgeValid : styles.badgeInvalid}`}>
+                      {urlValid ? 'Valid' : 'Invalid URL'}
+                    </span>
+                  )}
                 </div>
-              );
-            })}
-          </section>
-
-          {/* -- Pixel Streaming -- */}
-          <section
-            className={`${styles.settingsBlock} ${
-              psHasError
-                ? styles.settingsBlockError
-                : psAllGood
-                  ? styles.settingsBlockValid
-                  : ''
-            }`}
-          >
-            <h2 className={styles.settingsBlockTitle}>Pixel Streaming</h2>
-
-            <div className={styles.field}>
-              <div className={styles.fieldHeader}>
-                <label className={styles.label} htmlFor="pixel-streaming-url">URL</label>
-                {psHasUrl && (
-                  <span className={`${styles.badge} ${psUrlValid ? styles.badgeValid : styles.badgeInvalid}`}>
-                    {psUrlValid ? '✓ Valid' : '✗ Invalid URL'}
-                  </span>
-                )}
-                {/* PS server reachability badge */}
-                {psReachable === true && psAllGood && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Reachable</span>
-                )}
-                {psReachable === false && psAllGood && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>○ Not responding</span>
-                )}
+                <input
+                  id={`${field.id}-url`}
+                  className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
+                  type="url"
+                  placeholder={field.placeholder}
+                  value={urlValue}
+                  onChange={(e) => setDeviceUrl(field.id, e.target.value)}
+                  spellCheck={false}
+                  autoComplete="url"
+                />
               </div>
-              <input
-                id="pixel-streaming-url"
-                className={`${styles.input} ${psHasError ? styles.inputError : ''}`}
-                type="url"
-                placeholder="https://stream.example.com"
-                value={psUrlInput}
-                onChange={(e) => setPsUrlInput(e.target.value)}
-                spellCheck={false}
-                autoComplete="url"
-              />
-              <div className={styles.connectRow}>
-                <button
-                  type="button"
-                  className={`${styles.connectButton} ${psConnected ? styles.connectButtonDisconnect : ''}`}
-                  onClick={() => (psConnected ? psDisconnect() : psConnect())}
-                  disabled={!psAllGood}
-                >
-                  {psConnected ? 'Disconnect' : 'Connect'}
-                </button>
-                {psConnected && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Session active</span>
-                )}
-              </div>
-              <p className={styles.hint}>
-                Shared URL for all streaming devices. Session persists across page navigation.
-              </p>
             </div>
-
-            {/* UE Remote API URL */}
-            <div className={styles.field}>
-              <div className={styles.fieldHeader}>
-                <label className={styles.label} htmlFor="ue-api-url">UE Remote API</label>
-                {ueApiUrlInput.trim() && isValidUrl(ueApiUrlInput) && (
-                  <span className={`${styles.badge} ${styles.badgeValid}`}>
-                    ✓ Valid
-                  </span>
-                )}
-                {ueApiUrlInput.trim() && !isValidUrl(ueApiUrlInput) && (
-                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                    ✗ Invalid URL
-                  </span>
-                )}
-                {ueReachable === true && ueApiUrl && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Reachable</span>
-                )}
-                {ueReachable === false && ueApiUrl && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>○ Not responding</span>
-                )}
-              </div>
-              <input
-                id="ue-api-url"
-                className={`${styles.input} ${ueApiUrlInput.trim() && !isValidUrl(ueApiUrlInput) ? styles.inputError : ''}`}
-                type="url"
-                placeholder="http://127.0.0.1:8081"
-                value={ueApiUrlInput}
-                onChange={(e) => setUeApiUrlInput(e.target.value)}
-                spellCheck={false}
-                autoComplete="url"
-              />
-              <p className={styles.hint}>
-                UE app built-in HTTP server for runtime control (camera, levels, avatars).
-              </p>
-            </div>
-          </section>
-        </div>
-      </div>
+          );
+        })}
+      </section>
     </div>
   );
 }

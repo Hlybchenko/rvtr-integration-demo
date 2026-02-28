@@ -7,46 +7,11 @@
   max-width: 1100px;
 }
 
-/* Header */
-.header {
+/* Start step content — simple vertical layout */
+.startStepContent {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-}
-
-.title {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
-
-.accent {
-  color: var(--accent);
-}
-
-.subtitle {
-  font-size: var(--font-md);
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-/* Form — 2-column grid layout */
-.form {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-5);
-  align-items: stretch;
-}
-
-.column {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-/* Stretch last block to fill remaining column height */
-.column > .settingsBlock:last-child {
-  flex: 1;
+  gap: var(--space-3);
 }
 
 /* Nested device card inside a group block */
@@ -121,24 +86,6 @@
   text-align: center;
 }
 
-.voiceAgentStatusIcon {
-  font-size: var(--font-md);
-  font-weight: 700;
-  line-height: 1;
-}
-
-.voiceAgentStatusNeutral {
-  color: var(--text-secondary);
-}
-
-.voiceAgentStatusOk {
-  color: var(--success);
-}
-
-.voiceAgentStatusError {
-  color: var(--danger);
-}
-
 .field {
   display: flex;
   flex-direction: column;
@@ -158,10 +105,6 @@
   align-items: center;
   gap: 6px;
   color: var(--text-secondary);
-}
-
-.labelIcon {
-  font-size: 16px;
 }
 
 .badge {
@@ -264,76 +207,6 @@
   margin: 0;
 }
 
-.code {
-  font-family: var(--font-mono);
-  font-size: var(--font-xs);
-  background: var(--glass-bg);
-  padding: 2px 6px;
-  border-radius: 4px;
-  color: var(--text-primary);
-  word-break: break-all;
-}
-
-/* Active URLs status */
-.status {
-  background: var(--glass-highlight), var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: var(--glass-shadow);
-}
-
-.statusTitle {
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 0;
-}
-
-.statusRow {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.statusLabel {
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 60px;
-  flex-shrink: 0;
-}
-
-.statusValue {
-  font-size: var(--font-sm);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.statusLink {
-  color: var(--accent);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.statusLink:hover {
-  color: var(--accent-hover, var(--accent));
-  text-decoration: underline;
-}
-
-.statusEmpty {
-  color: var(--text-secondary);
-  opacity: 0.6;
-  font-style: italic;
-}
-
 /* Apply agent button — compact, centered, accent when active */
 .applyButton {
   appearance: none;
@@ -420,11 +293,6 @@
   min-height: 1.4em;
 }
 
-.filePathValidationOk {
-  font-size: var(--font-sm);
-  color: var(--success);
-}
-
 .filePathValidationError {
   font-size: var(--font-sm);
   color: var(--danger);
@@ -505,20 +373,9 @@
   border-radius: var(--radius-md);
 }
 
-/* ── Responsive: collapse to 1 column ── */
-@media (max-width: 860px) {
-  .form {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* ── Mobile adjustments ── */
 @media (max-width: 767px) {
   .settings {
     padding: 56px 16px 24px;
-  }
-
-  .title {
-    font-size: 22px;
   }
 }

@@ -263,8 +263,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="range"
                 className={styles.slider}
-                min={-200}
-                max={200}
+                min={-1000}
+                max={1000}
                 step={1}
                 value={settings.zoom}
                 onChange={(e) =>
@@ -279,8 +279,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="range"
                 className={styles.slider}
-                min={-100}
-                max={100}
+                min={-500}
+                max={500}
                 step={1}
                 value={settings.cameraVertical}
                 onChange={(e) =>
@@ -295,8 +295,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="range"
                 className={styles.slider}
-                min={-100}
-                max={100}
+                min={-500}
+                max={500}
                 step={1}
                 value={settings.cameraHorizontal}
                 onChange={(e) =>
@@ -311,8 +311,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="range"
                 className={styles.slider}
-                min={-90}
-                max={90}
+                min={-500}
+                max={500}
                 step={1}
                 value={settings.cameraPitch}
                 onChange={(e) =>

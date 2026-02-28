@@ -6,8 +6,10 @@ import { getProcessStatus, checkPixelStreamingStatus } from '@/services/voiceAge
 import { checkUeApiHealth } from '@/services/ueRemoteApi';
 import { isValidUrl } from '@/utils/isValidUrl';
 
-/** Polling interval for all status checks */
+/** Base polling interval for process & PS checks */
 const STATUS_POLL_MS = 5_000;
+/** Max backoff for UE health when unreachable */
+const UE_MAX_BACKOFF_MS = 30_000;
 
 /**
  * Global status polling hook — runs at AppShell level.
@@ -15,12 +17,16 @@ const STATUS_POLL_MS = 5_000;
  * Polls every 5s:
  *  - start2stream process status
  *  - Pixel Streaming endpoint reachability
- *  - UE Remote API health
+ *  - UE Remote API health (with exponential backoff when unreachable)
  *
  * Results go into statusStore (process, PS) and ueControlStore (UE health).
  */
 export function useStatusPolling(): void {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Consecutive UE health check failures — drives backoff */
+  const ueFailCountRef = useRef(0);
+  /** Tick counter to compare against backoff interval */
+  const tickRef = useRef(0);
 
   useEffect(() => {
     const poll = async () => {
@@ -28,7 +34,18 @@ export function useStatusPolling(): void {
       const { ueApiUrl, setUeReachable } = useUeControlStore.getState();
       const { setProcessRunning, setPsReachable } = useStatusStore.getState();
 
-      // Run all health checks in parallel — no reason to block on each other
+      tickRef.current += 1;
+
+      // Determine whether to run UE health check this tick.
+      // Backoff: skip ticks when UE is known unreachable to avoid console spam.
+      const backoffMs = Math.min(
+        STATUS_POLL_MS * 2 ** ueFailCountRef.current,
+        UE_MAX_BACKOFF_MS,
+      );
+      const ticksBetweenUeChecks = Math.max(1, Math.round(backoffMs / STATUS_POLL_MS));
+      const shouldCheckUe = tickRef.current % ticksBetweenUeChecks === 0;
+
+      // Run health checks in parallel — no reason to block on each other
       await Promise.allSettled([
         // Process status
         getProcessStatus()
@@ -42,12 +59,21 @@ export function useStatusPolling(): void {
               .catch(() => setPsReachable(null))
           : Promise.resolve(setPsReachable(null)),
 
-        // UE API health
-        ueApiUrl && isValidUrl(ueApiUrl)
+        // UE API health — with backoff
+        shouldCheckUe && ueApiUrl && isValidUrl(ueApiUrl)
           ? checkUeApiHealth(ueApiUrl)
-              .then((ok) => setUeReachable(ok))
-              .catch(() => setUeReachable(null))
-          : Promise.resolve(setUeReachable(null)),
+              .then((ok) => {
+                setUeReachable(ok);
+                // Reset backoff on success, increase on failure
+                ueFailCountRef.current = ok ? 0 : ueFailCountRef.current + 1;
+              })
+              .catch(() => {
+                setUeReachable(null);
+                ueFailCountRef.current += 1;
+              })
+          : shouldCheckUe
+            ? Promise.resolve(setUeReachable(null))
+            : Promise.resolve(),
       ]);
     };
 
