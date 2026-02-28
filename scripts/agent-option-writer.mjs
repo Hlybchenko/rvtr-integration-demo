@@ -575,6 +575,7 @@ const server = createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         licenseFilePath: cfg?.licenseFilePath ?? '',
+        exePath: cfg?.exePath ?? cfg?.start2streamPath ?? '',
         deviceExePaths: cfg?.deviceExePaths ?? {},
         // Legacy fallback
         start2streamPath: cfg?.start2streamPath ?? '',
@@ -801,6 +802,41 @@ const server = createServer(async (req, res) => {
     }
 
     // -----------------------------------------------------------------------
+    // POST /config/exe — set global executable path (replaces start2streamPath)
+    // -----------------------------------------------------------------------
+    if (req.method === 'POST' && req.url === '/config/exe') {
+      const body = await readBody(req);
+      const exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
+
+      if (!exePath) {
+        sendJson(res, 400, { ok: false, error: 'exePath is required' });
+        return;
+      }
+
+      const resolved = path.resolve(exePath);
+      const validation = await validateExecutable(resolved);
+
+      if (!validation.valid) {
+        sendJson(res, 400, {
+          ok: false,
+          error: validation.errors.join('; '),
+          errors: validation.errors,
+          resolvedPath: resolved,
+        });
+        return;
+      }
+
+      await writeConfig({ exePath: resolved });
+
+      sendJson(res, 200, {
+        ok: true,
+        exePath: resolved,
+        validation,
+      });
+      return;
+    }
+
+    // -----------------------------------------------------------------------
     // POST /config/validate-exe — validate executable path without saving
     // -----------------------------------------------------------------------
     if (req.method === 'POST' && req.url === '/config/validate-exe') {
@@ -927,7 +963,7 @@ const server = createServer(async (req, res) => {
         deviceId = activeProcess.deviceId;
         // Look up exe path from config
         const cfg = await readConfig();
-        exePath = cfg?.deviceExePaths?.[deviceId] ?? cfg?.start2streamPath ?? '';
+        exePath = cfg?.deviceExePaths?.[deviceId] ?? cfg?.exePath ?? cfg?.start2streamPath ?? '';
       }
 
       if (!exePath) {
