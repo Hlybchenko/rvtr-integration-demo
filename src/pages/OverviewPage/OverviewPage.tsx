@@ -3,7 +3,8 @@ import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
 import { useSettingsStore, type VoiceAgent } from '@/stores/settingsStore';
 import { useUeControlStore } from '@/stores/ueControlStore';
-import { checkUeApiHealth } from '@/services/ueRemoteApi';
+import { useStatusStore } from '@/stores/statusStore';
+import { useStreamingStore } from '@/stores/streamingStore';
 import {
   forceRewriteVoiceAgentFile,
   readVoiceAgentFromFile,
@@ -13,9 +14,8 @@ import {
   setGlobalExePath,
   browseForExe,
   restartProcess,
-  getProcessStatus,
-  checkPixelStreamingStatus,
 } from '@/services/voiceAgentWriter';
+import { isValidUrl } from '@/utils/isValidUrl';
 import styles from './OverviewPage.module.css';
 
 const IS_WINDOWS =
@@ -31,22 +31,9 @@ interface DeviceField {
 }
 
 const WIDGET_DEVICES: DeviceField[] = [
-  { id: 'phone', label: 'Phone', placeholder: 'https://your-phone-url.com' },
-  { id: 'laptop', label: 'Laptop', placeholder: 'https://your-laptop-url.com' },
+  { id: 'phone', label: 'Phone', placeholder: 'https://widget.example.com/phone' },
+  { id: 'laptop', label: 'Laptop', placeholder: 'https://widget.example.com/laptop' },
 ];
-
-function isValidUrl(value: string): boolean {
-  if (!value.trim()) return false;
-  try {
-    new URL(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Status polling interval */
-const STATUS_POLL_MS = 5_000;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -99,10 +86,22 @@ export function OverviewPage() {
   const setUeReachable = useUeControlStore((s) => s.setUeReachable);
   const [ueApiUrlInput, setUeApiUrlInput] = useState(ueApiUrl);
 
-  // -- status polling --
-  const [processRunning, setProcessRunning] = useState<boolean | null>(null);
-  const [psReachable, setPsReachable] = useState<boolean | null>(null);
-  const statusTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // -- global status (polling runs in AppShell) --
+  const processRunning = useStatusStore((s) => s.processRunning);
+  const psReachable = useStatusStore((s) => s.psReachable);
+
+  // -- streaming connection --
+  const psConnected = useStreamingStore((s) => s.connected);
+  const psConnect = useStreamingStore((s) => s.connect);
+  const psDisconnect = useStreamingStore((s) => s.disconnect);
+
+  // Timer for auto-reconnect PS after agent change — cleaned up on unmount
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    };
+  }, []);
 
   const valuesByDevice: Record<'phone' | 'laptop', string> = {
     phone: phoneUrl,
@@ -136,48 +135,6 @@ export function OverviewPage() {
       warmDetectScreenRect(device.frameSrc);
     });
   }, []);
-
-  // -- status polling effect --
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const status = await getProcessStatus();
-        setProcessRunning(status.running);
-      } catch {
-        setProcessRunning(null);
-      }
-
-      if (pixelStreamingUrl && isValidUrl(pixelStreamingUrl)) {
-        try {
-          const ps = await checkPixelStreamingStatus(pixelStreamingUrl);
-          setPsReachable(ps.reachable);
-        } catch {
-          setPsReachable(null);
-        }
-      } else {
-        setPsReachable(null);
-      }
-
-      // UE API health
-      if (ueApiUrl && isValidUrl(ueApiUrl)) {
-        try {
-          const ok = await checkUeApiHealth(ueApiUrl);
-          setUeReachable(ok);
-        } catch {
-          setUeReachable(null);
-        }
-      } else {
-        setUeReachable(null);
-      }
-    };
-
-    void poll();
-    statusTimerRef.current = setInterval(() => void poll(), STATUS_POLL_MS);
-
-    return () => {
-      if (statusTimerRef.current) clearInterval(statusTimerRef.current);
-    };
-  }, [pixelStreamingUrl, ueApiUrl, setUeReachable]);
 
   // ---------------------------------------------------------------------------
   // Init effect
@@ -249,7 +206,7 @@ export function OverviewPage() {
       } catch (err) {
         if (cancelled) return;
         setBackendError(
-          `Local server unavailable. Start agent-option-writer and reload the page.${err instanceof Error ? ` (${err.message})` : ''}`,
+          `Local server unavailable. Start the backend service and reload.${err instanceof Error ? ` (${err.message})` : ''}`,
         );
       }
     })();
@@ -393,17 +350,35 @@ export function OverviewPage() {
 
         // Restart process after applying agent change
         if (isExeConfigured) {
-          void restartProcess();
+          try {
+            const restart = await restartProcess();
+            if (!restart.ok) {
+              setApplyError(
+                `Agent applied, but process restart failed: ${restart.error ?? 'unknown error'}`,
+              );
+            }
+          } catch (err) {
+            setApplyError(
+              `Agent applied, but process restart failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+
+        // Auto-reconnect Pixel Streaming when agent provider changes
+        if (psConnected) {
+          psDisconnect();
+          // Small delay to let iframe unmount before reconnecting
+          reconnectTimerRef.current = setTimeout(() => psConnect(), 300);
         }
       } else {
-        setApplyError("Agent updated, but the file content didn't change as expected");
+        setApplyError('Agent config saved, but file verification failed. Try applying again.');
       }
     } catch (error) {
       setApplyError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsApplying(false);
     }
-  }, [pendingVoiceAgent, isFileConfigured, isExeConfigured, setVoiceAgent]);
+  }, [pendingVoiceAgent, isFileConfigured, isExeConfigured, setVoiceAgent, psConnected, psConnect, psDisconnect]);
 
   const handleBrowse = useCallback(async () => {
     setIsBrowsing(true);
@@ -434,7 +409,7 @@ export function OverviewPage() {
           setFilePathSaved(false);
         }
       } else {
-        setFilePathError(result.errors.join('; ') || 'Selected file is not valid for this field');
+        setFilePathError(result.errors.join('; ') || 'Selected file is not a valid license file');
         setFilePathSaved(false);
       }
     } catch (error) {
@@ -442,7 +417,7 @@ export function OverviewPage() {
       if (error instanceof DOMException && error.name === 'AbortError') {
         setFilePathError('Browse timed out — the local server may be unresponsive');
       } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setFilePathError('Cannot reach the local server. Is agent-option-writer running?');
+        setFilePathError('Cannot reach the local server. Make sure the backend is running.');
       } else {
         setFilePathError(msg);
       }
@@ -457,14 +432,10 @@ export function OverviewPage() {
 
     try {
       const result = await browseForExe();
-      if (result.cancelled) {
-        setIsExeBrowsing(false);
-        return;
-      }
+      if (result.cancelled) return;
 
       if (!result.exePath) {
-        setExePathError(result.errors.join('; ') || 'File picker failed.');
-        setIsExeBrowsing(false);
+        setExePathError(result.errors.join('; ') || 'File picker failed. Try again or enter the path manually.');
         return;
       }
 
@@ -478,11 +449,11 @@ export function OverviewPage() {
           setExePathSaved(true);
           setExePathError(null);
         } else {
-          setExePathError(saveResult.error ?? 'Could not save');
+          setExePathError(saveResult.error ?? 'Could not save — file may be missing or inaccessible');
           setExePathSaved(false);
         }
       } else {
-        setExePathError(result.errors.join('; ') || 'Selected file is not valid');
+        setExePathError(result.errors.join('; ') || 'Selected file is not a valid executable');
         setExePathSaved(false);
       }
     } catch (error) {
@@ -490,7 +461,7 @@ export function OverviewPage() {
       if (error instanceof DOMException && error.name === 'AbortError') {
         setExePathError('Browse timed out');
       } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        setExePathError('Cannot reach the local server');
+        setExePathError('Cannot reach the local server. Make sure the backend is running.');
       } else {
         setExePathError(msg);
       }
@@ -540,7 +511,7 @@ export function OverviewPage() {
                 )}
                 {filePathError && (
                   <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                    ✗ Invalid
+                    ✗ Path not found
                   </span>
                 )}
               </div>
@@ -651,7 +622,7 @@ export function OverviewPage() {
                 <span className={`${styles.badge} ${styles.badgeValid}`}>✓ Applied</span>
               )}
               {isFileConfigured && hasPendingAgentChange && (
-                <span className={`${styles.badge} ${styles.badgeInvalid}`}>● Unsaved</span>
+                <span className={`${styles.badge} ${styles.badgeInvalid}`}>Unsaved changes</span>
               )}
             </div>
 
@@ -691,7 +662,7 @@ export function OverviewPage() {
               onClick={() => void handleApplyAgent()}
               disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
             >
-              {isApplying ? 'Applying...' : 'Apply'}
+              {isApplying ? 'Applying...' : 'Apply & restart'}
             </button>
 
             {applyError && <p className={styles.filePathValidationError}>{applyError}</p>}
@@ -772,27 +743,39 @@ export function OverviewPage() {
                     {psUrlValid ? '✓ Valid' : '✗ Invalid URL'}
                   </span>
                 )}
-                {/* PS reachability badge */}
+                {/* PS server reachability badge */}
                 {psReachable === true && psAllGood && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Connected</span>
+                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Reachable</span>
                 )}
                 {psReachable === false && psAllGood && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>○ Unreachable</span>
+                  <span className={`${styles.badge} ${styles.badgeStopped}`}>○ Not responding</span>
                 )}
               </div>
               <input
                 id="pixel-streaming-url"
                 className={`${styles.input} ${psHasError ? styles.inputError : ''}`}
                 type="url"
-                placeholder="https://your-pixel-streaming-url.com"
+                placeholder="https://stream.example.com"
                 value={psUrlInput}
                 onChange={(e) => setPsUrlInput(e.target.value)}
                 spellCheck={false}
                 autoComplete="url"
               />
+              <div className={styles.connectRow}>
+                <button
+                  type="button"
+                  className={`${styles.connectButton} ${psConnected ? styles.connectButtonDisconnect : ''}`}
+                  onClick={() => (psConnected ? psDisconnect() : psConnect())}
+                  disabled={!psAllGood}
+                >
+                  {psConnected ? 'Disconnect' : 'Connect'}
+                </button>
+                {psConnected && (
+                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Session active</span>
+                )}
+              </div>
               <p className={styles.hint}>
-                Single URL for all streaming devices (Holobox, Info Kiosk, Keba Kiosk).
-                The connection persists across device switches.
+                Shared URL for all streaming devices. Session persists across page navigation.
               </p>
             </div>
 
@@ -811,10 +794,10 @@ export function OverviewPage() {
                   </span>
                 )}
                 {ueReachable === true && ueApiUrl && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Connected</span>
+                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Reachable</span>
                 )}
                 {ueReachable === false && ueApiUrl && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>○ Unreachable</span>
+                  <span className={`${styles.badge} ${styles.badgeStopped}`}>○ Not responding</span>
                 )}
               </div>
               <input

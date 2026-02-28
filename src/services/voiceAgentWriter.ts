@@ -331,7 +331,7 @@ export async function forceRewriteVoiceAgentFile(
 export async function setGlobalExePath(
   exePath: string,
 ): Promise<{ ok: boolean; error?: string; resolvedPath?: string }> {
-  const response = await fetchWithTimeout(`${WRITER_BASE_URL}/config/device-exe`, {
+  const response = await fetchWithTimeout(`${WRITER_BASE_URL}/config/exe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ exePath }),

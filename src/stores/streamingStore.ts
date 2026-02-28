@@ -9,15 +9,20 @@ export interface StreamingViewport {
 }
 
 interface StreamingState {
-  /** True after first streaming page visit — never resets to false */
-  iframeMounted: boolean;
+  /**
+   * True when user explicitly connected to Pixel Streaming (via Connect button).
+   * Toggleable — disconnect unmounts the iframe.
+   */
+  connected: boolean;
   /** True when a streaming device page is currently displayed */
   isVisible: boolean;
   /** Current screen slot geometry in viewport coordinates */
   viewport: StreamingViewport | null;
 
-  /** Call on first streaming device page visit to mount the persistent iframe */
-  mount: () => void;
+  /** User clicked Connect — mount the persistent iframe */
+  connect: () => void;
+  /** User clicked Disconnect — unmount the persistent iframe */
+  disconnect: () => void;
   /** Call when entering a streaming device page */
   show: () => void;
   /** Call when leaving a streaming device page */
@@ -27,11 +32,12 @@ interface StreamingState {
 }
 
 export const useStreamingStore = create<StreamingState>()((set) => ({
-  iframeMounted: false,
+  connected: false,
   isVisible: false,
   viewport: null,
 
-  mount: () => set({ iframeMounted: true }),
+  connect: () => set({ connected: true }),
+  disconnect: () => set({ connected: false, isVisible: false, viewport: null }),
   show: () => set({ isVisible: true }),
   hide: () => set({ isVisible: false }),
   setViewport: (viewport) => set({ viewport }),

@@ -68,10 +68,6 @@ export function changeLevel(baseUrl: string, level: UeLevelId): Promise<boolean>
   return sendUeCommand(baseUrl, { command: 'ChangeLevel', Level: level });
 }
 
-export function changeAvatar(baseUrl: string): Promise<boolean> {
-  return sendUeCommand(baseUrl, { command: 'ChangeAvatar' });
-}
-
 export function changeAvatarById(baseUrl: string, avatarId: string): Promise<boolean> {
   return sendUeCommand(baseUrl, { command: 'ChangeAvatarByID', AvatarID: avatarId });
 }

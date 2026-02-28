@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { PersistentPixelStreaming } from '@/components/PersistentPixelStreaming/PersistentPixelStreaming';
+import { useStatusPolling } from '@/hooks/useStatusPolling';
 import styles from './AppShell.module.css';
 
 const MOBILE_BREAKPOINT = 768;
@@ -9,6 +10,9 @@ const MOBILE_BREAKPOINT = 768;
 export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+
+  // Global status polling (process, PS reachability, UE health)
+  useStatusPolling();
 
   // Close sidebar on route change (mobile)
   useEffect(() => {

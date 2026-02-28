@@ -96,6 +96,16 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const pendingDeltaRef = useRef(new Map<string, number>());
   /** Last value that was sent (or initial) — used to track the "sent" baseline */
   const sentValueRef = useRef(new Map<string, number>());
+  /** Timer for debounced avatar ID change */
+  const avatarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up all pending timers on unmount
+  useEffect(() => {
+    return () => {
+      sliderTimersRef.current.forEach((t) => clearTimeout(t));
+      if (avatarTimerRef.current) clearTimeout(avatarTimerRef.current);
+    };
+  }, []);
 
   const handleSlider = useCallback(
     (key: SliderKey, value: number) => {
@@ -119,14 +129,20 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
           const url = useUeControlStore.getState().ueApiUrl;
           const delta = pendingDeltaRef.current.get(key) ?? 0;
           pendingDeltaRef.current.set(key, 0);
-          sentValueRef.current.set(key, value);
 
           if (!url || delta === 0) return;
           const cmd = SLIDER_COMMANDS[key];
           if (!cmd) return;
+
           void sendUeCommand(url, {
             command: cmd.command,
             [cmd.param]: String(delta),
+          }).then((ok) => {
+            if (ok) {
+              // Only advance baseline on successful send
+              sentValueRef.current.set(key, value);
+            }
+            // On failure: baseline stays — next delta will include the missed offset
           });
         }, SLIDER_DEBOUNCE_MS),
       );
@@ -161,8 +177,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   );
 
   // ── Avatar handler ────────────────────────────────────────────────────────
-
-  const avatarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleAvatarId = useCallback(
     (avatarId: string) => {
@@ -306,7 +320,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <input
                 type="text"
                 className={styles.smallInput}
-                placeholder="Avatar ID"
+                placeholder="e.g. avatar_01"
                 value={settings.avatarId}
                 onChange={(e) => handleAvatarId(e.target.value)}
                 spellCheck={false}
@@ -314,7 +328,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
             </div>
 
             <div className={styles.controlRow}>
-              <span className={styles.controlLabel}>Logo</span>
+              <span className={styles.controlLabel}>Show logo</span>
               <input
                 type="checkbox"
                 className={styles.toggle}
@@ -324,7 +338,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
             </div>
 
             <div className={styles.controlRow}>
-              <span className={styles.controlLabel}>Allow change</span>
+              <span className={styles.controlLabel}>Allow avatar switch</span>
               <input
                 type="checkbox"
                 className={styles.toggle}
@@ -368,12 +382,12 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 className={styles.smallButton}
                 onClick={() => { const u = useUeControlStore.getState().ueApiUrl; if (u) void changeLight(u); }}
               >
-                Switch
+                Toggle type
               </button>
             </div>
 
             <div className={styles.controlRow}>
-              <span className={styles.controlLabel}>Interruption</span>
+              <span className={styles.controlLabel}>Allow interruption</span>
               <input
                 type="checkbox"
                 className={styles.toggle}
@@ -383,7 +397,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
             </div>
 
             <div className={styles.controlRow}>
-              <span className={styles.controlLabel}>PCM audio</span>
+              <span className={styles.controlLabel}>Raw audio (PCM)</span>
               <input
                 type="checkbox"
                 className={styles.toggle}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { isValidUrl } from '@/utils/isValidUrl';
 
 const ENV_WIDGET_URL = import.meta.env.VITE_DEFAULT_WIDGET_URL || '';
 
@@ -18,16 +19,6 @@ type LegacyVoiceAgent = VoiceAgent | 'google-native-audio';
 export function normalizeVoiceAgent(value: LegacyVoiceAgent | undefined): VoiceAgent {
   if (value === 'google-native-audio') return 'gemini-live';
   return value === 'gemini-live' || value === 'elevenlabs' ? value : 'elevenlabs';
-}
-
-function isValidUrl(value: string): boolean {
-  if (!value.trim()) return false;
-  try {
-    new URL(value);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 interface SettingsState {

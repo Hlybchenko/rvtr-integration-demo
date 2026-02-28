@@ -443,6 +443,57 @@
   pointer-events: none;
 }
 
+/* Connect / Disconnect row */
+.connectRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.connectButton {
+  appearance: none;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+  color: var(--accent);
+  border-radius: var(--radius-md);
+  padding: 4px 22px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.connectButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+}
+
+.connectButton:disabled {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.connectButtonDisconnect {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--glass-bg));
+  color: var(--danger);
+}
+
+.connectButtonDisconnect:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 20%, var(--glass-bg));
+}
+
 /* Backend error banner */
 .backendErrorBanner {
   padding: 10px 14px;
