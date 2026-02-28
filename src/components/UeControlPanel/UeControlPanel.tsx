@@ -138,15 +138,35 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     };
   }, []);
 
-  // Reset slider baseline refs when switching devices.
-  // After a switch, DevicePage sends reset+apply to UE, so UE camera
-  // matches the new device's stored offsets. The slider baseline must
-  // reflect these stored values so subsequent drags compute correct deltas.
+  // ── Auto-apply saved settings on device switch ──────────────────────────
+  // Generation counter ensures rapid device switches don't overlap: only the
+  // latest switch's commands run to completion.
+  const applyGenRef = useRef(0);
   useEffect(() => {
+    // Clear slider state for the new device
     sliderTimersRef.current.forEach((t) => clearTimeout(t));
     sliderTimersRef.current.clear();
     pendingDeltaRef.current.clear();
     sentValueRef.current.clear();
+
+    const url = useUeControlStore.getState().ueApiUrl;
+    if (!url) return;
+
+    const gen = ++applyGenRef.current;
+    const committed = useUeControlStore.getState().ueCommittedCamera;
+    const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
+
+    void (async () => {
+      // Reset camera to zero from current committed position
+      const afterReset = await resetCameraToZero(url, committed);
+      if (applyGenRef.current !== gen) return;
+      useUeControlStore.getState().setUeCommittedCamera(afterReset);
+
+      // Apply the new device's saved settings
+      const { newCommitted } = await applyDeviceSettings(url, desired, afterReset);
+      if (applyGenRef.current !== gen) return;
+      useUeControlStore.getState().setUeCommittedCamera(newCommitted);
+    })();
   }, [deviceId]);
 
   const handleSlider = useCallback(
