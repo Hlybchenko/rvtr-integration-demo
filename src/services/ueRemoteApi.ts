@@ -135,7 +135,7 @@ const CAMERA_KEYS: (keyof CameraPosition)[] = [
 
 /** Maximum per-axis camera delta sent in one command.
  *  Prevents UE crashes from oversized offsets (e.g. stale committed camera). */
-const MAX_CAMERA_DELTA = 500;
+const MAX_CAMERA_DELTA = 1000;
 
 /** Map camera key → UE send function */
 const CAMERA_SENDERS: Record<

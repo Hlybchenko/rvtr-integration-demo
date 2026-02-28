@@ -60,9 +60,9 @@ interface UeControlPanelProps {
  *
  * Slider delta tracking:
  *   `sentValueRef` holds the last baseline successfully sent to UE.
- *   `pendingDeltaRef` accumulates the difference (current slider value − baseline).
- *   On debounce timeout, the accumulated delta is sent as one UE command.
- *   If the command fails, baseline stays — next delta will include the missed offset.
+ *   On debounce fire, delta is computed as (latest store value − baseline).
+ *   Baseline is advanced optimistically before the HTTP send; on failure
+ *   it reverts so the next fire re-includes the missed offset.
  */
 export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -116,7 +116,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
   // ── Debounced slider handler ──────────────────────────────────────────────
   // Per-key timers so concurrent slider movements don't cancel each other.
-  // Accumulated pending deltas ensure rapid slider moves don't lose offset.
   //
   // NOTE: `useUeControlStore.getState()` is used inside setTimeout callbacks
   // and onClick handlers instead of reading from hook state. In debounced
@@ -126,8 +125,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   // Zustand snapshot directly.
 
   const sliderTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  /** Accumulated delta not yet sent to UE, keyed by slider */
-  const pendingDeltaRef = useRef(new Map<string, number>());
   /** Last value that was sent (or initial) — used to track the "sent" baseline */
   const sentValueRef = useRef(new Map<string, number>());
   // Clean up all pending timers on unmount.
@@ -145,7 +142,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const resetSliderState = (camera: CameraPosition) => {
     sliderTimersRef.current.forEach((t) => clearTimeout(t));
     sliderTimersRef.current.clear();
-    pendingDeltaRef.current.clear();
     sentValueRef.current.clear();
     sentValueRef.current.set('zoom', camera.zoom);
     sentValueRef.current.set('cameraVertical', camera.cameraVertical);
@@ -182,13 +178,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
   const handleSlider = useCallback(
     (key: SliderKey, value: number) => {
-      // Read the baseline from sentValue; fallback to current store value
-      const baseline = sentValueRef.current.get(key)
-        ?? useUeControlStore.getState().deviceSettings[deviceId]?.[key]
-        ?? 0;
-      const accumulatedDelta = value - baseline;
-      pendingDeltaRef.current.set(key, accumulatedDelta);
-
       // Update store immediately (optimistic UI)
       updateSettings(deviceId, { [key]: value });
 
@@ -200,24 +189,31 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
         key,
         setTimeout(() => {
           const url = useUeControlStore.getState().ueApiUrl;
-          const delta = pendingDeltaRef.current.get(key) ?? 0;
-          pendingDeltaRef.current.set(key, 0);
-
-          if (!url || delta === 0) return;
+          if (!url) return;
           const cmd = SLIDER_COMMANDS[key];
           if (!cmd) return;
+
+          // Compute delta AT FIRE TIME: baseline is the last confirmed position,
+          // target is the latest store value (may differ from `value` if user
+          // kept dragging after this timer was scheduled).
+          const baseline = sentValueRef.current.get(key) ?? 0;
+          const target = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
+          const delta = target - baseline;
+          if (delta === 0) return;
+
+          // Optimistically advance baseline so concurrent sends don't double-count
+          sentValueRef.current.set(key, target);
 
           void sendUeCommand(url, {
             command: cmd.command,
             [cmd.param]: String(delta),
           }).then((ok) => {
             if (ok) {
-              // Only advance baseline on successful send
-              sentValueRef.current.set(key, value);
-              // Keep committed camera in sync for cross-session persistence
-              useUeControlStore.getState().patchUeCommittedCamera({ [key]: value });
+              useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
+            } else {
+              // Revert baseline — next fire will re-include the missed delta
+              sentValueRef.current.set(key, baseline);
             }
-            // On failure: baseline stays — next delta will include the missed offset
           });
         }, SLIDER_DEBOUNCE_MS),
       );
@@ -252,6 +248,9 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   );
 
   const handleReset = useCallback(() => {
+    // Invalidate any in-flight auto-apply or previous reset/re-sync
+    const gen = ++applyGenRef.current;
+
     // Seed baselines at zero — defaults have all camera values at 0
     resetSliderState(ZERO_CAMERA);
 
@@ -265,6 +264,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     if (url) {
       void (async () => {
         const newCommitted = await resetCameraToZero(url, committed);
+        if (applyGenRef.current !== gen) return;
         useUeControlStore.getState().setUeCommittedCamera(newCommitted);
         await applyDeviceSettings(url, DEFAULT_DEVICE_SETTINGS, newCommitted);
       })();
@@ -465,6 +465,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               type="button"
               className={styles.resetButton}
               onClick={() => {
+                // Invalidate any in-flight auto-apply or previous reset
+                const gen = ++applyGenRef.current;
                 // Assume UE is at zero (fresh start), then re-apply current settings
                 const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
                 resetSliderState(desired);
@@ -472,6 +474,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 const url = useUeControlStore.getState().ueApiUrl;
                 if (url) {
                   void applyDeviceSettings(url, desired, ZERO_CAMERA).then(({ newCommitted }) => {
+                    if (applyGenRef.current !== gen) return;
                     useUeControlStore.getState().setUeCommittedCamera(newCommitted);
                   });
                 }
