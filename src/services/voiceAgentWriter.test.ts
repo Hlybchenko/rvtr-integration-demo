@@ -78,18 +78,20 @@ const {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('getWriterConfig', () => {
-  it('parses full response with pixelStreamingUrl', async () => {
+  it('parses full response with all fields', async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({
         ok: true,
         licenseFilePath: '/path/to/license.lic',
         pixelStreamingUrl: 'https://pixel-streaming.example.com',
+        exePath: '/path/to/start2stream.bat',
       }),
     );
 
     const cfg = await getWriterConfig();
     expect(cfg.licenseFilePath).toBe('/path/to/license.lic');
     expect(cfg.pixelStreamingUrl).toBe('https://pixel-streaming.example.com');
+    expect(cfg.exePath).toBe('/path/to/start2stream.bat');
   });
 
   it('returns empty strings when response has no fields', async () => {
@@ -98,6 +100,7 @@ describe('getWriterConfig', () => {
     const cfg = await getWriterConfig();
     expect(cfg.licenseFilePath).toBe('');
     expect(cfg.pixelStreamingUrl).toBe('');
+    expect(cfg.exePath).toBe('');
   });
 
   it('throws on non-ok response', async () => {

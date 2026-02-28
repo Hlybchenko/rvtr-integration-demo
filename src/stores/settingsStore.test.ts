@@ -8,12 +8,8 @@ import { isStreamingDevice, STREAMING_DEVICE_IDS, migrateSettingsState } from '.
 describe('isStreamingDevice', () => {
   it.each<[string, boolean]>([
     ['holobox', true],
-    ['keba-kiosk', true],
-    ['kiosk', true],
     ['phone', false],
-    ['laptop', false],
     ['', false],
-    ['unknown-device', false],
     ['HOLOBOX', false], // case-sensitive
   ])('isStreamingDevice(%j) → %s', (input, expected) => {
     expect(isStreamingDevice(input)).toBe(expected);

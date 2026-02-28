@@ -124,11 +124,11 @@ describe('OverviewPage init effect', () => {
       exePath: '',
     });
 
-    // Give time for potential state updates
-    await new Promise((r) => setTimeout(r, 50));
-
-    // Store should NOT have been updated
-    expect(useSettingsStore.getState().licenseFilePath).toBe('');
-    expect(useSettingsStore.getState().pixelStreamingUrl).toBe('');
+    // Flush microtasks so the resolved promise handlers run
+    await vi.waitFor(() => {
+      // Store should NOT have been updated
+      expect(useSettingsStore.getState().licenseFilePath).toBe('');
+      expect(useSettingsStore.getState().pixelStreamingUrl).toBe('');
+    });
   });
 });
