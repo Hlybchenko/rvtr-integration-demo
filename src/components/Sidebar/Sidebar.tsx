@@ -34,6 +34,7 @@ const DEVICE_ICONS: Record<string, string> = {
   kiosk: '🖥️',
   holobox: '🔲',
   'keba-kiosk': '🏧',
+  fullscreen: '🖵',
 };
 
 interface SidebarProps {

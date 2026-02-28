@@ -319,6 +319,22 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       return () => iframe.removeEventListener('blur', refocus);
     }, [url, isEmbedBlocked, isGeometryReady, isStreaming]);
 
+    // Fullscreen devices: no frame image, screen slot fills the entire container
+    if (device.fullscreen) {
+      return (
+        <div className={`${styles.container} ${styles.fullscreenContainer}`} ref={containerRef}>
+          <div
+            ref={screenSlotRef}
+            className={styles.fullscreenScreen}
+          >
+            {isStreaming ? (
+              <div className={styles.streamingSlot} />
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className={styles.container} ref={containerRef}>
         <div

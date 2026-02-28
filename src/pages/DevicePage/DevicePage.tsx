@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { devicesMap } from '@/config/devices';
-import { useResolvedUrl, isStreamingDevice } from '@/stores/settingsStore';
+import { useSettingsStore, useResolvedUrl, isStreamingDevice } from '@/stores/settingsStore';
 import { useStreamingStore } from '@/stores/streamingStore';
 import { useUeControlStore, getDeviceSettingsSnapshot, getCommittedCameraSnapshot, type UeDeviceSettings } from '@/stores/ueControlStore';
 import { applyDeviceSettings } from '@/services/ueRemoteApi';
@@ -40,9 +40,12 @@ export function DevicePage() {
     (deviceId && devicesMap.has(deviceId) ? devicesMap.get(deviceId) : undefined);
 
   const isStreaming = isStreamingDevice(displayedDevice?.id ?? '');
+  const isFullscreen = !!displayedDevice?.fullscreen;
 
   // For non-streaming devices (phone, laptop): resolve their own URL
   const resolvedUrl = useResolvedUrl(displayedDevice?.id ?? '');
+  // For fullscreen: embed pixelStreamingUrl directly (no persistent iframe)
+  const pixelStreamingUrl = useSettingsStore((s) => s.pixelStreamingUrl);
 
   // Streaming store: show/hide on enter/leave (connect happens on Settings page)
   const connected = useStreamingStore((s) => s.connected);
@@ -59,15 +62,15 @@ export function DevicePage() {
   const ueApiUrl = useUeControlStore((s) => s.ueApiUrl);
 
   // Show/hide persistent iframe when entering/leaving a streaming device page.
-  // The iframe is already mounted if user clicked Connect on Settings.
+  // Fullscreen bypasses the persistent iframe — it embeds pixelStreamingUrl directly.
   useEffect(() => {
-    if (!isStreaming || !connected) return;
+    if (!isStreaming || isFullscreen || !connected) return;
 
     show();
     return () => {
       hide();
     };
-  }, [isStreaming, connected, show, hide]);
+  }, [isStreaming, isFullscreen, connected, show, hide]);
 
   // Auto-apply saved UE settings when switching to a streaming device.
   // On switch: reset the previous device's camera offsets to zero, then apply the new device's settings.
@@ -169,6 +172,31 @@ export function DevicePage() {
 
   if (!displayedDevice) {
     return <div className={styles.devicePage} />;
+  }
+
+  // Fullscreen: embed pixelStreamingUrl directly, no device frame
+  if (isFullscreen) {
+    return (
+      <div className={styles.devicePage}>
+        <div className={styles.fullscreenStage}>
+          {pixelStreamingUrl ? (
+            <iframe
+              className={styles.fullscreenIframe}
+              src={pixelStreamingUrl}
+              title="Pixel Streaming Fullscreen"
+              allow="autoplay; microphone; fullscreen"
+            />
+          ) : (
+            <div className={styles.notFound}>
+              <span className={styles.notFoundIcon}>🔗</span>
+              <span>Set Pixel Streaming URL in Settings</span>
+              <Link to="/">← Back to Settings</Link>
+            </div>
+          )}
+          <UeControlPanel deviceId={displayedDeviceId} />
+        </div>
+      </div>
+    );
   }
 
   const finalUrl = isStreaming ? '' : resolvedUrl || displayedDevice.defaultUrl || '';

@@ -72,6 +72,15 @@ export const devices: DeviceTemplate[] = [
     autoDetectScreen: true,
     previewScale: 1,
   },
+  {
+    id: 'fullscreen',
+    name: 'Fullscreen',
+    frameSrc: '',
+    frameWidth: 1920,
+    frameHeight: 1080,
+    screenRect: { x: 0, y: 0, w: 1920, h: 1080, r: 0 },
+    fullscreen: true,
+  },
 ];
 
 export const devicesMap = new Map(devices.map((d) => [d.id, d]));

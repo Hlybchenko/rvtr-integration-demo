@@ -8,6 +8,7 @@ import { isStreamingDevice, STREAMING_DEVICE_IDS, migrateSettingsState } from '.
 describe('isStreamingDevice', () => {
   it.each<[string, boolean]>([
     ['holobox', true],
+    ['fullscreen', true],
     ['phone', false],
     ['', false],
     ['HOLOBOX', false], // case-sensitive
@@ -21,11 +22,12 @@ describe('isStreamingDevice', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('STREAMING_DEVICE_IDS', () => {
-  it('contains exactly 3 device IDs', () => {
-    expect(STREAMING_DEVICE_IDS).toHaveLength(3);
+  it('contains exactly 4 device IDs', () => {
+    expect(STREAMING_DEVICE_IDS).toHaveLength(4);
     expect(STREAMING_DEVICE_IDS).toContain('holobox');
     expect(STREAMING_DEVICE_IDS).toContain('keba-kiosk');
     expect(STREAMING_DEVICE_IDS).toContain('kiosk');
+    expect(STREAMING_DEVICE_IDS).toContain('fullscreen');
   });
 });
 
