@@ -99,10 +99,12 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   /** Timer for debounced avatar ID change */
   const avatarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clean up all pending timers on unmount
+  // Clean up all pending timers on unmount.
+  // Copy ref to local var so cleanup captures the same Map instance.
   useEffect(() => {
+    const timers = sliderTimersRef.current;
     return () => {
-      sliderTimersRef.current.forEach((t) => clearTimeout(t));
+      timers.forEach((t) => clearTimeout(t));
       if (avatarTimerRef.current) clearTimeout(avatarTimerRef.current);
     };
   }, []);
