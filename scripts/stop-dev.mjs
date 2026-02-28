@@ -69,13 +69,12 @@ function stopPortListener(port) {
 
 function stopKnownProcesses() {
   if (process.platform === 'win32') {
-    run('wmic', [
-      'process',
-      'where',
-      "CommandLine like '%dev-unsafe.mjs%' or CommandLine like '%agent-option-writer.mjs%'",
-      'call',
-      'terminate',
-    ]);
+    // PowerShell replaces deprecated wmic — works on Windows 10+ and Server 2019+
+    run('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+    ], { shell: false });
     return;
   }
 
@@ -87,13 +86,12 @@ function closeUnsafeChrome() {
   const marker = 'ChromeDevSession-rvtr';
 
   if (process.platform === 'win32') {
-    run('wmic', [
-      'process',
-      'where',
-      `CommandLine like '%${marker}%'`,
-      'call',
-      'terminate',
-    ]);
+    // PowerShell replaces deprecated wmic — works on Windows 10+ and Server 2019+
+    run('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${marker}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+    ], { shell: false });
     return;
   }
 
