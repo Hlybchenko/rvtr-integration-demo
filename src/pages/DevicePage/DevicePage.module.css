@@ -51,22 +51,6 @@
   opacity: 0.4;
 }
 
-/* ── Fullscreen device ── */
-.fullscreenStage {
-  position: relative;
-  flex: 1;
-  display: flex;
-  min-height: 0;
-}
-
-.fullscreenIframe {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: #0a0c14;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .previewStage {
     transition: none;
