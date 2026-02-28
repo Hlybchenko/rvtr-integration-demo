@@ -18,6 +18,8 @@ import {
   lightDown,
   changeLight,
   stopAnswer,
+  resetCameraToZero,
+  applyDeviceSettings,
 } from '@/services/ueRemoteApi';
 import styles from './UeControlPanel.module.css';
 
@@ -109,6 +111,17 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     };
   }, []);
 
+  // Reset slider baseline refs when switching devices.
+  // After a switch, DevicePage sends reset+apply to UE, so UE camera
+  // matches the new device's stored offsets. The slider baseline must
+  // reflect these stored values so subsequent drags compute correct deltas.
+  useEffect(() => {
+    sliderTimersRef.current.forEach((t) => clearTimeout(t));
+    sliderTimersRef.current.clear();
+    pendingDeltaRef.current.clear();
+    sentValueRef.current.clear();
+  }, [deviceId]);
+
   const handleSlider = useCallback(
     (key: SliderKey, value: number) => {
       // Read the baseline from sentValue; fallback to current store value
@@ -196,12 +209,25 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   );
 
   const handleReset = useCallback(() => {
+    // Capture current settings before resetting store — needed for reverse deltas
+    const current = useUeControlStore.getState().deviceSettings[deviceId];
+
     resetSettings(deviceId);
+
     // Clear accumulated slider state so next move starts from defaults
     pendingDeltaRef.current.clear();
     sentValueRef.current.clear();
     sliderTimersRef.current.forEach((t) => clearTimeout(t));
     sliderTimersRef.current.clear();
+
+    // Send reverse camera deltas + default absolute commands to UE
+    const url = useUeControlStore.getState().ueApiUrl;
+    if (url && current) {
+      void (async () => {
+        await resetCameraToZero(url, current);
+        await applyDeviceSettings(url, DEFAULT_DEVICE_SETTINGS);
+      })();
+    }
   }, [deviceId, resetSettings]);
 
   if (!ueApiUrl) return null;

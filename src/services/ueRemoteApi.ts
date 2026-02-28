@@ -125,17 +125,11 @@ export async function resetCameraToZero(
 ): Promise<void> {
   if (!baseUrl) return;
 
-  const ops: Array<Promise<boolean>> = [];
-  if (currentSettings.zoom !== 0)
-    ops.push(setZoom(baseUrl, -currentSettings.zoom));
-  if (currentSettings.cameraVertical !== 0)
-    ops.push(setCameraVertical(baseUrl, -currentSettings.cameraVertical));
-  if (currentSettings.cameraHorizontal !== 0)
-    ops.push(setCameraHorizontal(baseUrl, -currentSettings.cameraHorizontal));
-  if (currentSettings.cameraPitch !== 0)
-    ops.push(setCameraPitch(baseUrl, -currentSettings.cameraPitch));
-
-  await Promise.allSettled(ops);
+  // Sequential — UE processes one command at a time
+  if (currentSettings.zoom !== 0) await setZoom(baseUrl, -currentSettings.zoom);
+  if (currentSettings.cameraVertical !== 0) await setCameraVertical(baseUrl, -currentSettings.cameraVertical);
+  if (currentSettings.cameraHorizontal !== 0) await setCameraHorizontal(baseUrl, -currentSettings.cameraHorizontal);
+  if (currentSettings.cameraPitch !== 0) await setCameraPitch(baseUrl, -currentSettings.cameraPitch);
 }
 
 // ─── Batch apply ─────────────────────────────────────────────────────────────
