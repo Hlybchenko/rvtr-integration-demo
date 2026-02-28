@@ -60,14 +60,11 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        // Don't steal focus from overlay UI elements
+        // Don't steal focus from any meaningful UI element (inputs, buttons,
+        // sidebar links, UE panel controls, etc.). Only refocus the iframe
+        // when focus landed on <body> (i.e. nowhere specific).
         const active = document.activeElement;
-        if (
-          active &&
-          active !== document.body &&
-          active !== iframe &&
-          active.closest('[data-ue-panel]')
-        ) {
+        if (active && active !== document.body && active !== iframe) {
           return;
         }
         try {
@@ -130,10 +127,15 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     setLoading(false);
   }, []);
 
-  // Reset loading state when URL changes
+  // Reset loading state when URL changes; add timeout fallback so loading
+  // doesn't stick forever if the iframe never fires onLoad/onError.
   useEffect(() => {
     setLoading(!!url);
     setIsEmbedBlocked(false);
+
+    if (!url) return;
+    const timer = window.setTimeout(() => setLoading(false), 15_000);
+    return () => window.clearTimeout(timer);
   }, [url]);
 
   const shouldShow = isVisible && !!viewport;
