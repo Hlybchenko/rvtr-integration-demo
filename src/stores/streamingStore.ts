@@ -2,15 +2,17 @@
  * Streaming state store (runtime-only, NOT persisted).
  *
  * Manages the lifecycle of the persistent Pixel Streaming iframe:
- *   connected → iframe mounted in DOM (position:fixed, off-screen until show())
  *   isVisible → iframe positioned over the device screen slot
  *   viewport  → exact geometry (left/top/width/height/borderRadius) from DevicePreview
  *
+ * The iframe auto-mounts whenever `pixelStreamingUrl` is set in settingsStore.
+ * No manual connect/disconnect — the iframe stays alive across route changes.
+ *
  * Flow:
- *   1. User clicks Connect on Settings → connect() → iframe mounts
+ *   1. User enters a PS URL on Settings → iframe mounts automatically
  *   2. User navigates to /kiosk → show() → iframe moves over screen slot
  *   3. User navigates away → hide() → iframe stays mounted but invisible
- *   4. User clicks Disconnect → disconnect() → postMessage to close WebRTC → iframe unmounts
+ *   4. remount() forces iframe teardown+rebuild (used after voice agent change)
  */
 import { create } from 'zustand';
 
@@ -23,36 +25,33 @@ export interface StreamingViewport {
 }
 
 interface StreamingState {
-  /**
-   * True when user explicitly connected to Pixel Streaming (via Connect button).
-   * Toggleable — disconnect unmounts the iframe.
-   */
-  connected: boolean;
   /** True when a streaming device page is currently displayed */
   isVisible: boolean;
   /** Current screen slot geometry in viewport coordinates */
   viewport: StreamingViewport | null;
+  /** Incremented to force iframe remount (key change) */
+  mountGeneration: number;
 
-  /** User clicked Connect — mount the persistent iframe */
-  connect: () => void;
-  /** User clicked Disconnect — unmount the persistent iframe */
-  disconnect: () => void;
   /** Call when entering a streaming device page */
   show: () => void;
   /** Call when leaving a streaming device page */
   hide: () => void;
   /** Update viewport geometry from ResizeObserver / scroll */
   setViewport: (viewport: StreamingViewport) => void;
+  /** Force iframe teardown + rebuild (e.g. after voice agent provider change) */
+  remount: () => void;
 }
 
 export const useStreamingStore = create<StreamingState>()((set) => ({
-  connected: false,
   isVisible: false,
   viewport: null,
+  mountGeneration: 0,
 
-  connect: () => set({ connected: true }),
-  disconnect: () => {
-    // Best-effort: notify PS iframe to gracefully close WebRTC before unmount
+  show: () => set({ isVisible: true }),
+  hide: () => set({ isVisible: false }),
+  setViewport: (viewport) => set({ viewport }),
+  remount: () => {
+    // Best-effort: notify current PS iframe to gracefully close WebRTC
     const iframe = document.querySelector<HTMLIFrameElement>('[data-ps-iframe]');
     if (iframe?.contentWindow) {
       try {
@@ -61,9 +60,6 @@ export const useStreamingStore = create<StreamingState>()((set) => ({
         // cross-origin — iframe will cleanup on unload
       }
     }
-    set({ connected: false, isVisible: false, viewport: null });
+    set((s) => ({ isVisible: false, viewport: null, mountGeneration: s.mountGeneration + 1 }));
   },
-  show: () => set({ isVisible: true }),
-  hide: () => set({ isVisible: false }),
-  setViewport: (viewport) => set({ viewport }),
 }));

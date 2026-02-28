@@ -6,22 +6,22 @@ import styles from './PersistentPixelStreaming.module.css';
 /**
  * Persistent position:fixed iframe for Pixel Streaming.
  *
- * Mounts when user clicks Connect on Settings page.
- * Unmounts on Disconnect or when Agent provider changes.
+ * Auto-mounts when pixelStreamingUrl is configured in settingsStore.
  * Follows the screen-slot viewport geometry from streamingStore.
  * Keeps WebRTC alive by re-focusing on blur.
+ * Uses mountGeneration as React key to force remount after voice agent change.
  */
 export function PersistentPixelStreaming() {
   const pixelStreamingUrl = useSettingsStore((s) => s.pixelStreamingUrl);
-  const connected = useStreamingStore((s) => s.connected);
   const isVisible = useStreamingStore((s) => s.isVisible);
   const viewport = useStreamingStore((s) => s.viewport);
+  const mountGeneration = useStreamingStore((s) => s.mountGeneration);
 
-  // Don't render anything until user clicks Connect
-  if (!connected) return null;
+  if (!pixelStreamingUrl) return null;
 
   return (
     <PersistentIframe
+      key={mountGeneration}
       url={pixelStreamingUrl}
       isVisible={isVisible}
       viewport={viewport}

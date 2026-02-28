@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
 import { usePathConfig, type BrowseResult } from '@/hooks/usePathConfig';
@@ -33,7 +33,7 @@ import styles from './OverviewPage.module.css';
  *
  *   **Right column**
  *   3. Widget — phone & laptop iframe URLs.
- *   4. Pixel Streaming — PS URL, UE Remote API URL, connect/disconnect controls.
+ *   4. Pixel Streaming — PS URL, UE Remote API URL (auto-connects when URL is set).
  *
  * Data flow:
  *   - Persisted settings live in `settingsStore` and `ueControlStore` (Zustand + localStorage).
@@ -133,18 +133,8 @@ export function OverviewPage() {
   const processRunning = useStatusStore((s) => s.processRunning);
   const psReachable = useStatusStore((s) => s.psReachable);
 
-  // -- streaming connection --
-  const psConnected = useStreamingStore((s) => s.connected);
-  const psConnect = useStreamingStore((s) => s.connect);
-  const psDisconnect = useStreamingStore((s) => s.disconnect);
-
-  // Timer for auto-reconnect PS after agent change — cleaned up on unmount
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    };
-  }, []);
+  // -- streaming remount (used after voice agent change to rebuild iframe) --
+  const psRemount = useStreamingStore((s) => s.remount);
 
   const valuesByDevice: Record<'phone' | 'laptop', string> = {
     phone: phoneUrl,
@@ -339,13 +329,8 @@ export function OverviewPage() {
           }
         }
 
-        // Auto-reconnect Pixel Streaming when agent provider changes
-        if (psConnected) {
-          // Cancel any pending reconnect from a previous Apply click
-          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-          psDisconnect();
-          reconnectTimerRef.current = setTimeout(() => psConnect(), 300);
-        }
+        // Force PS iframe remount so it picks up the new agent provider
+        psRemount();
       } else {
         setApplyError('Agent config saved, but file verification failed. Try applying again.');
       }
@@ -354,7 +339,7 @@ export function OverviewPage() {
     } finally {
       setIsApplying(false);
     }
-  }, [pendingVoiceAgent, isFileConfigured, isExeConfigured, setVoiceAgent, psConnected, psConnect, psDisconnect]);
+  }, [pendingVoiceAgent, isFileConfigured, isExeConfigured, setVoiceAgent, psRemount]);
 
   // Browse handlers are now provided by usePathConfig (filePath.onBrowse, exePath.onBrowse).
 
@@ -750,20 +735,11 @@ export function OverviewPage() {
               </p>
             </div>
 
-            {/* Connect / Disconnect — at bottom of block */}
-            <div className={styles.connectRow}>
-              <button
-                type="button"
-                className={`${styles.connectButton} ${psConnected ? styles.connectButtonDisconnect : ''}`}
-                onClick={() => (psConnected ? psDisconnect() : psConnect())}
-                disabled={!psAllGood}
-              >
-                {psConnected ? 'Disconnect' : 'Connect'}
-              </button>
-              {psConnected && (
-                <span className={`${styles.badge} ${styles.badgeRunning}`}>● Session active</span>
-              )}
-            </div>
+            {psAllGood && (
+              <p className={styles.hint}>
+                Stream auto-connects when you open a streaming device page.
+              </p>
+            )}
           </section>
         </div>
       </div>

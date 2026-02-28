@@ -38,8 +38,7 @@ export function DevicePage() {
   // For non-streaming devices (phone, laptop): resolve their own URL
   const resolvedUrl = useResolvedUrl(displayedDevice?.id ?? '');
 
-  // Streaming store: show/hide on enter/leave (connect happens on Settings page)
-  const connected = useStreamingStore((s) => s.connected);
+  // Streaming store: show/hide on enter/leave
   const show = useStreamingStore((s) => s.show);
   const hide = useStreamingStore((s) => s.hide);
 
@@ -51,12 +50,11 @@ export function DevicePage() {
   }, []);
 
   // Show/hide persistent iframe when entering/leaving a streaming device page.
-  // The iframe is already mounted if user clicked Connect on Settings.
   // Hide during crossfade transitions to avoid expensive browser recomposites
   // when the viewport geometry changes (position/size/borderRadius) — this
   // prevents WebRTC video freezes during rapid device navigation.
   useEffect(() => {
-    if (!isStreaming || !connected) return;
+    if (!isStreaming) return;
 
     if (transitionPhase === 'exiting') {
       hide();
@@ -67,7 +65,7 @@ export function DevicePage() {
     return () => {
       hide();
     };
-  }, [isStreaming, connected, transitionPhase, show, hide]);
+  }, [isStreaming, transitionPhase, show, hide]);
 
   // ── Crossfade transition on device switch ─────────────────────────────────
   // Sequence: idle → exiting (220ms fade-out) → entering (swap ID, 1500ms fade-in) → idle.
