@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { devicesMap } from '@/config/devices';
-import { useResolvedUrl, useSettingsStore, isStreamDevice } from '@/stores/settingsStore';
-import { startDeviceProcess, stopProcess } from '@/services/voiceAgentWriter';
+import { useResolvedUrl, isStreamingDevice } from '@/stores/settingsStore';
+import { useStreamingStore } from '@/stores/streamingStore';
+import { useUeControlStore, getDeviceSettingsSnapshot } from '@/stores/ueControlStore';
+import { applyDeviceSettings } from '@/services/ueRemoteApi';
 import { DevicePreview } from '@/components/DevicePreview/DevicePreview';
+import { UeControlPanel } from '@/components/UeControlPanel/UeControlPanel';
 import styles from './DevicePage.module.css';
 
 const EXIT_TRANSITION_MS = 220;
@@ -23,7 +26,15 @@ export function DevicePage() {
     devicesMap.get(displayedDeviceId) ??
     (deviceId && devicesMap.has(deviceId) ? devicesMap.get(deviceId) : undefined);
 
+  const isStreaming = isStreamingDevice(displayedDevice?.id ?? '');
+
+  // For non-streaming devices (phone, laptop): resolve their own URL
   const resolvedUrl = useResolvedUrl(displayedDevice?.id ?? '');
+
+  // Streaming store: mount on first streaming visit, show/hide on enter/leave
+  const mount = useStreamingStore((s) => s.mount);
+  const show = useStreamingStore((s) => s.show);
+  const hide = useStreamingStore((s) => s.hide);
 
   useEffect(() => {
     return () => {
@@ -32,46 +43,33 @@ export function DevicePage() {
     };
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Process lifecycle: start on mount, stop on unmount (fire-and-forget).
-  //
-  // Only stream devices (holobox, keba-kiosk, kiosk) need a native process.
-  // Non-stream devices (phone, laptop) skip this entirely.
-  //
-  // Both start and stop are serialized via the async queue in
-  // voiceAgentWriter, so concurrent calls never overlap. The backend's
-  // /process/start also kills any existing process before spawning,
-  // so even orphaned processes are handled.
-  //
-  // IMPORTANT: The iframe URL is passed through immediately (no gate).
-  // Pixel Streaming's PS client handles connection retries internally.
-  // Withholding the URL until process start completes was found to cause
-  // timing issues with WebRTC establishment.
-  //
-  // Granular selector: subscribe to THIS device's exePath only.
-  // Using the whole `deviceExePaths` object would re-trigger this effect
-  // whenever ANY device's path changes.
-  // ---------------------------------------------------------------------------
-  const streamDeviceId = deviceId && isStreamDevice(deviceId) ? deviceId : null;
-  const exePath = useSettingsStore((s) =>
-    streamDeviceId ? s.deviceExePaths[streamDeviceId] : '',
-  );
+  const ueApiUrl = useUeControlStore((s) => s.ueApiUrl);
+
+  // Mount persistent iframe on first streaming page visit, show/hide on enter/leave
+  useEffect(() => {
+    if (!isStreaming) return;
+
+    mount();
+    show();
+
+    return () => {
+      hide();
+    };
+  }, [isStreaming, mount, show, hide]);
+
+  // Auto-apply saved UE settings when switching to a streaming device.
+  // Uses a ref for ueApiUrl so the effect only fires on displayedDeviceId change,
+  // not when the user edits the URL on the settings page.
+  const ueApiUrlRef = useRef(ueApiUrl);
+  ueApiUrlRef.current = ueApiUrl;
 
   useEffect(() => {
-    if (!streamDeviceId || !exePath) return;
+    const url = ueApiUrlRef.current;
+    if (!isStreaming || !url || !displayedDeviceId) return;
 
-    // Start the process for this device (fire-and-forget)
-    void startDeviceProcess(streamDeviceId, exePath).catch((err) => {
-      console.error(`[DevicePage] Failed to start process for ${streamDeviceId}:`, err);
-    });
-
-    // Stop when leaving this device page (fire-and-forget)
-    return () => {
-      void stopProcess().catch((err) => {
-        console.error('[DevicePage] Failed to stop process:', err);
-      });
-    };
-  }, [streamDeviceId, exePath]);
+    const saved = getDeviceSettingsSnapshot(displayedDeviceId);
+    void applyDeviceSettings(url, saved);
+  }, [isStreaming, displayedDeviceId]);
 
   useEffect(() => {
     if (!deviceId || !targetDevice || displayedDeviceId === deviceId) return;
@@ -115,7 +113,7 @@ export function DevicePage() {
     return <div className={styles.devicePage} />;
   }
 
-  const finalUrl = resolvedUrl || displayedDevice.defaultUrl || '';
+  const finalUrl = isStreaming ? '' : resolvedUrl || displayedDevice.defaultUrl || '';
   const transitionClass =
     transitionPhase === 'exiting'
       ? styles.previewExit
@@ -130,7 +128,9 @@ export function DevicePage() {
           device={displayedDevice}
           url={finalUrl}
           transitionPhase={transitionPhase}
+          isStreaming={isStreaming}
         />
+        {isStreaming && <UeControlPanel deviceId={displayedDeviceId} />}
       </div>
     </div>
   );

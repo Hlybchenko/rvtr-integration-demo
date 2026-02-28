@@ -182,6 +182,16 @@
   color: var(--danger);
 }
 
+.badgeRunning {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.badgeStopped {
+  background: var(--danger-soft);
+  color: var(--text-secondary);
+}
+
 /* Input */
 .input {
   width: 100%;

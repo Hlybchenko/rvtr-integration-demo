@@ -110,6 +110,12 @@
   }
 }
 
+/* Empty slot for streaming devices — persistent iframe sits on top */
+.streamingSlot {
+  width: 100%;
+  height: 100%;
+}
+
 .emptyScreen {
   position: absolute;
   inset: 0;

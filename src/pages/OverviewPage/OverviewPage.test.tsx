@@ -10,13 +10,14 @@ import { useSettingsStore } from '@/stores/settingsStore';
 vi.mock('@/services/voiceAgentWriter', () => ({
   getWriterConfig: vi.fn(),
   setWriterFilePath: vi.fn(),
-  setDeviceExePath: vi.fn(),
-  getProcessStatus: vi.fn(),
-  readVoiceAgentFromFile: vi.fn(),
-  forceRewriteVoiceAgentFile: vi.fn(),
+  setGlobalExePath: vi.fn(),
   browseForFile: vi.fn(),
   browseForExe: vi.fn(),
-  restartStart2stream: vi.fn(),
+  readVoiceAgentFromFile: vi.fn(),
+  forceRewriteVoiceAgentFile: vi.fn(),
+  restartProcess: vi.fn(),
+  getProcessStatus: vi.fn().mockResolvedValue({ running: false, pid: null }),
+  checkPixelStreamingStatus: vi.fn().mockResolvedValue({ reachable: false }),
 }));
 
 // Mock device config to avoid complex imports
@@ -29,11 +30,10 @@ vi.mock('@/hooks/useDetectScreenRect', () => ({
   warmDetectScreenRect: vi.fn(),
 }));
 
-const { getWriterConfig, getProcessStatus, readVoiceAgentFromFile } =
+const { getWriterConfig, readVoiceAgentFromFile } =
   await import('@/services/voiceAgentWriter');
 
 const mockedGetConfig = vi.mocked(getWriterConfig);
-const mockedGetStatus = vi.mocked(getProcessStatus);
 const mockedReadVoiceAgent = vi.mocked(readVoiceAgentFromFile);
 
 const { OverviewPage } = await import('./OverviewPage');
@@ -50,12 +50,10 @@ beforeEach(() => {
   useSettingsStore.setState({
     phoneUrl: '',
     laptopUrl: '',
-    kioskUrl: '',
-    holoboxUrl: '',
-    kebaKioskUrl: '',
+    pixelStreamingUrl: '',
     voiceAgent: 'elevenlabs',
     licenseFilePath: '',
-    deviceExePaths: { holobox: '', 'keba-kiosk': '', kiosk: '' },
+    exePath: '',
   });
 });
 
@@ -73,12 +71,8 @@ describe('OverviewPage init effect', () => {
   it('syncs license path from backend config', async () => {
     mockedGetConfig.mockResolvedValueOnce({
       licenseFilePath: '/from/backend.lic',
-      deviceExePaths: { holobox: '', 'keba-kiosk': '', kiosk: '' },
-    });
-    mockedGetStatus.mockResolvedValueOnce({
-      running: false,
-      pid: null,
-      deviceId: null,
+      pixelStreamingUrl: 'https://streaming.example.com',
+      exePath: '',
     });
 
     render(<OverviewPage />);
@@ -89,27 +83,18 @@ describe('OverviewPage init effect', () => {
     });
   });
 
-  it('syncs device exe paths from backend', async () => {
+  it('syncs pixelStreamingUrl from backend config', async () => {
     mockedGetConfig.mockResolvedValueOnce({
-      licenseFilePath: '',
-      deviceExePaths: {
-        holobox: '/backend/holobox.bat',
-        'keba-kiosk': '/backend/keba.bat',
-        kiosk: '/backend/kiosk.bat',
-      },
-    });
-    mockedGetStatus.mockResolvedValueOnce({
-      running: true,
-      pid: 999,
-      deviceId: 'holobox',
+      licenseFilePath: '/from/backend.lic',
+      pixelStreamingUrl: 'https://pixel-stream.example.com',
+      exePath: '',
     });
 
     render(<OverviewPage />);
 
     await vi.waitFor(() => {
       const store = useSettingsStore.getState();
-      expect(store.deviceExePaths.holobox).toBe('/backend/holobox.bat');
-      expect(store.deviceExePaths['keba-kiosk']).toBe('/backend/keba.bat');
+      expect(store.pixelStreamingUrl).toBe('https://pixel-stream.example.com');
     });
   });
 
@@ -117,7 +102,8 @@ describe('OverviewPage init effect', () => {
     // Make getWriterConfig resolve slowly
     let resolveConfig!: (value: {
       licenseFilePath: string;
-      deviceExePaths: Record<string, string>;
+      pixelStreamingUrl: string;
+      exePath: string;
     }) => void;
     mockedGetConfig.mockImplementationOnce(
       () =>
@@ -134,7 +120,8 @@ describe('OverviewPage init effect', () => {
     // Now resolve — should NOT cause errors
     resolveConfig({
       licenseFilePath: '/should/not/apply',
-      deviceExePaths: { holobox: '', 'keba-kiosk': '', kiosk: '' },
+      pixelStreamingUrl: 'https://should-not-apply.com',
+      exePath: '',
     });
 
     // Give time for potential state updates
@@ -142,5 +129,6 @@ describe('OverviewPage init effect', () => {
 
     // Store should NOT have been updated
     expect(useSettingsStore.getState().licenseFilePath).toBe('');
+    expect(useSettingsStore.getState().pixelStreamingUrl).toBe('');
   });
 });

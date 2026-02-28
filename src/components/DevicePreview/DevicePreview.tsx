@@ -11,13 +11,17 @@ import {
 import { preloadDeviceFrameImages } from '@/config/devices';
 import type { DeviceTemplate } from '@/models/device';
 import { useDetectScreenRect } from '@/hooks/useDetectScreenRect';
+import { useStreamingStore } from '@/stores/streamingStore';
 import styles from './DevicePreview.module.css';
 
 interface DevicePreviewProps {
   device: DeviceTemplate;
+  /** URL for non-streaming devices (phone, laptop). Ignored when isStreaming=true. */
   url: string;
   sandbox?: string;
   transitionPhase?: 'idle' | 'exiting' | 'entering';
+  /** When true, renders empty screen slot and reports viewport to streamingStore */
+  isStreaming?: boolean;
 }
 
 const DEFAULT_SANDBOX =
@@ -29,12 +33,19 @@ const IFRAME_REVEAL_DELAY_MS = 1000;
 /**
  * Renders a device frame image with an iframe "screen" overlay.
  * Scales responsively using object-fit: contain logic via ResizeObserver.
+ *
+ * When isStreaming=true, the screen slot is empty (no iframe) and its
+ * viewport geometry is reported to streamingStore for the persistent iframe.
  */
 export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
-  function DevicePreview({ device, url, sandbox, transitionPhase = 'idle' }, ref) {
+  function DevicePreview(
+    { device, url, sandbox, transitionPhase = 'idle', isStreaming = false },
+    ref,
+  ) {
     const containerRef = useRef<HTMLDivElement>(null);
     const frameRef = useRef<HTMLImageElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const screenSlotRef = useRef<HTMLDivElement>(null);
     const iframeRevealTimerRef = useRef<number | null>(null);
     const [loading, setLoading] = useState(!!url);
     const [isEmbedBlocked, setIsEmbedBlocked] = useState(false);
@@ -45,6 +56,8 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       width: device.frameWidth,
       height: device.frameHeight,
     });
+
+    const setViewport = useStreamingStore((s) => s.setViewport);
 
     useEffect(() => {
       preloadDeviceFrameImages([device]);
@@ -80,7 +93,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       setFrameLoaded(false);
     }, [device.frameWidth, device.frameHeight, device.frameSrc]);
 
-    // Expose iframe ref to parent
+    // Expose iframe ref to parent (only relevant for non-streaming)
     useImperativeHandle(ref, () => iframeRef.current!, []);
 
     // Compute the scale factor so the device fits in the container (contain)
@@ -88,7 +101,6 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       const el = containerRef.current;
       if (!el) return;
 
-      // Use content box (subtract padding) so the wrapper never overflows
       const cs = getComputedStyle(el);
       const containerW =
         el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -115,15 +127,47 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       return () => ro.disconnect();
     }, [computeSize]);
 
-    // Reset loading / blocked state when url or device changes.
-    // The browser automatically closes the old page context (WebSocket,
-    // WebRTC, etc.) when React updates the iframe `src` prop, so there's
-    // no need to imperatively blank it — doing so desynchronises React's
-    // virtual DOM from the real DOM and can kill Pixel Streaming sessions.
+    // Report screen slot viewport geometry to streamingStore
     useEffect(() => {
+      if (!isStreaming) return;
+
+      const el = screenSlotRef.current;
+      if (!el) return;
+
+      const updateViewport = () => {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        const computedStyle = getComputedStyle(el);
+        setViewport({
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          borderRadius: computedStyle.borderRadius,
+        });
+      };
+
+      updateViewport();
+
+      const ro = new ResizeObserver(updateViewport);
+      ro.observe(el);
+
+      // Also update on scroll (in case parent scrolls)
+      window.addEventListener('scroll', updateViewport, { passive: true });
+
+      return () => {
+        ro.disconnect();
+        window.removeEventListener('scroll', updateViewport);
+      };
+    }, [isStreaming, setViewport, size]);
+
+    // Reset loading / blocked state when url or device changes (non-streaming only)
+    useEffect(() => {
+      if (isStreaming) return;
       setLoading(!!url);
       setIsEmbedBlocked(false);
-    }, [url, device.id, device.frameSrc]);
+    }, [url, device.id, device.frameSrc, isStreaming]);
 
     const handleIframeLoad = useCallback(() => {
       const iframe = iframeRef.current;
@@ -155,7 +199,6 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       setIsEmbedBlocked(blocked);
       setLoading(false);
 
-      // Auto-focus the iframe so keyboard events reach its content immediately
       if (!blocked) {
         requestAnimationFrame(() => {
           try {
@@ -172,12 +215,6 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       setLoading(false);
     }, []);
 
-    /**
-     * Ensure the iframe content-window receives keyboard focus.
-     * Use mousedown (fires before the browser's own focus logic) so the
-     * iframe gets focus even when a higher-z-index transparent layer sits
-     * on top of it.
-     */
     const handleScreenMouseDown = useCallback(() => {
       requestAnimationFrame(() => {
         try {
@@ -189,7 +226,6 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     }, []);
 
     // Auto-detect the screen cutout (inner transparent hole) in the PNG.
-    // Falls back to the manually configured screenRect.
     const detectedRect = useDetectScreenRect(device.frameSrc, !!device.autoDetectScreen);
 
     const sourceWidth = naturalSize.width || device.frameWidth;
@@ -234,14 +270,12 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
 
     const previewScale = device.previewScale ?? 1;
     const isGeometryReady = frameLoaded && !!rect && size.width > 0 && size.height > 0;
-    const shouldRenderIframe = Boolean(url) && isGeometryReady;
-    const showGlobalLoader = !isGeometryReady || (Boolean(url) && loading);
+    const shouldRenderIframe = !isStreaming && Boolean(url) && isGeometryReady;
+    const showGlobalLoader = !isStreaming && (!isGeometryReady || (Boolean(url) && loading));
 
-    // Keep focus on the iframe — re-focus whenever it loses it.
-    // Pixel Streaming relies on the iframe holding focus for WebRTC
-    // heartbeat / ICE keepalive. Without this, a blur (DevTools, parent
-    // click, etc.) can starve the PS client and freeze the stream.
+    // Keep focus on the iframe — re-focus whenever it loses it (non-streaming only).
     useEffect(() => {
+      if (isStreaming) return;
       const iframe = iframeRef.current;
       if (!iframe || !url || isEmbedBlocked) return;
 
@@ -257,7 +291,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
 
       iframe.addEventListener('blur', refocus);
       return () => iframe.removeEventListener('blur', refocus);
-    }, [url, isEmbedBlocked, isGeometryReady]);
+    }, [url, isEmbedBlocked, isGeometryReady, isStreaming]);
 
     return (
       <div className={styles.container} ref={containerRef}>
@@ -291,11 +325,15 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
 
           {screenStyle ? (
             <div
+              ref={screenSlotRef}
               className={styles.screen}
               style={screenStyle}
-              onMouseDown={handleScreenMouseDown}
+              onMouseDown={isStreaming ? undefined : handleScreenMouseDown}
             >
-              {shouldRenderIframe ? (
+              {isStreaming ? (
+                // Empty screen slot — persistent iframe is positioned over this via streamingStore
+                <div className={styles.streamingSlot} />
+              ) : shouldRenderIframe ? (
                 <>
                   <iframe
                     ref={iframeRef}
@@ -319,7 +357,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                     </div>
                   ) : null}
                 </>
-              ) : !url && isGeometryReady ? (
+              ) : !url && !isStreaming && isGeometryReady ? (
                 <div className={styles.emptyScreen}>
                   <span className={styles.emptyIcon}>🔗</span>
                   <span>Set a device URL in Settings to see the preview</span>
@@ -329,14 +367,14 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
           ) : null}
         </div>
 
-        <div
-          className={`${styles.deviceBootOverlay} ${!showGlobalLoader ? styles.deviceBootHidden : ''}`}
-        >
-          <div className={styles.loaderMinimal}>
-            <div className={styles.spinner} />
-            <div className={styles.loaderText}>Preparing preview…</div>
+        {showGlobalLoader ? (
+          <div className={styles.deviceBootOverlay}>
+            <div className={styles.loaderMinimal}>
+              <div className={styles.spinner} />
+              <div className={styles.loaderText}>Preparing preview…</div>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     );
   },

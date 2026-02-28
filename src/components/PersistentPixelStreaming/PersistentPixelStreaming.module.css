@@ -1,0 +1,20 @@
+.persistentIframe {
+  /* Positioned via inline style from streamingStore viewport */
+  will-change: left, top, width, height, opacity;
+}
+
+.persistentIframe:focus {
+  outline: none;
+}
+
+.embedError {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 45%, transparent);
+  font-size: var(--font-sm);
+  text-align: center;
+  padding: 16px;
+  pointer-events: none;
+}

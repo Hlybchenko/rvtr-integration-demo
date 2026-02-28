@@ -71,11 +71,6 @@ beforeEach(() => {
 const {
   getWriterConfig,
   setWriterFilePath,
-  setDeviceExePath,
-  startDeviceProcess,
-  stopProcess,
-  getProcessStatus,
-  restartStart2stream,
 } = await import('./voiceAgentWriter');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -83,65 +78,26 @@ const {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('getWriterConfig', () => {
-  it('parses full response with deviceExePaths', async () => {
+  it('parses full response with pixelStreamingUrl', async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({
         ok: true,
         licenseFilePath: '/path/to/license.lic',
-        deviceExePaths: {
-          holobox: '/path/holobox.bat',
-          'keba-kiosk': '/path/keba.bat',
-          kiosk: '/path/kiosk.bat',
-        },
+        pixelStreamingUrl: 'https://pixel-streaming.example.com',
       }),
     );
 
     const cfg = await getWriterConfig();
     expect(cfg.licenseFilePath).toBe('/path/to/license.lic');
-    expect(cfg.deviceExePaths.holobox).toBe('/path/holobox.bat');
-    expect(cfg.deviceExePaths['keba-kiosk']).toBe('/path/keba.bat');
-    expect(cfg.deviceExePaths.kiosk).toBe('/path/kiosk.bat');
+    expect(cfg.pixelStreamingUrl).toBe('https://pixel-streaming.example.com');
   });
 
-  it('falls back to legacy start2streamPath when deviceExePaths is missing', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        ok: true,
-        licenseFilePath: '/path/to/license.lic',
-        start2streamPath: '/legacy/path.exe',
-      }),
-    );
-
-    const cfg = await getWriterConfig();
-    expect(cfg.deviceExePaths.holobox).toBe('/legacy/path.exe');
-    expect(cfg.deviceExePaths['keba-kiosk']).toBe('/legacy/path.exe');
-    expect(cfg.deviceExePaths.kiosk).toBe('/legacy/path.exe');
-  });
-
-  it('returns empty strings when response has no paths', async () => {
+  it('returns empty strings when response has no fields', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
 
     const cfg = await getWriterConfig();
     expect(cfg.licenseFilePath).toBe('');
-    expect(cfg.deviceExePaths.holobox).toBe('');
-    expect(cfg.deviceExePaths['keba-kiosk']).toBe('');
-    expect(cfg.deviceExePaths.kiosk).toBe('');
-  });
-
-  it('handles partial deviceExePaths (some devices missing)', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        ok: true,
-        deviceExePaths: { holobox: '/path/holobox.bat' },
-        start2streamPath: '/legacy.exe',
-      }),
-    );
-
-    const cfg = await getWriterConfig();
-    expect(cfg.deviceExePaths.holobox).toBe('/path/holobox.bat');
-    // Missing devices fall back to legacy path
-    expect(cfg.deviceExePaths['keba-kiosk']).toBe('/legacy.exe');
-    expect(cfg.deviceExePaths.kiosk).toBe('/legacy.exe');
+    expect(cfg.pixelStreamingUrl).toBe('');
   });
 
   it('throws on non-ok response', async () => {
@@ -209,138 +165,6 @@ describe('setWriterFilePath', () => {
   });
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// setDeviceExePath
-// ═══════════════════════════════════════════════════════════════════════════
-
-describe('setDeviceExePath', () => {
-  it('sends deviceId and exePath in body', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ ok: true, exePath: '/resolved/holobox.bat' }),
-    );
-
-    const result = await setDeviceExePath('holobox', '/my/holobox.bat');
-    expect(result.ok).toBe(true);
-    expect(result.resolvedPath).toBe('/resolved/holobox.bat');
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      `${WRITER_BASE_URL}/config/device-exe`,
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ deviceId: 'holobox', exePath: '/my/holobox.bat' }),
-      }),
-    );
-  });
-
-  it('returns error on validation failure', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ error: 'File not found' }, { status: 400 }),
-    );
-
-    const result = await setDeviceExePath('kiosk', '/nonexistent.bat');
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe('File not found');
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// startDeviceProcess / stopProcess / getProcessStatus
-// ═══════════════════════════════════════════════════════════════════════════
-
-describe('startDeviceProcess', () => {
-  it('sends correct payload and returns pid', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ ok: true, deviceId: 'holobox', pid: 12345 }),
-    );
-
-    const result = await startDeviceProcess('holobox', '/path/holobox.bat');
-    expect(result.ok).toBe(true);
-    expect(result.deviceId).toBe('holobox');
-    expect(result.pid).toBe(12345);
-  });
-
-  it('returns error on spawn failure', async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ error: 'ENOENT' }, { status: 500 }));
-
-    const result = await startDeviceProcess('kiosk', '/bad.bat');
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe('ENOENT');
-  });
-});
-
-describe('stopProcess', () => {
-  it('returns stoppedDeviceId on success', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ ok: true, stoppedDeviceId: 'holobox' }),
-    );
-
-    const result = await stopProcess();
-    expect(result.ok).toBe(true);
-    expect(result.stoppedDeviceId).toBe('holobox');
-  });
-
-  it('handles no active process', async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ ok: true, stoppedDeviceId: null }));
-
-    const result = await stopProcess();
-    expect(result.ok).toBe(true);
-    expect(result.stoppedDeviceId).toBeUndefined();
-  });
-});
-
-describe('getProcessStatus', () => {
-  it('returns running status with deviceId', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ ok: true, running: true, pid: 1234, deviceId: 'keba-kiosk' }),
-    );
-
-    const status = await getProcessStatus();
-    expect(status.running).toBe(true);
-    expect(status.pid).toBe(1234);
-    expect(status.deviceId).toBe('keba-kiosk');
-  });
-
-  it('returns not running', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ ok: true, running: false, pid: null, deviceId: null }),
-    );
-
-    const status = await getProcessStatus();
-    expect(status.running).toBe(false);
-    expect(status.pid).toBeNull();
-    expect(status.deviceId).toBeNull();
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// restartStart2stream
-// ═══════════════════════════════════════════════════════════════════════════
-
-describe('restartStart2stream', () => {
-  it('returns ok with deviceId on success', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ ok: true, pid: 999, deviceId: 'kiosk' }),
-    );
-
-    const result = await restartStart2stream();
-    expect(result.ok).toBe(true);
-    expect(result.pid).toBe(999);
-    expect(result.deviceId).toBe('kiosk');
-  });
-
-  it('returns error when no exe path available', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse(
-        { error: 'No executable path available for restart' },
-        { status: 400 },
-      ),
-    );
-
-    const result = await restartStart2stream();
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe('No executable path available for restart');
-  });
-});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // fetchWithTimeout (tested indirectly via AbortError)

@@ -3,19 +3,18 @@
  *
  * Responsibilities:
  *  - License file path CRUD (GET/POST /config, /config/browse, /config/validate)
- *  - Per-device start2stream executable paths (POST /config/device-exe, /config/browse-exe)
+ *  - Global executable path (POST /config/exe, /config/browse-exe)
  *  - Voice agent read/write to the license file (GET/POST /voice-agent)
  *  - Process lifecycle: start, stop, restart, status (POST/GET /process/*)
  *
  * All requests use fetchWithTimeout (5s default) to avoid hanging when backend is down.
  * Browse endpoints use 120s timeout because they block on native OS file picker.
- * Process start/restart use 15s timeout because spawn may take time.
  *
  * Error handling: every endpoint returns a typed result object with ok/error fields
  * instead of throwing, so callers can show user-friendly messages without try/catch.
  * Internal helpers (ensureOk, parseJsonSafely) handle malformed responses gracefully.
  */
-import type { VoiceAgent, StreamDeviceId } from '@/stores/settingsStore';
+import type { VoiceAgent } from '@/stores/settingsStore';
 
 /** Backend runs on localhost — not configurable, hardcoded by agent-option-writer */
 const WRITER_BASE_URL = 'http://127.0.0.1:3210';
@@ -27,7 +26,6 @@ const VALID_AGENTS: VoiceAgent[] = ['elevenlabs', 'gemini-live'];
  * Fetch wrapper with AbortController timeout.
  * Aborts the request if it exceeds timeoutMs — prevents UI from hanging
  * when the backend process is down or unreachable.
- * The timer is always cleaned up via .finally() to prevent leaks.
  */
 function fetchWithTimeout(
   url: string,
@@ -75,19 +73,17 @@ async function ensureOk(response: Response, fallbackMessage: string): Promise<un
 }
 
 // ---------------------------------------------------------------------------
-// Config — license file path + per-device exe paths
-// Called by OverviewPage on mount to sync frontend state with backend.
+// Config — license file path + pixel streaming URL
 // ---------------------------------------------------------------------------
 
 export interface WriterConfig {
   licenseFilePath: string;
-  deviceExePaths: Record<StreamDeviceId, string>;
+  pixelStreamingUrl: string;
+  exePath: string;
 }
 
 /**
  * GET /config — read current backend configuration.
- * Handles legacy `start2streamPath` (single path for all devices, pre-v8)
- * by falling back to it when per-device `deviceExePaths` are missing.
  */
 export async function getWriterConfig(): Promise<WriterConfig> {
   const response = await fetchWithTimeout(`${WRITER_BASE_URL}/config`);
@@ -95,27 +91,23 @@ export async function getWriterConfig(): Promise<WriterConfig> {
   const record = payload && typeof payload === 'object' ? payload : null;
 
   const r = record as Record<string, unknown> | null;
-  const rawPaths = r?.deviceExePaths as Record<string, string> | undefined;
-  // Legacy fallback: if backend still has old single start2streamPath
-  const legacyPath =
-    r && typeof r.start2streamPath === 'string' ? r.start2streamPath : '';
 
-  const deviceExePaths: Record<StreamDeviceId, string> = {
-    holobox: rawPaths?.holobox ?? legacyPath,
-    'keba-kiosk': rawPaths?.['keba-kiosk'] ?? legacyPath,
-    kiosk: rawPaths?.kiosk ?? legacyPath,
-  };
+  // Resolve exe path: new field or legacy single/per-device paths
+  const rawExePath =
+    (r && typeof r.exePath === 'string' ? r.exePath : '') ||
+    (r && typeof r.start2streamPath === 'string' ? r.start2streamPath : '');
 
   return {
     licenseFilePath: r && typeof r.licenseFilePath === 'string' ? r.licenseFilePath : '',
-    deviceExePaths,
+    pixelStreamingUrl:
+      r && typeof r.pixelStreamingUrl === 'string' ? r.pixelStreamingUrl : '',
+    exePath: rawExePath,
   };
 }
 
 /**
  * POST /config — set license file path on the backend.
  * Backend validates the file exists and is readable.
- * Returns resolvedPath (absolute path after symlink resolution).
  */
 export async function setWriterFilePath(
   licenseFilePath: string,
@@ -163,7 +155,7 @@ export async function browseForFile(): Promise<BrowseFileResult> {
   const response = await fetchWithTimeout(
     `${WRITER_BASE_URL}/config/browse`,
     {},
-    120_000, // 2min — user may take time picking a file
+    120_000,
   );
 
   const payload = await parseJsonSafely(response);
@@ -228,21 +220,11 @@ export async function validateFilePath(
 
 // ---------------------------------------------------------------------------
 // Voice agent read / write
-//
-// The voice agent setting lives inside the license file on disk (not just in
-// the Zustand store). This means changing it requires a file write via the
-// backend. The read/write cycle is:
-//   1. readVoiceAgentFromFile()  — GET /voice-agent  (what's on disk?)
-//   2. writeVoiceAgentToFile()   — POST /voice-agent (overwrite disk value)
-//   3. ensureVoiceAgentFileSync() — compare store vs file, write if different
-//   4. forceRewriteVoiceAgentFile() — always write, used by "Apply" button
 // ---------------------------------------------------------------------------
 
 export interface VoiceAgentFileState {
   voiceAgent: VoiceAgent | null;
-  /** Absolute path to the file where the agent value was read from */
   filePath?: string;
-  /** Whether a valid license file is configured on the backend */
   configured: boolean;
   error?: string;
 }
@@ -279,18 +261,12 @@ export async function writeVoiceAgentToFile(voiceAgent: VoiceAgent): Promise<voi
 
 export interface VoiceAgentSyncResult {
   matched: boolean;
-  /** Whether a write to the license file actually happened (agent was changed) */
   written: boolean;
   fileVoiceAgent: VoiceAgent | null;
   filePath?: string;
   configured: boolean;
 }
 
-/**
- * Compare the store's selected agent with the file on disk.
- * If they differ and the file is configured, write the store's value to disk.
- * Used during init to ensure store and file are consistent.
- */
 export async function ensureVoiceAgentFileSync(
   selectedVoiceAgent: VoiceAgent,
 ): Promise<VoiceAgentSyncResult> {
@@ -348,20 +324,17 @@ export async function forceRewriteVoiceAgentFile(
 }
 
 // ---------------------------------------------------------------------------
-// Start2stream executable path — per-device .bat/.sh files
-// Each stream device (holobox, keba-kiosk, kiosk) can have its own executable.
-// Paths are validated by the backend (file must exist and be executable).
+// Executable path — global .bat/.sh for start2stream
 // ---------------------------------------------------------------------------
 
-/** POST /config/device-exe — save and validate an exe path for a specific device */
-export async function setDeviceExePath(
-  deviceId: StreamDeviceId,
+/** POST /config/exe — save and validate an exe path */
+export async function setGlobalExePath(
   exePath: string,
 ): Promise<{ ok: boolean; error?: string; resolvedPath?: string }> {
   const response = await fetchWithTimeout(`${WRITER_BASE_URL}/config/device-exe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceId, exePath }),
+    body: JSON.stringify({ exePath }),
   });
 
   const payload = await parseJsonSafely(response);
@@ -392,10 +365,7 @@ export interface BrowseExeResult {
   errors: string[];
 }
 
-/**
- * Opens a native OS file picker for executable files.
- * Longer timeout because user interaction is involved.
- */
+/** Opens a native OS file picker for executable files */
 export async function browseForExe(): Promise<BrowseExeResult> {
   const response = await fetchWithTimeout(
     `${WRITER_BASE_URL}/config/browse-exe`,
@@ -430,27 +400,12 @@ export async function browseForExe(): Promise<BrowseExeResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Process management — start2stream lifecycle
+// Process lifecycle — start2stream
 //
-// Only ONE process runs at a time. Starting a new device kills the previous one.
-// The backend tracks the active process (pid + deviceId).
-//
-// Lifecycle:
-//   DevicePage mount  → startDeviceProcess(deviceId, exePath)
-//   DevicePage unmount → stopProcess()
-//   OverviewPage mount → stopProcess() (safety net — kill orphaned processes)
-//   OverviewPage "Apply" → restartStart2stream() (re-reads config from disk)
-//   OverviewPage poll  → getProcessStatus() every 5s
-//
-// IMPORTANT: All mutating process operations (start, stop, restart) are
-// serialized through an async queue to prevent concurrent HTTP requests.
-// Without this, rapid navigation, HMR re-mounts, or overlapping cleanup
-// effects can fire two start/stop calls simultaneously, creating duplicate
-// Pixel Streaming WebRTC connections that freeze the stream.
+// All mutating process operations are serialized through an async queue
+// to prevent concurrent HTTP requests that could create duplicate processes.
 // ---------------------------------------------------------------------------
 
-// Async operation queue: ensures start/stop/restart never run concurrently.
-// Each call chains onto the previous promise, so they execute one-by-one.
 let processQueue: Promise<unknown> = Promise.resolve();
 
 function enqueueProcessOp<T>(op: () => Promise<T>): Promise<T> {
@@ -459,92 +414,25 @@ function enqueueProcessOp<T>(op: () => Promise<T>): Promise<T> {
   return result;
 }
 
-export interface ProcessRestartResult {
-  ok: boolean;
-  pid?: number;
-  deviceId?: string;
-  error?: string;
-}
-
-export function restartStart2stream(): Promise<ProcessRestartResult> {
-  return enqueueProcessOp(async () => {
-    const response = await fetchWithTimeout(
-      `${WRITER_BASE_URL}/process/restart`,
-      { method: 'POST' },
-      15_000, // process kill + spawn may take a few seconds
-    );
-
-    const payload = await parseJsonSafely(response);
-    const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
-      string,
-      unknown
-    >;
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        error:
-          typeof record.error === 'string' ? record.error : 'Failed to restart process',
-      };
-    }
-
-    return {
-      ok: true,
-      pid: typeof record.pid === 'number' ? record.pid : undefined,
-      deviceId: typeof record.deviceId === 'string' ? record.deviceId : undefined,
-    };
-  });
-}
-
-export interface ProcessStatusResult {
-  running: boolean;
-  pid: number | null;
-  deviceId: string | null;
-}
-
-export async function getProcessStatus(): Promise<ProcessStatusResult> {
-  const response = await fetchWithTimeout(`${WRITER_BASE_URL}/process/status`);
-  const payload = await ensureOk(response, 'Failed to get process status');
-  const record = payload && typeof payload === 'object' ? payload : null;
-  const r = record as Record<string, unknown> | null;
-
-  return {
-    running: r?.running === true,
-    pid: typeof r?.pid === 'number' ? r.pid : null,
-    deviceId: typeof r?.deviceId === 'string' ? r.deviceId : null,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Device process lifecycle — called by DevicePage
-// ---------------------------------------------------------------------------
-
 export interface ProcessStartResult {
   ok: boolean;
-  deviceId?: string;
   pid?: number;
   error?: string;
 }
 
 /**
- * POST /process/start — start a process for a specific device.
+ * POST /process/start — start the start2stream process.
  * Backend kills any active process first, then spawns a new one.
- * Returns the new PID and deviceId on success.
- * 15s timeout — process spawn can take a few seconds.
- *
- * Serialized via async queue — safe to call from multiple React effects.
+ * Serialized via async queue.
  */
-export function startDeviceProcess(
-  deviceId: StreamDeviceId,
-  exePath: string,
-): Promise<ProcessStartResult> {
+export function startProcess(exePath: string): Promise<ProcessStartResult> {
   return enqueueProcessOp(async () => {
     const response = await fetchWithTimeout(
       `${WRITER_BASE_URL}/process/start`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId, exePath }),
+        body: JSON.stringify({ exePath }),
       },
       15_000,
     );
@@ -565,22 +453,37 @@ export function startDeviceProcess(
 
     return {
       ok: true,
-      deviceId: typeof record.deviceId === 'string' ? record.deviceId : undefined,
       pid: typeof record.pid === 'number' ? record.pid : undefined,
     };
   });
 }
 
-/**
- * Stop the currently running process.
- * Serialized via async queue — safe to call from cleanup effects.
- */
-export function stopProcess(): Promise<{ ok: boolean; stoppedDeviceId?: string }> {
+/** Stop the currently running process. Serialized via async queue. */
+export function stopProcess(): Promise<{ ok: boolean }> {
   return enqueueProcessOp(async () => {
     const response = await fetchWithTimeout(
       `${WRITER_BASE_URL}/process/stop`,
       { method: 'POST' },
       10_000,
+    );
+
+    return { ok: response.ok };
+  });
+}
+
+export interface ProcessRestartResult {
+  ok: boolean;
+  pid?: number;
+  error?: string;
+}
+
+/** Restart the process. Serialized via async queue. */
+export function restartProcess(): Promise<ProcessRestartResult> {
+  return enqueueProcessOp(async () => {
+    const response = await fetchWithTimeout(
+      `${WRITER_BASE_URL}/process/restart`,
+      { method: 'POST' },
+      15_000,
     );
 
     const payload = await parseJsonSafely(response);
@@ -589,10 +492,50 @@ export function stopProcess(): Promise<{ ok: boolean; stoppedDeviceId?: string }
       unknown
     >;
 
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          typeof record.error === 'string' ? record.error : 'Failed to restart process',
+      };
+    }
+
     return {
-      ok: response.ok,
-      stoppedDeviceId:
-        typeof record.stoppedDeviceId === 'string' ? record.stoppedDeviceId : undefined,
+      ok: true,
+      pid: typeof record.pid === 'number' ? record.pid : undefined,
     };
   });
+}
+
+export interface ProcessStatusResult {
+  running: boolean;
+  pid: number | null;
+}
+
+/** GET /process/status — check if process is running */
+export async function getProcessStatus(): Promise<ProcessStatusResult> {
+  const response = await fetchWithTimeout(`${WRITER_BASE_URL}/process/status`);
+  const payload = await ensureOk(response, 'Failed to get process status');
+  const record = payload && typeof payload === 'object' ? payload : null;
+  const r = record as Record<string, unknown> | null;
+
+  return {
+    running: r?.running === true,
+    pid: typeof r?.pid === 'number' ? r.pid : null,
+  };
+}
+
+/** Check if the Pixel Streaming URL is reachable (HEAD request) */
+export async function checkPixelStreamingStatus(
+  url: string,
+): Promise<{ reachable: boolean }> {
+  if (!url.trim()) return { reachable: false };
+
+  try {
+    const response = await fetchWithTimeout(url, { method: 'HEAD', mode: 'no-cors' }, 3_000);
+    // no-cors gives opaque response with status 0 — that's still "reachable"
+    return { reachable: response.status === 0 || response.ok };
+  } catch {
+    return { reachable: false };
+  }
 }

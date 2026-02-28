@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
+import { PersistentPixelStreaming } from '@/components/PersistentPixelStreaming/PersistentPixelStreaming';
 import styles from './AppShell.module.css';
 
 const MOBILE_BREAKPOINT = 768;
@@ -56,6 +57,8 @@ export function AppShell() {
           <Outlet />
         </div>
       </main>
+
+      <PersistentPixelStreaming />
     </div>
   );
 }

@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isStreamDevice, STREAM_DEVICE_IDS, migrateSettingsState } from './settingsStore';
-import type { StreamDeviceId } from './settingsStore';
+import { isStreamingDevice, STREAMING_DEVICE_IDS, migrateSettingsState } from './settingsStore';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// isStreamDevice
+// isStreamingDevice
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('isStreamDevice', () => {
+describe('isStreamingDevice', () => {
   it.each<[string, boolean]>([
     ['holobox', true],
     ['keba-kiosk', true],
@@ -16,21 +15,21 @@ describe('isStreamDevice', () => {
     ['', false],
     ['unknown-device', false],
     ['HOLOBOX', false], // case-sensitive
-  ])('isStreamDevice(%j) → %s', (input, expected) => {
-    expect(isStreamDevice(input)).toBe(expected);
+  ])('isStreamingDevice(%j) → %s', (input, expected) => {
+    expect(isStreamingDevice(input)).toBe(expected);
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STREAM_DEVICE_IDS
+// STREAMING_DEVICE_IDS
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('STREAM_DEVICE_IDS', () => {
+describe('STREAMING_DEVICE_IDS', () => {
   it('contains exactly 3 device IDs', () => {
-    expect(STREAM_DEVICE_IDS).toHaveLength(3);
-    expect(STREAM_DEVICE_IDS).toContain('holobox');
-    expect(STREAM_DEVICE_IDS).toContain('keba-kiosk');
-    expect(STREAM_DEVICE_IDS).toContain('kiosk');
+    expect(STREAMING_DEVICE_IDS).toHaveLength(3);
+    expect(STREAMING_DEVICE_IDS).toContain('holobox');
+    expect(STREAMING_DEVICE_IDS).toContain('keba-kiosk');
+    expect(STREAMING_DEVICE_IDS).toContain('kiosk');
   });
 });
 
@@ -46,101 +45,150 @@ describe('persist migration', () => {
     expect(result).toMatchObject({
       phoneUrl: '',
       laptopUrl: '',
-      kioskUrl: '',
-      holoboxUrl: '',
-      kebaKioskUrl: '',
+      pixelStreamingUrl: '',
       voiceAgent: 'elevenlabs',
       licenseFilePath: '',
-      deviceExePaths: { holobox: '', 'keba-kiosk': '', kiosk: '' },
+      exePath: '',
     });
   });
 
-  describe('v7 → v8 (start2streamPath → deviceExePaths)', () => {
-    it('replicates single start2streamPath to all 3 devices', () => {
-      const oldState = {
+  describe('v8 → v9 (per-device streaming URLs → pixelStreamingUrl)', () => {
+    it('consolidates per-device URLs into single pixelStreamingUrl (holoboxUrl priority)', () => {
+      const v8State = {
         phoneUrl: '',
         laptopUrl: '',
-        kioskUrl: '',
-        holoboxUrl: '',
-        kebaKioskUrl: '',
+        kioskUrl: 'https://kiosk.example.com',
+        holoboxUrl: 'https://holobox.example.com',
+        kebaKioskUrl: 'https://keba-kiosk.example.com',
         voiceAgent: 'elevenlabs' as const,
         licenseFilePath: '/lic.lic',
-        start2streamPath: '/legacy/stream.exe',
       };
 
-      const result = migrate(oldState, 7);
-      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> })
-        .deviceExePaths;
+      const result = migrate(v8State, 8);
 
-      expect(exePaths.holobox).toBe('/legacy/stream.exe');
-      expect(exePaths['keba-kiosk']).toBe('/legacy/stream.exe');
-      expect(exePaths.kiosk).toBe('/legacy/stream.exe');
+      // holoboxUrl has priority after pixelStreamingUrl
+      expect(result.pixelStreamingUrl).toBe('https://holobox.example.com');
     });
 
-    it('uses empty strings when no legacy path exists', () => {
-      const oldState = {
+    it('prefers pixelStreamingUrl over per-device URLs when present', () => {
+      const v8State = {
         phoneUrl: '',
         laptopUrl: '',
-        kioskUrl: '',
-        holoboxUrl: '',
-        kebaKioskUrl: '',
+        kioskUrl: 'https://kiosk.example.com',
+        holoboxUrl: 'https://holobox.example.com',
+        kebaKioskUrl: 'https://keba-kiosk.example.com',
+        pixelStreamingUrl: 'https://preferred.example.com',
+        voiceAgent: 'elevenlabs' as const,
+        licenseFilePath: '/lic.lic',
+      };
+
+      const result = migrate(v8State, 8);
+
+      expect(result.pixelStreamingUrl).toBe('https://preferred.example.com');
+    });
+
+    it('falls back to holoboxUrl when other streaming URLs missing', () => {
+      const v8State = {
+        phoneUrl: '',
+        laptopUrl: '',
+        holoboxUrl: 'https://holobox.example.com',
+        voiceAgent: 'elevenlabs' as const,
+        licenseFilePath: '/lic.lic',
+      };
+
+      const result = migrate(v8State, 7);
+
+      expect(result.pixelStreamingUrl).toBe('https://holobox.example.com');
+    });
+
+    it('uses empty string when no streaming URLs present', () => {
+      const v8State = {
+        phoneUrl: '',
+        laptopUrl: '',
+        voiceAgent: 'elevenlabs' as const,
+        licenseFilePath: '/lic.lic',
+      };
+
+      const result = migrate(v8State, 8);
+
+      expect(result.pixelStreamingUrl).toBe('');
+    });
+  });
+
+  describe('v9 → v10 (add exePath)', () => {
+    it('resolves exePath from start2streamPath', () => {
+      const v9State = {
+        phoneUrl: '',
+        laptopUrl: '',
+        pixelStreamingUrl: 'https://streaming.example.com',
+        voiceAgent: 'elevenlabs' as const,
+        licenseFilePath: '/lic.lic',
+        start2streamPath: '/path/to/start2stream.bat',
+      };
+
+      const result = migrate(v9State, 9);
+      expect(result.exePath).toBe('/path/to/start2stream.bat');
+    });
+
+    it('resolves exePath from deviceExePaths', () => {
+      const v9State = {
+        phoneUrl: '',
+        laptopUrl: '',
+        pixelStreamingUrl: '',
+        voiceAgent: 'elevenlabs' as const,
+        licenseFilePath: '',
+        deviceExePaths: { holobox: '/exe/holobox.bat', kiosk: '' },
+      };
+
+      const result = migrate(v9State, 9);
+      expect(result.exePath).toBe('/exe/holobox.bat');
+    });
+
+    it('defaults exePath to empty string when no legacy sources', () => {
+      const v9State = {
+        phoneUrl: '',
+        laptopUrl: '',
+        pixelStreamingUrl: '',
         voiceAgent: 'elevenlabs' as const,
         licenseFilePath: '',
       };
 
-      const result = migrate(oldState, 7);
-      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> })
-        .deviceExePaths;
-
-      expect(exePaths.holobox).toBe('');
-      expect(exePaths['keba-kiosk']).toBe('');
-      expect(exePaths.kiosk).toBe('');
+      const result = migrate(v9State, 9);
+      expect(result.exePath).toBe('');
     });
+  });
 
-    it('preserves existing deviceExePaths when already present', () => {
-      const stateWithPaths = {
-        phoneUrl: '',
-        laptopUrl: '',
-        kioskUrl: '',
-        holoboxUrl: '',
-        kebaKioskUrl: '',
+  describe('v10+ (already migrated)', () => {
+    it('preserves all fields when state is v10+', () => {
+      const v10State = {
+        phoneUrl: 'https://phone.example.com',
+        laptopUrl: 'https://laptop.example.com',
+        pixelStreamingUrl: 'https://streaming.example.com',
         voiceAgent: 'elevenlabs' as const,
-        licenseFilePath: '',
-        deviceExePaths: {
-          holobox: '/a.bat',
-          'keba-kiosk': '/b.bat',
-          kiosk: '/c.bat',
-        },
+        licenseFilePath: '/lic.lic',
+        exePath: '/path/to/exe.bat',
       };
 
-      const result = migrate(stateWithPaths, 8);
-      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> })
-        .deviceExePaths;
+      const result = migrate(v10State, 10);
 
-      expect(exePaths.holobox).toBe('/a.bat');
-      expect(exePaths['keba-kiosk']).toBe('/b.bat');
-      expect(exePaths.kiosk).toBe('/c.bat');
+      expect(result.pixelStreamingUrl).toBe('https://streaming.example.com');
+      expect(result.phoneUrl).toBe('https://phone.example.com');
+      expect(result.laptopUrl).toBe('https://laptop.example.com');
+      expect(result.exePath).toBe('/path/to/exe.bat');
     });
 
-    it('handles partial deviceExePaths (fills missing with empty)', () => {
-      const partial = {
-        phoneUrl: '',
-        laptopUrl: '',
-        kioskUrl: '',
-        holoboxUrl: '',
-        kebaKioskUrl: '',
+    it('uses defaults for missing v10+ fields', () => {
+      const v10State = {
+        phoneUrl: 'https://phone.example.com',
+        laptopUrl: 'https://laptop.example.com',
         voiceAgent: 'elevenlabs' as const,
-        licenseFilePath: '',
-        deviceExePaths: { holobox: '/a.bat' },
       };
 
-      const result = migrate(partial, 7);
-      const exePaths = (result as { deviceExePaths: Record<StreamDeviceId, string> })
-        .deviceExePaths;
+      const result = migrate(v10State, 10);
 
-      expect(exePaths.holobox).toBe('/a.bat');
-      expect(exePaths['keba-kiosk']).toBe('');
-      expect(exePaths.kiosk).toBe('');
+      expect(result.pixelStreamingUrl).toBe('');
+      expect(result.licenseFilePath).toBe('');
+      expect(result.exePath).toBe('');
     });
   });
 
@@ -203,8 +251,8 @@ describe('persist migration', () => {
 
       expect(result.phoneUrl).toBe('https://widget.example.com');
       expect(result.laptopUrl).toBe('https://widget.example.com');
-      expect(result.kioskUrl).toBe('https://holobox.example.com');
-      expect(result.holoboxUrl).toBe('https://holobox.example.com');
+      // holoboxUrl is consolidated into pixelStreamingUrl
+      expect(result.pixelStreamingUrl).toBe('https://holobox.example.com');
     });
   });
 });
