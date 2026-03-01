@@ -143,16 +143,16 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     };
   }, [url, isEmbedBlocked]);
 
-  // Explicit focus grab whenever shouldShow transitions to true.
-  // Deferred by one frame so the browser processes visibility/z-index first.
+  // Aggressive focus grab whenever shouldShow transitions to true.
+  // Multiple attempts cover page-transition timing, animations, and the
+  // case where an input on a previous page held focus until unmount.
   useEffect(() => {
     if (!shouldShow) return;
     const iframe = iframeRef.current;
     if (!iframe || isEmbedBlocked) return;
-    const id = requestAnimationFrame(() => {
-      try { iframe.focus(); } catch { /* cross-origin */ }
-    });
-    return () => cancelAnimationFrame(id);
+    const grab = () => { try { iframe.focus(); } catch { /* cross-origin */ } };
+    const ids = [0, 50, 150, 300].map((ms) => window.setTimeout(grab, ms));
+    return () => ids.forEach((id) => clearTimeout(id));
   }, [shouldShow, isEmbedBlocked]);
 
   const handleLoad = useCallback(() => {
