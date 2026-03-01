@@ -133,7 +133,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
       if (document.activeElement === iframe) return;
       focusIframe();
     };
-    const pollId = window.setInterval(poll, 200);
+    const pollId = window.setInterval(poll, 100);
 
     return () => {
       document.removeEventListener('mousedown', onMouseDown, true);

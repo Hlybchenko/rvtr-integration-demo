@@ -237,7 +237,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
         title={ueApiUrl ? 'UE Remote Control' : 'UE Remote Control — set API URL in Settings'}
       >
         <span className={styles.triggerIcon} aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             {/* Horizontal slider tracks */}
             <line x1="3" y1="6" x2="17" y2="6" strokeWidth="1" opacity="0.3" />
             <line x1="3" y1="10" x2="17" y2="10" strokeWidth="1" opacity="0.3" />
