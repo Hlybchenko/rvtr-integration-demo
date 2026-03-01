@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
 import { usePathConfig, type BrowseResult } from '@/hooks/usePathConfig';
@@ -112,6 +112,9 @@ export function OverviewPage() {
 
   // -- pixel streaming URL local state --
   const [psUrlInput, setPsUrlInput] = useState(pixelStreamingUrl);
+  // Tracks whether user has actively typed in the PS URL input.
+  // Prevents Zustand hydration race from clearing the URL on mount.
+  const psUrlDirtyRef = useRef(false);
 
   // -- voice agent state --
   const [pendingVoiceAgent, setPendingVoiceAgent] = useState<VoiceAgent>(voiceAgent);
@@ -128,6 +131,7 @@ export function OverviewPage() {
   const ueReachable = useUeControlStore((s) => s.ueReachable);
   const setUeReachable = useUeControlStore((s) => s.setUeReachable);
   const [ueApiUrlInput, setUeApiUrlInput] = useState(ueApiUrl);
+  const ueUrlDirtyRef = useRef(false);
 
   // -- global status (polling runs in AppShell) --
   const processRunning = useStatusStore((s) => s.processRunning);
@@ -272,31 +276,42 @@ export function OverviewPage() {
   // Debounced auto-save for file/exe paths is handled by usePathConfig hooks above.
 
   // -- debounced auto-save for Pixel Streaming URL --
-  // Allows clearing (empty string) or setting a valid URL
+  // Allows clearing (empty string) only when user has actively typed (dirty).
+  // Without the dirty guard, Zustand async hydration can race: psUrlInput starts
+  // as '' while pixelStreamingUrl hydrates from localStorage, causing an unwanted clear.
   useEffect(() => {
     const trimmed = psUrlInput.trim();
-    if (trimmed === pixelStreamingUrl) return;
-    // Allow empty (clear) or valid URL only
+    if (trimmed === pixelStreamingUrl) {
+      psUrlDirtyRef.current = false;
+      return;
+    }
+    // Allow clearing only from explicit user action, not hydration race
+    if (!trimmed && !psUrlDirtyRef.current) return;
     if (trimmed && !isValidUrl(trimmed)) return;
 
     const timer = setTimeout(() => {
       setPixelStreamingUrl(trimmed);
+      psUrlDirtyRef.current = false;
     }, 400);
 
     return () => clearTimeout(timer);
   }, [psUrlInput, pixelStreamingUrl, setPixelStreamingUrl]);
 
   // -- debounced auto-save for UE API URL --
-  // Allows clearing (empty string) or setting a valid URL
+  // Same dirty guard as PS URL above to prevent hydration race.
   useEffect(() => {
     const trimmed = ueApiUrlInput.trim();
-    if (trimmed === ueApiUrl) return;
-    // Allow empty (clear) or valid URL only
+    if (trimmed === ueApiUrl) {
+      ueUrlDirtyRef.current = false;
+      return;
+    }
+    if (!trimmed && !ueUrlDirtyRef.current) return;
     if (trimmed && !isValidUrl(trimmed)) return;
 
     const timer = setTimeout(() => {
       setUeApiUrl(trimmed);
       if (!trimmed) setUeReachable(null);
+      ueUrlDirtyRef.current = false;
     }, 400);
 
     return () => clearTimeout(timer);
@@ -694,7 +709,7 @@ export function OverviewPage() {
                 type="url"
                 placeholder="https://stream.example.com"
                 value={psUrlInput}
-                onChange={(e) => setPsUrlInput(e.target.value)}
+                onChange={(e) => { psUrlDirtyRef.current = true; setPsUrlInput(e.target.value); }}
                 spellCheck={false}
                 autoComplete="url"
               />
@@ -730,7 +745,7 @@ export function OverviewPage() {
                 type="url"
                 placeholder="http://127.0.0.1:8081"
                 value={ueApiUrlInput}
-                onChange={(e) => setUeApiUrlInput(e.target.value)}
+                onChange={(e) => { ueUrlDirtyRef.current = true; setUeApiUrlInput(e.target.value); }}
                 spellCheck={false}
                 autoComplete="url"
               />
