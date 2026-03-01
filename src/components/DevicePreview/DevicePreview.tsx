@@ -231,16 +231,6 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
 
       setIsEmbedBlocked(blocked);
       setLoading(false);
-
-      if (!blocked) {
-        requestAnimationFrame(() => {
-          try {
-            iframeRef.current?.focus();
-          } catch {
-            // cross-origin – safe to ignore
-          }
-        });
-      }
     }, []);
 
     const handleIframeError = useCallback(() => {
@@ -249,13 +239,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     }, []);
 
     const handleScreenMouseDown = useCallback(() => {
-      requestAnimationFrame(() => {
-        try {
-          iframeRef.current?.focus();
-        } catch {
-          // cross-origin focus may throw – safe to ignore
-        }
-      });
+      // No-op: focus stays on PS iframe; widget preview is view-only.
     }, []);
 
     // Auto-detect the screen cutout (inner transparent hole) in the PNG.
@@ -332,25 +316,8 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
       };
     }, [showGlobalLoader]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Keep focus on the iframe — re-focus whenever it loses it (non-streaming only).
-    useEffect(() => {
-      if (isStreaming) return;
-      const iframe = iframeRef.current;
-      if (!iframe || !url || isEmbedBlocked) return;
-
-      const refocus = () => {
-        requestAnimationFrame(() => {
-          try {
-            iframeRef.current?.focus();
-          } catch {
-            // cross-origin — safe to ignore
-          }
-        });
-      };
-
-      iframe.addEventListener('blur', refocus);
-      return () => iframe.removeEventListener('blur', refocus);
-    }, [url, isEmbedBlocked, isGeometryReady, isStreaming]);
+    // Widget iframe is view-only — no focus management needed.
+    // Focus lock lives solely in PersistentPixelStreaming for the PS iframe.
 
     // Fullscreen devices: no frame image, screen slot fills the entire container
     if (device.fullscreen) {
@@ -416,7 +383,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                     data-rvtr-preview="true"
                     src={url}
                     title={`${device.name} preview`}
-                    tabIndex={0}
+                    tabIndex={-1}
                     sandbox={resolvedSandbox}
                     onLoad={handleIframeLoad}
                     onError={handleIframeError}
