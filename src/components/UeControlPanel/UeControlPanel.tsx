@@ -204,17 +204,19 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
         command: cmd.command,
         [cmd.param]: String(delta),
       }).then((ok) => {
-        if (ok) {
-          useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
-        } else {
-          sentValueRef.current.set(key, baseline);
-        }
         inFlightRef.current.delete(key);
 
-        // Catch-up: if slider moved while we were in-flight, send again
-        const latest = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
-        if (latest !== (sentValueRef.current.get(key) ?? 0)) {
-          fireSliderSend(key);
+        if (ok) {
+          useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
+          // Catch-up: if slider moved while we were in-flight, send again.
+          // Only on success — on failure baseline reverts, and retrying
+          // would loop infinitely when UE is unreachable.
+          const latest = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
+          if (latest !== target) {
+            fireSliderSend(key);
+          }
+        } else {
+          sentValueRef.current.set(key, baseline);
         }
       });
     },
