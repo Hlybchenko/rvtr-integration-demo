@@ -24,12 +24,13 @@ import styles from './UeControlPanel.module.css';
 
 const SLIDER_DEBOUNCE_MS = 200;
 
-/** Slider min/max ranges per camera axis. Zoom has a wider range than pan/pitch. */
+/** Slider min/max ranges per camera axis.
+ *  Zoom/pan are positional offsets (UE units). Pitch is an angle. */
 const SLIDER_RANGES = {
-  zoom:             { min: -500,  max: 500  },
-  cameraVertical:   { min: -500,  max: 500  },
-  cameraHorizontal: { min: -500,  max: 500  },
-  cameraPitch:      { min: -500,  max: 500  },
+  zoom:             { min: -1000, max: 1000 },
+  cameraVertical:   { min: -300,  max: 300  },
+  cameraHorizontal: { min: -300,  max: 300  },
+  cameraPitch:      { min: -45,   max: 45   },
 } as const;
 
 /** Slider key → UE command name mapping */
