@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { devices } from '@/config/devices';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { isValidUrl } from '@/utils/isValidUrl';
 import {
   IconSettings,
   IconPhone,
@@ -66,6 +68,8 @@ interface SidebarProps {
  *  Click events still fire; keyboard Tab navigation is unaffected. */
 const preventFocusSteal = (e: React.MouseEvent) => e.preventDefault();
 
+const ENV_WIDGET_URL = import.meta.env.VITE_DEFAULT_WIDGET_URL || '';
+
 export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const navRef = useRef<HTMLElement>(null);
@@ -74,6 +78,12 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
   const logoMarkRef = useRef<SVGSVGElement>(null);
   const logoRafRef = useRef<number | null>(null);
   const location = useLocation();
+
+  // Hide phone/laptop nav items when no valid URL is configured
+  const phoneUrl = useSettingsStore((s) => s.phoneUrl);
+  const laptopUrl = useSettingsStore((s) => s.laptopUrl);
+  const hasPhoneUrl = isValidUrl(phoneUrl) || isValidUrl(ENV_WIDGET_URL);
+  const hasLaptopUrl = isValidUrl(laptopUrl) || isValidUrl(ENV_WIDGET_URL);
 
   useEffect(() => {
     const initial = resolveInitialTheme();
@@ -324,6 +334,11 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         <span className={styles.navLabel}>Devices</span>
         {devices
           .filter((d) => d.id !== 'fullscreen')
+          .filter((d) => {
+            if (d.id === 'phone') return hasPhoneUrl;
+            if (d.id === 'laptop') return hasLaptopUrl;
+            return true;
+          })
           .map((device) => (
             <NavLink
               key={device.id}
