@@ -1,0 +1,233 @@
+/* ── Test Page — single-page layout ── */
+
+.page {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+  height: 100vh;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* ── Top bar: URL inputs ── */
+.topBar {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 16px;
+  align-items: end;
+}
+
+.field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: var(--font-sm);
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--card-nested-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 200ms ease;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+.input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+/* ── Iframe area ── */
+.iframeArea {
+  position: relative;
+  border: 2px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: #0a0c14;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.iframePlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  opacity: 0.5;
+}
+
+/* ── Right panel: UE controls ── */
+.controlPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Slider row ── */
+.controlRow {
+  display: grid;
+  grid-template-columns: 70px 1fr 30px;
+  align-items: center;
+  gap: 8px;
+}
+
+.controlLabel {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.controlValue {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Slider track ── */
+.sliderTrack {
+  position: relative;
+  height: 20px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.sliderTrack::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--glass-border);
+  border-radius: 2px;
+}
+
+.sliderThumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  transition: box-shadow 150ms ease;
+}
+
+.sliderThumb:hover,
+.sliderThumbActive {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* ── Select ── */
+.select {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: var(--font-xs);
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--card-nested-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+/* ── Toggle (checkbox) ── */
+.toggle {
+  accent-color: var(--accent);
+}
+
+/* ── Button row ── */
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.smallButton {
+  appearance: none;
+  padding: 4px 10px;
+  font-size: var(--font-xs);
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--card-nested-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.smallButton:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card-nested-bg));
+}
+
+.resetButton {
+  composes: smallButton;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  .page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(300px, 1fr) auto;
+  }
+
+  .controlPanel {
+    max-height: 40vh;
+  }
+}
