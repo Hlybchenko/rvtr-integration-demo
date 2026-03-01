@@ -145,30 +145,11 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const { handleSlider, resetSliderState } = useSliderSend({ deviceId });
 
   // ── Auto-apply saved settings on device switch ──────────────────────────
-  // Generation counter ensures rapid device switches don't overlap: only the
-  // latest switch's commands run to completion.
+  // DEBUG: disabled to isolate focus bug — just reset slider baselines.
   const applyGenRef = useRef(0);
   useEffect(() => {
     const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
     resetSliderState(desired);
-
-    const { ueApiUrl: url } = useUeControlStore.getState();
-    if (!url) return;
-
-    const gen = ++applyGenRef.current;
-    const committed = useUeControlStore.getState().ueCommittedCamera;
-
-    void (async () => {
-      // Reset camera to zero from current committed position
-      const afterReset = await resetCameraToZero(url, committed);
-      if (applyGenRef.current !== gen) return;
-      useUeControlStore.getState().setUeCommittedCamera(afterReset);
-
-      // Apply the new device's saved settings
-      const { newCommitted } = await applyDeviceSettings(url, desired, afterReset);
-      if (applyGenRef.current !== gen) return;
-      useUeControlStore.getState().setUeCommittedCamera(newCommitted);
-    })();
   }, [deviceId, resetSliderState]);
 
   // ── Toggle handler ────────────────────────────────────────────────────────
