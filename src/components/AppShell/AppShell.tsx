@@ -5,7 +5,7 @@ import { PersistentPixelStreaming } from '@/components/PersistentPixelStreaming/
 import { useStatusPolling } from '@/hooks/useStatusPolling';
 import styles from './AppShell.module.css';
 
-const PIN_STORAGE_KEY = 'rvtr-sidebar-pinned';
+const PIN_STORAGE_KEY = 'rvtr-sidebar-pinned-v2';
 const DESKTOP_MQ = '(min-width: 1100px)';
 
 function resolveInitialPin(): boolean {
