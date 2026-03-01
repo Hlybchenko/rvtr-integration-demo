@@ -46,6 +46,22 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const [loading, setLoading] = useState(true);
   const [isEmbedBlocked, setIsEmbedBlocked] = useState(false);
 
+  // Force WebRTC teardown on unmount (HMR, remount, URL change).
+  // Navigating iframe to about:blank makes the PS frontend close its
+  // RTCPeerConnection before the DOM element is removed.
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    return () => {
+      if (iframe) {
+        try {
+          iframe.src = 'about:blank';
+        } catch {
+          // cross-origin — iframe will clean up on unload
+        }
+      }
+    };
+  }, []);
+
   // Blur → refocus for WebRTC keepalive.
   // Skip refocus when user interacts with UE control panel or other UI overlays
   // so that sliders, inputs and buttons work correctly.
