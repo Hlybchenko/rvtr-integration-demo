@@ -178,6 +178,9 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
 
       const ro = new ResizeObserver(scheduleUpdate);
       ro.observe(el);
+      // Also observe the container — when sidebar pins/unpins the container
+      // resizes, shifting the screen slot position without changing its size.
+      if (containerRef.current) ro.observe(containerRef.current);
 
       // Also update on scroll (in case parent scrolls) and resize
       // (position may shift due to flex centering without size change).
