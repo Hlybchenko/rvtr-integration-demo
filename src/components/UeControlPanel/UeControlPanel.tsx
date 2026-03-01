@@ -187,7 +187,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     <div ref={panelRef} className={styles.wrapper} data-ue-panel>
       {/* Status label — centered at top */}
       {ueApiUrl && ueConnected !== null && (
-        <div className={styles.statusLabel}>
+        <div className={`${styles.statusLabel} ${ueConnected ? styles.statusConnected : styles.statusDisconnected}`}>
           <span
             className={`${styles.statusDot} ${
               ueConnected ? styles.statusDotConnected : styles.statusDotDisconnected
