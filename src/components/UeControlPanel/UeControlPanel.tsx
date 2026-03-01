@@ -144,13 +144,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
   const { handleSlider, resetSliderState } = useSliderSend({ deviceId });
 
-  // ── Auto-apply saved settings on device switch ──────────────────────────
-  // DEBUG: disabled to isolate focus bug — just reset slider baselines.
+  // DEBUG: auto-apply disabled to isolate focus bug
   const applyGenRef = useRef(0);
-  useEffect(() => {
-    const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
-    resetSliderState(desired);
-  }, [deviceId, resetSliderState]);
 
   // ── Toggle handler ────────────────────────────────────────────────────────
 
