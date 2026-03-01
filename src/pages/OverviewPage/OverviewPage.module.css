@@ -24,8 +24,8 @@
 .settings {
   display: flex;
   flex-direction: column;
-  padding: 18px 22px;
-  gap: var(--space-4);
+  padding: 40px 40px;
+  gap: var(--space-6);
   max-width: 1100px;
   animation: fadeInUp 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
@@ -34,14 +34,14 @@
 .form {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
+  gap: var(--space-5);
   align-items: stretch;
 }
 
 .column {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
 /* Last card in each column stretches to fill remaining space */
@@ -54,8 +54,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px var(--space-3);
+  gap: 12px;
+  padding: var(--space-4);
   background: var(--glass-highlight), var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
@@ -94,7 +94,7 @@
 
 .settingsBlockTitle {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-lg, 18px);
   font-weight: 700;
   color: var(--text-primary);
   text-align: center;
@@ -241,8 +241,8 @@
 
 .input {
   width: 100%;
-  padding: 6px 10px;
-  font-size: var(--font-sm);
+  padding: 10px 14px;
+  font-size: var(--font-md);
   font-family: inherit;
   color: var(--text-primary);
   background:
@@ -307,8 +307,8 @@
 .radioGroup {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 10px;
+  padding: 10px 12px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
@@ -317,9 +317,9 @@
 .radioOption {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   color: var(--text-primary);
-  font-size: var(--font-sm);
+  font-size: var(--font-md);
   cursor: pointer;
 }
 
@@ -334,8 +334,8 @@
 /* Custom radio mark — visible circle */
 .radioMark {
   position: relative;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border: 2px solid var(--text-secondary);
   border-radius: 50%;
   flex-shrink: 0;
@@ -437,7 +437,7 @@
   position: relative;
   overflow: hidden;
   align-self: center;
-  min-height: 28px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -447,7 +447,7 @@
     color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
   color: var(--accent);
   border-radius: var(--radius-md);
-  padding: 3px 22px;
+  padding: 4px 28px;
   font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
@@ -541,7 +541,7 @@
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
-  min-height: 30px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -551,7 +551,7 @@
     var(--glass-bg);
   color: var(--text-primary);
   border-radius: var(--radius-md);
-  padding: 4px 12px;
+  padding: 6px 14px;
   font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
@@ -651,8 +651,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 20px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--glass-border);
   background: var(--glass-highlight), var(--glass-bg);
@@ -719,11 +719,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-width: 140px;
-  min-height: 32px;
-  padding: 6px 22px;
-  font-size: 12px;
+  gap: 10px;
+  min-width: 180px;
+  min-height: 46px;
+  padding: 10px 36px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.4px;
   border: 1px solid var(--accent);
@@ -832,9 +832,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
-  padding: 6px 20px;
-  font-size: 12px;
+  min-height: 46px;
+  padding: 10px 28px;
+  font-size: 16px;
   font-weight: 700;
   border: 1px solid var(--danger);
   border-radius: var(--radius-md);
@@ -972,6 +972,6 @@
 /* ── Mobile adjustments ── */
 @media (max-width: 767px) {
   .settings {
-    padding: 48px 12px 20px;
+    padding: 56px 16px 24px;
   }
 }

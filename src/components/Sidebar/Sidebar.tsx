@@ -209,8 +209,8 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         <svg
           ref={logoMarkRef}
           className={styles.logoMark}
-          width="34"
-          height="30"
+          width="44"
+          height="40"
           viewBox="0 0 40 36"
           fill="none"
           aria-hidden="true"

@@ -29,16 +29,16 @@
   appearance: none;
   pointer-events: auto;
   position: fixed;
-  top: 10px;
-  right: 10px;
+  top: 12px;
+  right: 12px;
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--glass-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background:
     linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 100%),
     var(--glass-bg);
@@ -246,11 +246,11 @@
 .panel {
   pointer-events: auto;
   position: fixed;
-  top: 48px;
-  right: 10px;
+  top: 56px;
+  right: 12px;
   z-index: 10;
-  width: 260px;
-  max-height: calc(100vh - 100px);
+  width: 300px;
+  max-height: calc(100vh - 120px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
