@@ -81,27 +81,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [isOpen]);
 
-  // Return focus to streaming iframe when panel closes
-  const prevOpenRef = useRef(isOpen);
-  useEffect(() => {
-    if (prevOpenRef.current && !isOpen) {
-      // Panel just closed — find and refocus the persistent iframe
-      const iframe = document.querySelector<HTMLIFrameElement>(
-        'iframe[title="Pixel Streaming"]',
-      );
-      if (iframe) {
-        requestAnimationFrame(() => {
-          try {
-            iframe.focus();
-          } catch {
-            // cross-origin
-          }
-        });
-      }
-    }
-    prevOpenRef.current = isOpen;
-  }, [isOpen]);
-
   const { handleSlider, resetSliderState } = useSliderSend({ deviceId });
 
   // ── Auto-apply saved settings on device switch ──────────────────────────

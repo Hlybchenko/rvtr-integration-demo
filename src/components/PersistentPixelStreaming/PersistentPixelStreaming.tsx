@@ -62,22 +62,23 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     };
   }, []);
 
-  // Blur → refocus for WebRTC keepalive.
-  // Sidebar elements use onMouseDown={preventDefault} so they never steal
-  // focus. The only elements that legitimately take focus are form controls
-  // inside the UE panel — we skip refocus for those.
+  // Global focus guard — reclaims focus for the iframe whenever it escapes
+  // to a non-interactive element (body, generic div, etc.).
+  // Covers all scenarios: iframe blur, UE panel close, sidebar interactions,
+  // and any other case where focus accidentally leaves the iframe.
+  // Form controls (sliders, inputs, selects) are allowed to keep focus.
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
     let rafId: number | null = null;
 
-    const refocus = () => {
+    const guardFocus = () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         rafId = null;
         const active = document.activeElement;
-        // Let form controls inside UE panel keep focus (sliders, inputs, selects)
+        // Let form controls keep focus (UE panel sliders, inputs, selects)
         if (
           active instanceof HTMLInputElement ||
           active instanceof HTMLTextAreaElement ||
@@ -85,6 +86,8 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
         ) {
           return;
         }
+        // If focus is already on the iframe, nothing to do
+        if (active === iframeRef.current) return;
         try {
           iframeRef.current?.focus();
         } catch {
@@ -93,9 +96,17 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
       });
     };
 
-    iframe.addEventListener('blur', refocus);
+    // focusin: catches focus moving to another element (e.g. sidebar click)
+    document.addEventListener('focusin', guardFocus);
+    // focusout: catches focus leaving a removed element (e.g. UE panel slider
+    // removed from DOM — focus silently falls to <body> without a focusin event)
+    document.addEventListener('focusout', guardFocus);
+    // Also catch iframe blur directly
+    iframe.addEventListener('blur', guardFocus);
     return () => {
-      iframe.removeEventListener('blur', refocus);
+      document.removeEventListener('focusin', guardFocus);
+      document.removeEventListener('focusout', guardFocus);
+      iframe.removeEventListener('blur', guardFocus);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [url, isEmbedBlocked]);
