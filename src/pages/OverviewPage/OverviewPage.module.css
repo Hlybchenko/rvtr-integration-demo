@@ -202,9 +202,10 @@
   border-radius: var(--radius-md);
   outline: none;
   transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    background var(--transition-fast);
+    border-color 200ms ease,
+    box-shadow 250ms ease,
+    background 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
   box-sizing: border-box;
 }
 
@@ -220,7 +221,10 @@
 
 .input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 0 8px color-mix(in srgb, var(--accent) 10%, transparent);
+  transform: translateY(-0.5px);
 }
 
 .inputError {
@@ -270,6 +274,12 @@
 }
 
 /* ── Apply / action button ── */
+@keyframes buttonPressRipple {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent); }
+  50%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
 .applyButton {
   appearance: none;
   align-self: center;
@@ -286,14 +296,23 @@
   font-weight: 600;
   cursor: pointer;
   transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast),
-    color var(--transition-fast),
-    opacity var(--transition-fast);
+    border-color 200ms ease,
+    background 200ms ease,
+    color 200ms ease,
+    opacity 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms ease;
 }
 
 .applyButton:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 16%, transparent);
+  transform: translateY(-1px);
+}
+
+.applyButton:active:not(:disabled) {
+  transform: scale(0.95) translateY(0);
+  animation: buttonPressRipple 400ms ease;
 }
 
 .applyButton:disabled {
@@ -332,14 +351,22 @@
   font-weight: 600;
   cursor: pointer;
   transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast),
-    opacity var(--transition-fast);
+    border-color 200ms ease,
+    background 200ms ease,
+    opacity 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms ease;
 }
 
 .filePathAction:hover:not(:disabled) {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: translateY(-1px);
+}
+
+.filePathAction:active:not(:disabled) {
+  transform: scale(0.95) translateY(0);
 }
 
 .filePathAction:disabled {
@@ -421,6 +448,18 @@
 }
 
 /* Large start button */
+@keyframes startButtonGlow {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 25%, transparent); }
+  50%  { box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+@keyframes successButtonGlow {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 25%, transparent); }
+  50%  { box-shadow: 0 0 0 8px color-mix(in srgb, var(--success) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 0%, transparent); }
+}
+
 .startButtonLarge {
   appearance: none;
   display: inline-flex;
@@ -439,22 +478,23 @@
   color: var(--accent);
   cursor: pointer;
   transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    transform var(--transition-fast),
-    opacity var(--transition-fast);
+    background 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease,
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 200ms ease;
 }
 
 .startButtonLarge:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 26%, var(--glass-bg));
-  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 20%, transparent);
-  transform: translateY(-1px);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 22%, transparent);
+  transform: translateY(-2px) scale(1.02);
 }
 
 .startButtonLarge:active:not(:disabled) {
-  transform: translateY(0);
+  transform: scale(0.96) translateY(0);
+  animation: startButtonGlow 450ms ease;
 }
 
 .startButtonLarge:disabled {
@@ -473,10 +513,20 @@
 
 .startButtonRunning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--success) 18%, var(--glass-bg));
-  box-shadow: 0 0 16px color-mix(in srgb, var(--success) 18%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--success) 20%, transparent);
+}
+
+.startButtonRunning:active:not(:disabled) {
+  animation: successButtonGlow 450ms ease;
 }
 
 /* Large stop button */
+@keyframes dangerButtonGlow {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 30%, transparent); }
+  50%  { box-shadow: 0 0 0 8px color-mix(in srgb, var(--danger) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 0%, transparent); }
+}
+
 .stopButtonLarge {
   appearance: none;
   display: inline-flex;
@@ -492,20 +542,21 @@
   color: var(--danger);
   cursor: pointer;
   transition:
-    background var(--transition-fast),
-    box-shadow var(--transition-fast),
-    transform var(--transition-fast),
-    opacity var(--transition-fast);
+    background 200ms ease,
+    box-shadow 200ms ease,
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 200ms ease;
 }
 
 .stopButtonLarge:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 20%, var(--glass-bg));
-  box-shadow: 0 0 16px color-mix(in srgb, var(--danger) 18%, transparent);
-  transform: translateY(-1px);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--danger) 20%, transparent);
+  transform: translateY(-2px) scale(1.02);
 }
 
 .stopButtonLarge:active:not(:disabled) {
-  transform: translateY(0);
+  transform: scale(0.96) translateY(0);
+  animation: dangerButtonGlow 450ms ease;
 }
 
 .stopButtonLarge:disabled {
@@ -546,8 +597,20 @@
   .processLaunchBar,
   .processStatusDotRunning,
   .badgeRunning::before,
-  .badgeStopped::before {
+  .badgeStopped::before,
+  .applyButton,
+  .startButtonLarge,
+  .stopButtonLarge,
+  .filePathAction {
     animation: none;
+  }
+
+  .applyButton,
+  .startButtonLarge,
+  .stopButtonLarge,
+  .filePathAction,
+  .input {
+    transition: none;
   }
 }
 

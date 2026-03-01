@@ -24,6 +24,262 @@
   border-bottom: 1px solid var(--glass-border);
 }
 
+/* When pinned — reduce logo left padding (no burger overlap) */
+.sidebarPinned .logo {
+  padding-left: 14px;
+}
+
+/* ── Pin button (bottom section) ── */
+.pinButton {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 2px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pinButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.pinLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: color 440ms ease;
+}
+
+.pinned .pinLabel {
+  color: var(--accent);
+}
+
+/* ── Cartoon pin icon — detailed CSS construction with keyframe animations ── */
+
+/* --- Keyframes --- */
+
+/* Whole pin: springy rotate with overshoot + wobble */
+@keyframes pinSlamIn {
+  0%   { transform: rotate(45deg) scale(1); }
+  25%  { transform: rotate(-12deg) scale(1.1); }
+  45%  { transform: rotate(6deg) scale(0.95); }
+  62%  { transform: rotate(-3deg) scale(1.02); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+@keyframes pinYankOut {
+  0%   { transform: rotate(0deg) scale(1); }
+  12%  { transform: rotate(0deg) scale(1.12) translateY(-2px); }
+  30%  { transform: rotate(-15deg) scale(1.05) translateY(-1px); }
+  55%  { transform: rotate(55deg) scale(0.95); }
+  75%  { transform: rotate(40deg) scale(1.04); }
+  100% { transform: rotate(45deg) scale(1); }
+}
+
+/* Head: cartoon squash & stretch */
+@keyframes headSmashIn {
+  0%   { transform: translateX(-50%) scaleY(1) scaleX(1); border-radius: 50%; }
+  20%  { transform: translateX(-50%) scaleY(0.4) scaleX(1.5); border-radius: 40%; }
+  40%  { transform: translateX(-50%) scaleY(1.1) scaleX(0.9); border-radius: 50%; }
+  55%  { transform: translateX(-50%) scaleY(0.55) scaleX(1.3); border-radius: 45%; }
+  72%  { transform: translateX(-50%) scaleY(0.9) scaleX(1.05); border-radius: 50%; }
+  100% { transform: translateX(-50%) scaleY(0.65) scaleX(1.2); border-radius: 45%; }
+}
+
+@keyframes headPopOut {
+  0%   { transform: translateX(-50%) scaleY(0.65) scaleX(1.2); border-radius: 45%; }
+  25%  { transform: translateX(-50%) scaleY(1.25) scaleX(0.8); border-radius: 55%; }
+  50%  { transform: translateX(-50%) scaleY(0.92) scaleX(1.06); border-radius: 50%; }
+  72%  { transform: translateX(-50%) scaleY(1.05) scaleX(0.97); border-radius: 50%; }
+  100% { transform: translateX(-50%) scaleY(1) scaleX(1); border-radius: 50%; }
+}
+
+/* Needle: punchy grow/shrink with overshoot */
+@keyframes needleDriveIn {
+  0%   { height: 10px; }
+  35%  { height: 17px; }
+  55%  { height: 12px; }
+  72%  { height: 15px; }
+  100% { height: 14px; }
+}
+
+@keyframes needlePullOut {
+  0%   { height: 14px; }
+  30%  { height: 7px; }
+  55%  { height: 12px; }
+  75%  { height: 9px; }
+  100% { height: 10px; }
+}
+
+/* Shine: flash across head on pin */
+@keyframes shineFlash {
+  0%   { left: -30%; opacity: 0; }
+  30%  { opacity: 0.9; }
+  100% { left: 130%; opacity: 0; }
+}
+
+/* Shadow: appear/disappear under tip */
+@keyframes shadowFadeIn {
+  0%   { transform: translateX(-50%) scaleX(0) scaleY(0.5); opacity: 0; }
+  50%  { transform: translateX(-50%) scaleX(1.4) scaleY(0.7); opacity: 0.35; }
+  100% { transform: translateX(-50%) scaleX(1) scaleY(0.5); opacity: 0.25; }
+}
+
+@keyframes shadowFadeOut {
+  0%   { transform: translateX(-50%) scaleX(1) scaleY(0.5); opacity: 0.25; }
+  100% { transform: translateX(-50%) scaleX(0) scaleY(0.5); opacity: 0; }
+}
+
+/* Ripple ring burst from tip */
+@keyframes rippleBurst {
+  0%   { transform: translateX(-50%) scale(0); opacity: 0.85; }
+  100% { transform: translateX(-50%) scale(3); opacity: 0; }
+}
+
+/* Alive glow pulse when pinned */
+@keyframes aliveGlow {
+  0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
+  50%      { box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 50%, transparent); }
+}
+
+/* --- Icon wrapper (30x30) --- */
+.pinIconWrap {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  transform: rotate(45deg);
+}
+
+.pinned .pinIconWrap {
+  animation: pinSlamIn 750ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+.pinButton:not(.pinned) .pinIconWrap {
+  animation: pinYankOut 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+/* --- Pin head — round cartoon ball --- */
+.pinHead {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transform: translateX(-50%) scaleY(1) scaleX(1);
+  transform-origin: center bottom;
+  overflow: hidden;
+  transition: background 300ms ease;
+}
+
+.pinned .pinHead {
+  background: var(--accent);
+  animation:
+    headSmashIn 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
+    aliveGlow 2.5s 900ms ease-in-out infinite;
+}
+
+.pinButton:not(.pinned) .pinHead {
+  animation: headPopOut 600ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+/* --- Shine — glossy highlight that sweeps across head --- */
+.pinShine {
+  position: absolute;
+  top: 2px;
+  left: -30%;
+  width: 6px;
+  height: 10px;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 45%,
+    rgba(255, 255, 255, 0.75) 50%,
+    rgba(255, 255, 255, 0.55) 55%,
+    transparent 100%
+  );
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pinned .pinShine {
+  animation: shineFlash 500ms 200ms ease-out both;
+}
+
+/* --- Needle — thick tapered cartoon shaft --- */
+.pinNeedle {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  width: 4px;
+  height: 10px;
+  background: var(--text-secondary);
+  transform: translateX(-50%);
+  clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+  transform-origin: center top;
+  transition: background 300ms ease;
+}
+
+.pinned .pinNeedle {
+  background: var(--accent);
+  animation: needleDriveIn 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+.pinButton:not(.pinned) .pinNeedle {
+  animation: needlePullOut 600ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+/* --- Shadow — soft oval under the tip when pinned --- */
+.pinShadow {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  width: 10px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  transform: translateX(-50%) scaleX(0) scaleY(0.5);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pinned .pinShadow {
+  animation: shadowFadeIn 500ms 200ms ease both;
+}
+
+.pinButton:not(.pinned) .pinShadow {
+  animation: shadowFadeOut 400ms ease both;
+}
+
+/* --- Ripple — ring that bursts from the tip on pin --- */
+.pinRipple {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  transform: translateX(-50%) scale(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pinned .pinRipple {
+  animation: rippleBurst 550ms 280ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
 .logoText {
   font-size: 13px;
   font-weight: 700;
@@ -38,12 +294,34 @@
 }
 
 .nav {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   padding: 12px 10px;
   overflow-y: auto;
+}
+
+/* ── Floating active indicator ── */
+.navIndicator {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border-radius: 10px;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 100%),
+    color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--accent) 10%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  transition:
+    top 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    height 300ms cubic-bezier(0.22, 0.9, 0.25, 1),
+    opacity 250ms ease;
 }
 
 .navLabel {
@@ -55,34 +333,143 @@
   padding: 8px 10px 4px;
 }
 
+/* ── Jelly press keyframe ── */
+@keyframes jellyPress {
+  0%   { transform: scale(1) translateX(var(--jelly-x, 0px)); }
+  30%  { transform: scaleX(1.04) scaleY(0.92) translateX(var(--jelly-x, 0px)); }
+  50%  { transform: scaleX(0.97) scaleY(1.04) translateX(var(--jelly-x, 0px)); }
+  70%  { transform: scaleX(1.015) scaleY(0.985) translateX(var(--jelly-x, 0px)); }
+  100% { transform: scale(1) translateX(var(--jelly-x, 0px)); }
+}
+
 .navLink {
+  --jelly-x: 0px;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
   color: var(--text-secondary);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast),
-    border-color var(--transition-fast);
   border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%),
+    transparent;
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  transition:
+    background 280ms ease,
+    color 200ms ease,
+    border-color 280ms ease,
+    box-shadow 320ms ease,
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    backdrop-filter 280ms ease,
+    -webkit-backdrop-filter 280ms ease;
+}
+
+/* Glossy top-edge shine */
+.navLink::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  border-radius: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.08) 30%,
+    rgba(255,255,255,0.14) 50%,
+    rgba(255,255,255,0.08) 70%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 280ms ease;
+  pointer-events: none;
+}
+
+/* Left accent bar — appears on hover, stays on active */
+.navLink::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 250ms ease;
+  opacity: 0;
 }
 
 .navLink:hover {
-  background: color-mix(in srgb, var(--panel-hover) 78%, transparent);
-  border-color: color-mix(in srgb, var(--border) 78%, transparent);
+  --jelly-x: 4px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.01) 100%),
+    color-mix(in srgb, var(--glass-bg) 80%, transparent);
+  border-color: color-mix(in srgb, var(--glass-border) 90%, var(--accent));
   color: var(--text);
+  transform: translateX(4px);
+  box-shadow:
+    0 2px 10px color-mix(in srgb, var(--accent) 8%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.07);
+  backdrop-filter: blur(8px) saturate(1.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  letter-spacing: 0.3px;
+}
+
+.navLink:hover::after {
+  opacity: 1;
+}
+
+.navLink:hover::before {
+  transform: scaleY(1);
+  opacity: 0.6;
+}
+
+.navLink:active {
+  --jelly-x: 2px;
+  animation: jellyPress 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
 
 .navLinkActive {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: transparent;
   color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.navLinkActive::after {
+  opacity: 0;
+}
+
+.navLinkActive::before {
+  transform: scaleY(1);
+  opacity: 1;
+}
+
+.navLinkActive:hover {
+  --jelly-x: 3px;
+  transform: translateX(3px);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+@keyframes iconWiggle {
+  0%   { transform: scale(1.18) rotate(0deg); }
+  25%  { transform: scale(1.2) rotate(8deg); }
+  50%  { transform: scale(1.15) rotate(-6deg); }
+  75%  { transform: scale(1.2) rotate(3deg); }
+  100% { transform: scale(1.18) rotate(0deg); }
 }
 
 .navIcon {
@@ -90,15 +477,41 @@
   height: 18px;
   flex-shrink: 0;
   opacity: 0.7;
+  filter: drop-shadow(0 0 0 transparent);
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 250ms ease,
+    filter 300ms ease;
+}
+
+.navLink:hover .navIcon {
+  transform: scale(1.18);
+  opacity: 0.9;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 25%, transparent));
+  animation: iconWiggle 600ms 150ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+.navLink:active .navIcon {
+  transform: scale(0.9);
+  animation: none;
 }
 
 .navLinkActive .navIcon {
   opacity: 1;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 18%, transparent));
+}
+
+.navLinkActive:hover .navIcon {
+  animation: iconWiggle 600ms 150ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
 
 .navBottom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-top: auto;
   padding: 12px 8px 8px;
+  border-top: 1px solid var(--glass-border);
 }
 
 .themeRow {
@@ -116,6 +529,91 @@
   color: var(--text-secondary);
 }
 
+/* ── Theme toggle — animated sun/moon ── */
+
+/* --- Theme keyframes --- */
+
+/* Thumb slides with smooth, fluid motion */
+@keyframes thumbSlideToDark {
+  0%   { transform: translateX(26px) rotate(0.5turn) scale(1); }
+  40%  { transform: translateX(2px) rotate(0.08turn) scale(1.06); }
+  70%  { transform: translateX(-1px) rotate(-0.01turn) scale(0.98); }
+  100% { transform: translateX(0) rotate(0turn) scale(1); }
+}
+
+@keyframes thumbSlideToLight {
+  0%   { transform: translateX(0) rotate(0turn) scale(1); }
+  40%  { transform: translateX(24px) rotate(0.4turn) scale(1.06); }
+  70%  { transform: translateX(27px) rotate(0.52turn) scale(0.98); }
+  100% { transform: translateX(26px) rotate(0.5turn) scale(1); }
+}
+
+/* Moon glyph gently rotates into view */
+@keyframes moonAppear {
+  0%   { transform: rotate(15deg) scale(0.5); opacity: 0; }
+  50%  { transform: rotate(-12deg) scale(1.05); opacity: 1; }
+  75%  { transform: rotate(-18deg) scale(0.97); }
+  100% { transform: rotate(-20deg) scale(1); }
+}
+
+/* Sun glyph smoothly grows in */
+@keyframes sunAppear {
+  0%   { transform: rotate(-25deg) scale(0.4); opacity: 0; }
+  50%  { transform: rotate(5deg) scale(1.06); opacity: 1; }
+  75%  { transform: rotate(-2deg) scale(0.97); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+/* Sun rays fade and spin in gracefully */
+@keyframes raysSpinIn {
+  0%   { opacity: 0; transform: scale(0.4) rotate(-60deg); }
+  50%  { opacity: 0.85; transform: scale(1.05) rotate(5deg); }
+  75%  { transform: scale(0.97) rotate(-2deg); }
+  100% { opacity: 0.95; transform: scale(1) rotate(0deg); }
+}
+
+/* Star fades in with gentle pulse */
+@keyframes starTwinkle {
+  0%   { opacity: 0; transform: scale(0) rotate(-15deg); }
+  40%  { opacity: 1; transform: scale(1.12) rotate(5deg); }
+  65%  { transform: scale(0.9) rotate(-2deg); }
+  100% { opacity: 0.92; transform: scale(1) rotate(0deg); }
+}
+
+/* Track background colour breathes on switch */
+@keyframes trackPulseDark {
+  0%   { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+  50%  { background: color-mix(in srgb, #1a1a3e 30%, var(--panel)); }
+  100% { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+}
+
+@keyframes trackPulseLight {
+  0%   { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+  50%  { background: color-mix(in srgb, #ffeebb 25%, var(--panel)); }
+  100% { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+}
+
+/* Track tilts so the thumb "rolls downhill" — jelly squash on tilt */
+@keyframes trackTiltToDark {
+  0%   { transform: rotate(0deg) scaleX(1) scaleY(1); }
+  12%  { transform: rotate(-14deg) scaleX(1.03) scaleY(0.97); }
+  35%  { transform: rotate(-9deg) scaleX(0.985) scaleY(1.015); }
+  55%  { transform: rotate(-4deg) scaleX(1.01) scaleY(0.99); }
+  75%  { transform: rotate(-1deg) scaleX(0.998) scaleY(1.002); }
+  100% { transform: rotate(0deg) scaleX(1) scaleY(1); }
+}
+
+@keyframes trackTiltToLight {
+  0%   { transform: rotate(0deg) scaleX(1) scaleY(1); }
+  12%  { transform: rotate(14deg) scaleX(1.03) scaleY(0.97); }
+  35%  { transform: rotate(9deg) scaleX(0.985) scaleY(1.015); }
+  55%  { transform: rotate(4deg) scaleX(1.01) scaleY(0.99); }
+  75%  { transform: rotate(1deg) scaleX(0.998) scaleY(1.002); }
+  100% { transform: rotate(0deg) scaleX(1) scaleY(1); }
+}
+
+/* --- Theme toggle structure --- */
+
 .themeToggle {
   display: inline-flex;
   align-items: center;
@@ -123,6 +621,7 @@
   padding: 0;
   border: 0;
   background: transparent;
+  cursor: pointer;
 }
 
 .themeToggle:focus-visible {
@@ -131,6 +630,7 @@
   border-radius: 999px;
 }
 
+/* --- Track --- */
 .themeToggleTrack {
   position: relative;
   width: 56px;
@@ -140,11 +640,22 @@
   background: color-mix(in srgb, var(--accent) 14%, var(--panel));
   overflow: hidden;
   flex-shrink: 0;
-  transition:
-    border-color 440ms ease,
-    background 440ms ease;
+  transition: border-color 440ms ease;
 }
 
+.themeToggleDark .themeToggleTrack {
+  animation:
+    trackPulseDark 1400ms ease both,
+    trackTiltToDark 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.themeToggleLight .themeToggleTrack {
+  animation:
+    trackPulseLight 1400ms ease both,
+    trackTiltToLight 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* --- Thumb --- */
 .themeToggleThumb {
   position: absolute;
   left: 3px;
@@ -155,15 +666,12 @@
   background: color-mix(in srgb, var(--accent) 30%, var(--panel-hover));
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   box-shadow: var(--shadow-sm);
-  transform: translateX(0) rotate(0turn);
+  transform: translateX(0) rotate(0turn) scale(1);
   transform-origin: center;
   will-change: transform;
-  transition:
-    transform 700ms cubic-bezier(0.22, 0.9, 0.25, 1),
-    background 440ms ease,
-    border-color 440ms ease;
 }
 
+/* --- Sun rays (::before) --- */
 .themeToggleThumb::before {
   content: '';
   position: absolute;
@@ -174,21 +682,14 @@
     color-mix(in srgb, #ffd75a 68%, transparent) 0deg 9deg,
     transparent 9deg 45deg
   );
-  -webkit-mask-image: radial-gradient(
-    circle,
-    transparent 0 43%,
-    #000 47% 62%,
-    transparent 75%
-  );
+  -webkit-mask-image: radial-gradient(circle, transparent 0 43%, #000 47% 62%, transparent 75%);
   mask-image: radial-gradient(circle, transparent 0 43%, #000 47% 62%, transparent 75%);
   filter: blur(0.35px);
   opacity: 0;
-  transform: scale(0.65) rotate(-20deg);
-  transition:
-    opacity 420ms ease,
-    transform 620ms cubic-bezier(0.22, 0.9, 0.25, 1);
+  transform: scale(0.3) rotate(-90deg);
 }
 
+/* --- Star sparkle (::after) --- */
 .themeToggleThumb::after {
   content: '';
   position: absolute;
@@ -198,22 +699,15 @@
   right: 3px;
   background: #ffd75a;
   clip-path: polygon(
-    50% 0%,
-    62% 38%,
-    100% 50%,
-    62% 62%,
-    50% 100%,
-    38% 62%,
-    0% 50%,
-    38% 38%
+    50% 0%, 62% 38%, 100% 50%, 62% 62%,
+    50% 100%, 38% 62%, 0% 50%, 38% 38%
   );
   box-shadow: 0 0 5px color-mix(in srgb, #ffd75a 45%, transparent);
   opacity: 0;
-  transform: scale(0.65) rotate(8deg);
-  transition:
-    opacity 420ms ease,
-    transform 620ms cubic-bezier(0.22, 0.9, 0.25, 1);
+  transform: scale(0) rotate(-30deg);
 }
+
+/* --- Moon/Sun glyph (morph via mask cutout) --- */
 
 @property --glyph-cutout-x {
   syntax: '<length>';
@@ -243,46 +737,46 @@
   background: #ffd75a;
   -webkit-mask-image: radial-gradient(
     circle var(--glyph-cutout-r) at var(--glyph-cutout-x) var(--glyph-cutout-y),
-    transparent 97%,
-    #000 100%
+    transparent 97%, #000 100%
   );
   mask-image: radial-gradient(
     circle var(--glyph-cutout-r) at var(--glyph-cutout-x) var(--glyph-cutout-y),
-    transparent 97%,
-    #000 100%
+    transparent 97%, #000 100%
   );
   transition:
-    --glyph-cutout-x 620ms cubic-bezier(0.22, 0.9, 0.25, 1),
-    --glyph-cutout-y 620ms cubic-bezier(0.22, 0.9, 0.25, 1),
-    --glyph-cutout-r 620ms cubic-bezier(0.22, 0.9, 0.25, 1),
-    box-shadow 460ms ease,
-    transform 620ms cubic-bezier(0.22, 0.9, 0.25, 1);
+    --glyph-cutout-x 1000ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    --glyph-cutout-y 1000ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    --glyph-cutout-r 1000ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    box-shadow 800ms ease;
 }
 
+/* ─── Dark state (moon + star) ─── */
+
 .themeToggleDark .themeToggleThumb {
-  transform: translateX(0) rotate(0turn);
+  animation: thumbSlideToDark 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
 .themeToggleDark .themeGlyph {
   --glyph-cutout-x: 9px;
   --glyph-cutout-y: 5.5px;
   --glyph-cutout-r: 5.5px;
-  transform: rotate(-20deg) scale(1);
   box-shadow: 0 0 6px color-mix(in srgb, #ffd75a 18%, transparent);
+  animation: moonAppear 1100ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
 .themeToggleDark .themeToggleThumb::before {
   opacity: 0;
-  transform: scale(0.65) rotate(-20deg);
+  transform: scale(0.3) rotate(-90deg);
 }
 
 .themeToggleDark .themeToggleThumb::after {
-  opacity: 0.92;
-  transform: scale(1) rotate(0deg);
+  animation: starTwinkle 900ms 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
+/* ─── Light state (sun + rays) ─── */
+
 .themeToggleLight .themeToggleThumb {
-  transform: translateX(26px) rotate(1turn);
+  animation: thumbSlideToLight 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
   background: color-mix(in srgb, var(--panel-hover) 84%, var(--accent));
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
@@ -291,20 +785,19 @@
   --glyph-cutout-x: 14px;
   --glyph-cutout-y: -4px;
   --glyph-cutout-r: 0px;
-  transform: rotate(0deg) scale(1);
   box-shadow:
     0 0 0 1.5px color-mix(in srgb, #ffd75a 65%, transparent),
     0 0 10px color-mix(in srgb, #ffd75a 30%, transparent);
+  animation: sunAppear 1100ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
 .themeToggleLight .themeToggleThumb::before {
-  opacity: 0.95;
-  transform: scale(1) rotate(0deg);
+  animation: raysSpinIn 1000ms 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
 .themeToggleLight .themeToggleThumb::after {
   opacity: 0;
-  transform: scale(0.65) rotate(8deg);
+  transform: scale(0) rotate(-30deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -313,7 +806,19 @@
   .themeToggleThumb,
   .themeGlyph,
   .themeToggleThumb::before,
-  .themeToggleThumb::after {
+  .themeToggleThumb::after,
+  .pinIconWrap,
+  .pinHead,
+  .pinShine,
+  .pinNeedle,
+  .pinShadow,
+  .pinRipple,
+  .pinLabel,
+  .navLink,
+  .navLink::before,
+  .navLink::after,
+  .navIcon {
+    animation: none;
     transition: none;
   }
 }

@@ -21,7 +21,49 @@
   overflow-x: hidden;
 }
 
+/* ── Page transition ──
+   NOTE: No `transform` here — transforms on ancestors shift
+   getBoundingClientRect() for the PS iframe screen-slot measurement
+   and ResizeObserver won't re-fire when the animation ends.
+   Using opacity + filter only keeps layout coords stable. */
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+
+.pageTransition {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* `backwards` — applies from-keyframe before start, but does NOT persist
+     the to-keyframe filter after completion. `both` would keep filter:blur(0px)
+     which creates a containing block and breaks position:fixed descendants
+     (UeControlPanel trigger, status label). */
+  animation: pageFadeIn 450ms cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+}
+
 /* ── Burger button ── */
+
+@keyframes burgerPopIn {
+  0%   { transform: scale(0.5) rotate(-90deg); opacity: 0; }
+  50%  { transform: scale(1.15) rotate(8deg); opacity: 1; }
+  75%  { transform: scale(0.95) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes burgerPressHover {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  50%  { box-shadow: 0 0 12px 2px color-mix(in srgb, var(--accent) 18%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
 .burger {
   display: flex;
   position: fixed;
@@ -39,8 +81,25 @@
   cursor: pointer;
   align-items: center;
   justify-content: center;
+  animation: burgerPopIn 500ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+.burger:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--glass-bg));
+  transform: scale(1.08);
+}
+
+.burger:active {
+  transform: scale(0.92);
+  animation: burgerPressHover 400ms ease;
+}
+
+/* Lines */
 .burgerLine,
 .burgerLine::before,
 .burgerLine::after {
@@ -48,14 +107,14 @@
   width: 18px;
   height: 2px;
   background: var(--text);
-  border-radius: 1px;
-  transition:
-    transform 280ms cubic-bezier(0.22, 0.9, 0.25, 1),
-    opacity 200ms ease;
+  border-radius: 2px;
 }
 
 .burgerLine {
   position: relative;
+  transition:
+    background 250ms ease,
+    transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .burgerLine::before,
@@ -63,29 +122,38 @@
   content: '';
   position: absolute;
   left: 0;
+  transition:
+    top 300ms cubic-bezier(0.22, 0.9, 0.25, 1),
+    transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    width 300ms cubic-bezier(0.22, 0.9, 0.25, 1),
+    opacity 250ms ease;
 }
 
 .burgerLine::before {
   top: -6px;
+  width: 14px;
 }
 
 .burgerLine::after {
   top: 6px;
+  width: 12px;
 }
 
-/* Animated X state */
+/* Animated X state — lines converge with overshoot rotation */
 .burgerOpen {
   background: transparent;
 }
 
 .burgerOpen::before {
   top: 0;
-  transform: rotate(45deg);
+  width: 18px;
+  transform: rotate(225deg);
 }
 
 .burgerOpen::after {
   top: 0;
-  transform: rotate(-45deg);
+  width: 18px;
+  transform: rotate(-225deg);
 }
 
 /* ── Backdrop ── */
@@ -97,7 +165,7 @@
   background: rgba(0, 0, 0, 0.45);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 280ms ease;
+  transition: opacity 350ms ease;
 }
 
 .backdropVisible {
@@ -107,4 +175,30 @@
 
 .sidebarOpen {
   transform: translateX(0);
+}
+
+/* ── Pinned sidebar (desktop) ── */
+.layoutPinned {
+  /* Shift main content to make room for the fixed sidebar */
+  padding-left: var(--sidebar-width);
+}
+
+.layoutPinned .sidebarOpen {
+  /* When pinned, sidebar is always visible and non-overlapping */
+  box-shadow: none;
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .pageTransition,
+  .burger {
+    animation: none;
+  }
+
+  .burger,
+  .burgerLine,
+  .burgerLine::before,
+  .burgerLine::after {
+    transition: none;
+  }
 }

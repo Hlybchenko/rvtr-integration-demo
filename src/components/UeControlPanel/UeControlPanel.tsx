@@ -21,13 +21,13 @@ import {
 import { useSliderSend } from '@/hooks/useSliderSend';
 import styles from './UeControlPanel.module.css';
 
-/** Slider min/max ranges per camera axis.
- *  Zoom/pan are positional offsets (UE units). Pitch is an angle. */
+/** Slider min/max ranges per camera axis (UI steps).
+ *  `scale` converts a UI step to UE units (offset / angle). */
 const SLIDER_RANGES = {
-  zoom:             { min: -1000, max: 1000 },
-  cameraVertical:   { min: -300,  max: 300  },
-  cameraHorizontal: { min: -300,  max: 300  },
-  cameraPitch:      { min: -45,   max: 45   },
+  zoom:             { min: -20, max: 20, scale: 50   },
+  cameraVertical:   { min: -20, max: 20, scale: 15   },
+  cameraHorizontal: { min: -20, max: 20, scale: 15   },
+  cameraPitch:      { min: -20, max: 20, scale: 2.25 },
 } as const;
 
 interface UeControlPanelProps {
@@ -129,7 +129,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
       if (applyGenRef.current !== gen) return;
       useUeControlStore.getState().setUeCommittedCamera(newCommitted);
     })();
-  }, [deviceId]);
+  }, [deviceId, resetSliderState]);
 
   // ── Toggle handler ────────────────────────────────────────────────────────
 
@@ -181,12 +181,10 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     }
   }, [deviceId, resetSettings, resetSliderState]);
 
-  if (!ueApiUrl) return null;
-
   return (
     <div ref={panelRef} className={styles.wrapper} data-ue-panel>
       {/* Status label — centered at top */}
-      {ueConnected !== null && (
+      {ueApiUrl && ueConnected !== null && (
         <div className={styles.statusLabel}>
           <span
             className={`${styles.statusDot} ${
@@ -199,19 +197,41 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
         </div>
       )}
 
-      {/* Trigger button */}
+      {/* Trigger button — always visible, dimmed when no UE URL */}
       <button
         type="button"
-        className={`${styles.trigger} ${isOpen ? styles.triggerActive : ''}`}
+        className={`${styles.trigger} ${isOpen ? styles.triggerActive : ''} ${!ueApiUrl ? styles.triggerDimmed : ''}`}
         onClick={() => setIsOpen((v) => !v)}
-        title="UE Remote Control"
+        title={ueApiUrl ? 'UE Remote Control' : 'UE Remote Control — set API URL in Settings'}
       >
-        <span className={styles.triggerIcon}>&#9881;</span>
+        <span className={styles.triggerIcon} aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            {/* Horizontal slider tracks */}
+            <line x1="3" y1="6" x2="17" y2="6" strokeWidth="1" opacity="0.3" />
+            <line x1="3" y1="10" x2="17" y2="10" strokeWidth="1" opacity="0.3" />
+            <line x1="3" y1="14" x2="17" y2="14" strokeWidth="1" opacity="0.3" />
+            {/* Slider knobs */}
+            <circle className={styles.knob1} cx="8" cy="6" r="2" />
+            <circle className={styles.knob2} cx="13" cy="10" r="2" />
+            <circle className={styles.knob3} cx="6" cy="14" r="2" />
+            {/* Knob center dots */}
+            <circle cx="8" cy="6" r="0.5" fill="currentColor" stroke="none" opacity="0.5" />
+            <circle cx="13" cy="10" r="0.5" fill="currentColor" stroke="none" opacity="0.5" />
+            <circle cx="6" cy="14" r="0.5" fill="currentColor" stroke="none" opacity="0.5" />
+          </svg>
+        </span>
       </button>
 
       {/* Dropdown panel */}
       {isOpen && (
         <div className={styles.panel}>
+          {!ueApiUrl && (
+            <div className={styles.noUrlHint}>
+              Set <strong>UE API URL</strong> on the{' '}
+              <a href="/" className={styles.noUrlLink}>Settings</a> page to enable controls.
+            </div>
+          )}
+
           {/* ── Camera & Zoom ── */}
           <div className={styles.section}>
             <h3 className={styles.sectionTitle}>Camera</h3>
@@ -224,12 +244,12 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 min={SLIDER_RANGES.zoom.min}
                 max={SLIDER_RANGES.zoom.max}
                 step={1}
-                value={settings.zoom}
+                value={Math.round(settings.zoom / SLIDER_RANGES.zoom.scale)}
                 onChange={(e) =>
-                  handleSlider('zoom', Number(e.target.value))
+                  handleSlider('zoom', Number(e.target.value) * SLIDER_RANGES.zoom.scale)
                 }
               />
-              <span className={styles.controlValue}>{settings.zoom}</span>
+              <span className={styles.controlValue}>{Math.round(settings.zoom / SLIDER_RANGES.zoom.scale)}</span>
             </div>
 
             <div className={styles.controlRow}>
@@ -240,12 +260,12 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 min={SLIDER_RANGES.cameraVertical.min}
                 max={SLIDER_RANGES.cameraVertical.max}
                 step={1}
-                value={settings.cameraVertical}
+                value={Math.round(settings.cameraVertical / SLIDER_RANGES.cameraVertical.scale)}
                 onChange={(e) =>
-                  handleSlider('cameraVertical', Number(e.target.value))
+                  handleSlider('cameraVertical', Number(e.target.value) * SLIDER_RANGES.cameraVertical.scale)
                 }
               />
-              <span className={styles.controlValue}>{settings.cameraVertical}</span>
+              <span className={styles.controlValue}>{Math.round(settings.cameraVertical / SLIDER_RANGES.cameraVertical.scale)}</span>
             </div>
 
             <div className={styles.controlRow}>
@@ -256,12 +276,12 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 min={SLIDER_RANGES.cameraHorizontal.min}
                 max={SLIDER_RANGES.cameraHorizontal.max}
                 step={1}
-                value={settings.cameraHorizontal}
+                value={Math.round(settings.cameraHorizontal / SLIDER_RANGES.cameraHorizontal.scale)}
                 onChange={(e) =>
-                  handleSlider('cameraHorizontal', Number(e.target.value))
+                  handleSlider('cameraHorizontal', Number(e.target.value) * SLIDER_RANGES.cameraHorizontal.scale)
                 }
               />
-              <span className={styles.controlValue}>{settings.cameraHorizontal}</span>
+              <span className={styles.controlValue}>{Math.round(settings.cameraHorizontal / SLIDER_RANGES.cameraHorizontal.scale)}</span>
             </div>
 
             <div className={styles.controlRow}>
@@ -272,12 +292,12 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 min={SLIDER_RANGES.cameraPitch.min}
                 max={SLIDER_RANGES.cameraPitch.max}
                 step={1}
-                value={settings.cameraPitch}
+                value={Math.round(settings.cameraPitch / SLIDER_RANGES.cameraPitch.scale)}
                 onChange={(e) =>
-                  handleSlider('cameraPitch', Number(e.target.value))
+                  handleSlider('cameraPitch', Number(e.target.value) * SLIDER_RANGES.cameraPitch.scale)
                 }
               />
-              <span className={styles.controlValue}>{settings.cameraPitch}</span>
+              <span className={styles.controlValue}>{Math.round(settings.cameraPitch / SLIDER_RANGES.cameraPitch.scale)}</span>
             </div>
           </div>
 
