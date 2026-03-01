@@ -63,38 +63,43 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   }, []);
 
   // Blur → refocus for WebRTC keepalive.
-  // Skip refocus when user interacts with UE control panel or other UI overlays
-  // so that sliders, inputs and buttons work correctly.
+  // Uses a short delay so transient UI clicks (sidebar pin, nav links, theme
+  // toggle) don't permanently steal focus from the stream. Only persistent
+  // interactive elements (inputs, textareas, selects, UE panel controls)
+  // are allowed to keep focus.
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
-    let rafId: number | null = null;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
 
     const refocus = () => {
-      // Cancel any pending rAF to avoid duplicate focus attempts
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        // Don't steal focus from any meaningful UI element (inputs, buttons,
-        // sidebar links, UE panel controls, etc.). Only refocus the iframe
-        // when focus landed on <body> (i.e. nowhere specific).
+      if (timerId !== null) clearTimeout(timerId);
+      timerId = setTimeout(() => {
+        timerId = null;
         const active = document.activeElement;
-        if (active && active !== document.body && active !== iframe) {
+        // Let form controls keep focus (sliders, inputs, selects)
+        if (
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLTextAreaElement ||
+          active instanceof HTMLSelectElement
+        ) {
           return;
         }
+        // Let UE control panel keep focus while open
+        if (active?.closest('[data-ue-panel]')) return;
         try {
           iframeRef.current?.focus();
         } catch {
           // cross-origin — safe to ignore
         }
-      });
+      }, 120);
     };
 
     iframe.addEventListener('blur', refocus);
     return () => {
       iframe.removeEventListener('blur', refocus);
-      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (timerId !== null) clearTimeout(timerId);
     };
   }, [url, isEmbedBlocked]);
 
