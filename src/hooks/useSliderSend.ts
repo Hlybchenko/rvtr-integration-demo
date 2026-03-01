@@ -40,6 +40,18 @@ export function useSliderSend({
   /** True while an HTTP send is in-flight for a given key — prevents concurrent sends */
   const inFlightRef = useRef(new Set<string>());
 
+  // Seed baselines from current store values on mount / device switch.
+  // Without this, persisted non-zero values cause all deltas to use baseline 0,
+  // making both slider directions send the same-sign offset.
+  useEffect(() => {
+    const settings = useUeControlStore.getState().deviceSettings[deviceId];
+    if (!settings) return;
+    sentValueRef.current.set('zoom', settings.zoom);
+    sentValueRef.current.set('cameraVertical', settings.cameraVertical);
+    sentValueRef.current.set('cameraHorizontal', settings.cameraHorizontal);
+    sentValueRef.current.set('cameraPitch', settings.cameraPitch);
+  }, [deviceId]);
+
   // Clean up all pending timers on unmount.
   useEffect(() => {
     const timers = sliderTimersRef.current;
