@@ -322,8 +322,9 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         </NavLink>
 
         <span className={styles.navLabel}>Devices</span>
+        {/* DEBUG: hide phone/laptop to isolate focus issue */}
         {devices
-          .filter((d) => d.id !== 'fullscreen')
+          .filter((d) => d.id !== 'fullscreen' && d.id !== 'phone' && d.id !== 'laptop')
           .map((device) => (
             <NavLink
               key={device.id}
