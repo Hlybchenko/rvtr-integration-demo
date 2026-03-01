@@ -65,10 +65,10 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const shouldShow = isVisible && !!viewport;
 
   // ── Focus guard ────────────────────────────────────────────────────────
-  // Polling-only approach: every 200ms, if the streaming page is active and
-  // focus isn't on an interactive control (input/button/select), reclaim it
-  // for the iframe.  No global mousedown/mouseup/change interception — those
-  // caused regressions (broken Browse buttons, potential Settings interference).
+  // Polling-only: every 200ms reclaim focus for the iframe unless the user
+  // is actively typing in a text field or has a <select> dropdown open.
+  // Sliders, checkboxes, radio buttons, and regular buttons are NOT
+  // protected — polling reclaims from them within 200ms after interaction.
   const shouldShowRef = useRef(shouldShow);
   shouldShowRef.current = shouldShow;
 
@@ -76,17 +76,16 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
-    const isInteractive = (el: Element | null): boolean =>
-      el instanceof HTMLInputElement ||
+    const isTyping = (el: Element | null): boolean =>
+      (el instanceof HTMLInputElement &&
+        /^(text|url|email|password|search|tel|number)$/.test(el.type)) ||
       el instanceof HTMLTextAreaElement ||
-      el instanceof HTMLSelectElement ||
-      el instanceof HTMLButtonElement ||
-      (el instanceof HTMLElement && el.closest('button') !== null);
+      el instanceof HTMLSelectElement;
 
     const poll = () => {
       if (!shouldShowRef.current) return;
       if (document.activeElement === iframe) return;
-      if (isInteractive(document.activeElement)) return;
+      if (isTyping(document.activeElement)) return;
       try { iframe.focus(); } catch { /* cross-origin */ }
     };
     const pollId = window.setInterval(poll, 200);
