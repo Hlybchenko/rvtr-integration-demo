@@ -409,8 +409,7 @@ export function OverviewPage() {
         </div>
       )}
 
-      {/* DEBUG: hide all inputs to isolate focus issue */}
-      <div className={styles.form} style={{ display: 'none' }}>
+      <div className={styles.form}>
         {/* -- Left column: Process + Agent Provider -- */}
         <div className={styles.column}>
           {/* -- Process (License + Executable) -- */}
@@ -713,8 +712,7 @@ export function OverviewPage() {
         </div>
       </div>
 
-      {/* DEBUG: hide process bar to isolate focus issue */}
-      <div className={styles.processLaunchBar} style={{ display: 'none' }}>
+      <div className={styles.processLaunchBar}>
         <div className={styles.processLaunchActions}>
           {processRunning ? (
             <button
