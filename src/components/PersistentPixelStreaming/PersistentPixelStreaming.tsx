@@ -102,7 +102,17 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     };
     document.addEventListener('mousedown', blockFocusTheft, true);
 
-    // (2) Polling fallback — catches silent focus loss (DOM removal,
+    // (2) Reclaim focus after form control interaction ends (mouseup).
+    // Without this, releasing a slider leaves focus on the <input> and
+    // polling (which exempts form controls) never reclaims it.
+    const reclaimOnRelease = (e: MouseEvent) => {
+      if (isFormControl(e.target)) {
+        try { iframe.focus(); } catch { /* cross-origin */ }
+      }
+    };
+    document.addEventListener('mouseup', reclaimOnRelease, true);
+
+    // (3) Polling fallback — catches silent focus loss (DOM removal,
     // Tab navigation, programmatic focus, etc.)
     const reclaimFocus = () => {
       if (isFormControl(document.activeElement)) return;
@@ -111,11 +121,12 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     };
     const pollId = window.setInterval(reclaimFocus, 200);
 
-    // (3) Initial focus
+    // (4) Initial focus
     reclaimFocus();
 
     return () => {
       document.removeEventListener('mousedown', blockFocusTheft, true);
+      document.removeEventListener('mouseup', reclaimOnRelease, true);
       window.clearInterval(pollId);
     };
   }, [url, isEmbedBlocked, shouldShow]);
