@@ -64,27 +64,11 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
 
   const shouldShow = isVisible && !!viewport;
 
-  // ── Focus lock ─────────────────────────────────────────────────────────
-  // Keeps keyboard focus on the PS iframe so keystrokes reach the stream.
-  //
-  // Architecture: listeners and polling are registered ONCE when the iframe
-  // mounts and stay active for the component's lifetime.  `shouldShowRef`
-  // is read inside callbacks to decide whether to act — this avoids the
-  // React effect-batching problem where rapid hide()/show() calls cause
-  // React to see shouldShow: true→true and skip effect re-runs.
-  //
-  //   1. mousedown capture — preventDefault() on every click that isn't
-  //      a form control (input/textarea/select). Only active when
-  //      shouldShowRef is true so non-streaming pages work normally.
-  //
-  //   2. mouseup capture — after releasing a form control (checkbox click),
-  //      returns focus to iframe. <select> exempted: dropdown still open.
-  //
-  //   3. change event — reclaims focus after <select> value change
-  //      (dropdown closes) or checkbox toggle.
-  //
-  //   4. Polling (200ms) — safety net for silent focus loss: React DOM
-  //      removal, Tab navigation, programmatic .focus() calls.
+  // ── Focus guard ────────────────────────────────────────────────────────
+  // Polling-only approach: every 200ms, if the streaming page is active and
+  // focus isn't on an interactive control (input/button/select), reclaim it
+  // for the iframe.  No global mousedown/mouseup/change interception — those
+  // caused regressions (broken Browse buttons, potential Settings interference).
   const shouldShowRef = useRef(shouldShow);
   shouldShowRef.current = shouldShow;
 
@@ -92,60 +76,24 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
-    const isInteractive = (el: EventTarget | null): boolean =>
+    const isInteractive = (el: Element | null): boolean =>
       el instanceof HTMLInputElement ||
       el instanceof HTMLTextAreaElement ||
       el instanceof HTMLSelectElement ||
       el instanceof HTMLButtonElement ||
       (el instanceof HTMLElement && el.closest('button') !== null);
 
-    const focusIframe = () => {
-      try { iframe.focus(); } catch { /* cross-origin */ }
-    };
-
-    // (1) Prevent focus theft — only when streaming page is active
-    const onMouseDown = (e: MouseEvent) => {
-      if (!shouldShowRef.current) return;
-      if (isInteractive(e.target)) return;
-      e.preventDefault();
-    };
-    document.addEventListener('mousedown', onMouseDown, true);
-
-    // (2) Reclaim after form control interaction ends
-    const onMouseUp = (e: MouseEvent) => {
-      if (!shouldShowRef.current) return;
-      if (!isInteractive(e.target)) return;
-      if (e.target instanceof HTMLSelectElement) return;
-      requestAnimationFrame(focusIframe);
-    };
-    document.addEventListener('mouseup', onMouseUp, true);
-
-    // (3) Reclaim after <select> change / checkbox toggle
-    const onChange = (e: Event) => {
-      if (!shouldShowRef.current) return;
-      if (!isInteractive(e.target)) return;
-      requestAnimationFrame(focusIframe);
-    };
-    document.addEventListener('change', onChange);
-
-    // (4) Polling safety net
     const poll = () => {
       if (!shouldShowRef.current) return;
-      if (isInteractive(document.activeElement)) return;
       if (document.activeElement === iframe) return;
-      focusIframe();
+      if (isInteractive(document.activeElement)) return;
+      try { iframe.focus(); } catch { /* cross-origin */ }
     };
     const pollId = window.setInterval(poll, 200);
-
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown, true);
-      document.removeEventListener('mouseup', onMouseUp, true);
-      document.removeEventListener('change', onChange);
-      window.clearInterval(pollId);
-    };
+    return () => window.clearInterval(pollId);
   }, [url, isEmbedBlocked]);
 
-  // Focus grab when shouldShow transitions to true (page switch).
+  // Immediate focus grab when streaming page becomes visible.
   useEffect(() => {
     if (!shouldShow) return;
     const iframe = iframeRef.current;
