@@ -10,7 +10,9 @@ const DESKTOP_MQ = '(min-width: 1100px)';
 
 function resolveInitialPin(): boolean {
   if (!window.matchMedia(DESKTOP_MQ).matches) return false;
-  return window.localStorage.getItem(PIN_STORAGE_KEY) === '1';
+  const stored = window.localStorage.getItem(PIN_STORAGE_KEY);
+  // Default to pinned on first visit (no stored preference)
+  return stored === null || stored === '1';
 }
 
 /**
@@ -44,12 +46,6 @@ export function AppShell() {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
-
-  // Close sidebar on route change (unless pinned)
-  useEffect(() => {
-    if (!pinned) setSidebarOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
 
   const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
