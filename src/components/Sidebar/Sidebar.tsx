@@ -62,6 +62,10 @@ interface SidebarProps {
   onTogglePin?: () => void;
 }
 
+/** Prevent mousedown from stealing focus from the PS iframe.
+ *  Click events still fire; keyboard Tab navigation is unaffected. */
+const preventFocusSteal = (e: React.MouseEvent) => e.preventDefault();
+
 export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const navRef = useRef<HTMLElement>(null);
@@ -308,6 +312,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         <NavLink
           to="/"
           end
+          onMouseDown={preventFocusSteal}
           className={({ isActive }) =>
             `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
           }
@@ -323,6 +328,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
             <NavLink
               key={device.id}
               to={`/${device.id}`}
+              onMouseDown={preventFocusSteal}
               className={({ isActive }) =>
                 `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
               }
@@ -335,6 +341,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         <span className={styles.navLabel}>Display</span>
         <NavLink
           to="/fullscreen"
+          onMouseDown={preventFocusSteal}
           className={({ isActive }) =>
             `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
           }
@@ -348,6 +355,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
             <button
               type="button"
               className={`${styles.pinButton} ${pinned ? styles.pinned : ''}`}
+              onMouseDown={preventFocusSteal}
               onClick={onTogglePin}
               aria-label={pinned ? 'Unpin sidebar' : 'Pin sidebar'}
               aria-pressed={pinned}
@@ -370,6 +378,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
             <button
               type="button"
               className={`${styles.themeToggle} ${theme === 'light' ? styles.themeToggleLight : styles.themeToggleDark}`}
+              onMouseDown={preventFocusSteal}
               onClick={() => switchTheme(theme === 'dark' ? 'light' : 'dark')}
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
               aria-pressed={theme === 'light'}

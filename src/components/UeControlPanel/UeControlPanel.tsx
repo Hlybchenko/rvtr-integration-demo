@@ -203,6 +203,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
       <button
         type="button"
         className={`${styles.trigger} ${isOpen ? styles.triggerActive : ''} ${!ueApiUrl ? styles.triggerDimmed : ''}`}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => setIsOpen((v) => !v)}
         title={ueApiUrl ? 'UE Remote Control' : 'UE Remote Control — set API URL in Settings'}
       >

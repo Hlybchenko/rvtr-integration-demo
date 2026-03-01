@@ -63,22 +63,21 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   }, []);
 
   // Blur → refocus for WebRTC keepalive.
-  // Uses a short delay so transient UI clicks (sidebar pin, nav links, theme
-  // toggle) don't permanently steal focus from the stream. Only persistent
-  // interactive elements (inputs, textareas, selects, UE panel controls)
-  // are allowed to keep focus.
+  // Sidebar elements use onMouseDown={preventDefault} so they never steal
+  // focus. The only elements that legitimately take focus are form controls
+  // inside the UE panel — we skip refocus for those.
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
-    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let rafId: number | null = null;
 
     const refocus = () => {
-      if (timerId !== null) clearTimeout(timerId);
-      timerId = setTimeout(() => {
-        timerId = null;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
         const active = document.activeElement;
-        // Let form controls keep focus (sliders, inputs, selects)
+        // Let form controls inside UE panel keep focus (sliders, inputs, selects)
         if (
           active instanceof HTMLInputElement ||
           active instanceof HTMLTextAreaElement ||
@@ -86,20 +85,18 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
         ) {
           return;
         }
-        // Let UE control panel keep focus while open
-        if (active?.closest('[data-ue-panel]')) return;
         try {
           iframeRef.current?.focus();
         } catch {
           // cross-origin — safe to ignore
         }
-      }, 120);
+      });
     };
 
     iframe.addEventListener('blur', refocus);
     return () => {
       iframe.removeEventListener('blur', refocus);
-      if (timerId !== null) clearTimeout(timerId);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [url, isEmbedBlocked]);
 
