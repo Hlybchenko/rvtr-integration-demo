@@ -146,10 +146,10 @@
   100% { transform: translateX(-50%) scale(3); opacity: 0; }
 }
 
-/* Alive glow pulse when pinned */
+/* Alive glow pulse when pinned (opacity-only, no box-shadow repaint) */
 @keyframes aliveGlow {
-  0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
-  50%      { box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 50%, transparent); }
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
 }
 
 /* --- Icon wrapper (30x30) --- */
@@ -406,7 +406,6 @@
   animation:
     logoTextShimmer 8s ease-in-out infinite,
     logoTextGlow 12s ease-in-out infinite;
-  will-change: background-position, filter;
 }
 
 @keyframes logoSubGlow {
@@ -477,10 +476,10 @@
   100% { transform: scaleY(1); }
 }
 
-/* Active bar alive pulse — gentle glow breath */
+/* Active bar alive pulse — gentle glow breath (opacity-only, no box-shadow repaint) */
 @keyframes accentBarPulse {
-  0%, 100% { box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent); }
-  50%      { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 3px var(--accent); }
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
 }
 
 /* Metallic edge sweep on hover */

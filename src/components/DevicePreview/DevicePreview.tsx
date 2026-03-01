@@ -464,7 +464,8 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                   <path className={styles.loaderPrismOuter} d="M11.5 6.3 H28.5 L20 23.5 Z" stroke="url(#ldEdge)" strokeWidth="1.1" strokeLinejoin="round" fill="none" />
                   <path className={styles.loaderEdgeInner} d="M28.5 6.3 L20 12.5 L11.5 6.3 M20 12.5 L20 23.5" stroke="url(#ldEdge)" strokeWidth="0.6" fill="none" opacity="0.5" />
                 </svg>
-                {/* Orbiting arrows — rotate around prism bottom vertex (20, 23.5) */}
+                {/* Orbit wrapper rotates; inner SVG breathes scale */}
+                <div className={styles.loaderArrowsOrbit}>
                 <svg className={styles.loaderArrows} width="44" height="40" viewBox="0 0 40 36" fill="none" overflow="visible">
                   <defs>
                     <linearGradient id="ldArrow" x1="0" y1="0" x2="1" y2="1">
@@ -480,6 +481,7 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
                   <path d="M16 -8 L20 -14 L24 -8" stroke="url(#ldArrow)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" transform="rotate(120 20 12)" />
                   <path d="M16 -8 L20 -14 L24 -8" stroke="url(#ldArrow)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" transform="rotate(240 20 12)" />
                 </svg>
+                </div>
               </div>
               <div className={styles.loaderTextWrap}>
                 {'Preparing preview'.split('').map((ch, i) => (
