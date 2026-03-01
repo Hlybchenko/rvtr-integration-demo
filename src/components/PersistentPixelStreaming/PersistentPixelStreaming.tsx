@@ -67,33 +67,43 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   // ── Focus lock ─────────────────────────────────────────────────────────
   // Keeps keyboard focus on the PS iframe so keystrokes reach the stream.
   //
-  //   1. mousedown capture — preventDefault() on every click that isn't
-  //      a form control (input/textarea/select). Blocks empty-space,
-  //      buttons, links, etc. from stealing focus.
+  // Architecture: listeners and polling are registered ONCE when the iframe
+  // mounts and stay active for the component's lifetime.  `shouldShowRef`
+  // is read inside callbacks to decide whether to act — this avoids the
+  // React effect-batching problem where rapid hide()/show() calls cause
+  // React to see shouldShow: true→true and skip effect re-runs.
   //
-  //   2. mouseup capture — after releasing a form control (slider drag
-  //      end, checkbox click), returns focus to iframe. Without this,
-  //      focus stays stuck on the control because polling exempts them.
-  //      <select> exempted: dropdown may still be open at mouseup time.
+  //   1. mousedown capture — preventDefault() on every click that isn't
+  //      a form control (input/textarea/select). Only active when
+  //      shouldShowRef is true so non-streaming pages work normally.
+  //
+  //   2. mouseup capture — after releasing a form control (checkbox click),
+  //      returns focus to iframe. <select> exempted: dropdown still open.
   //
   //   3. change event — reclaims focus after <select> value change
   //      (dropdown closes) or checkbox toggle.
   //
   //   4. Polling (200ms) — safety net for silent focus loss: React DOM
   //      removal, Tab navigation, programmatic .focus() calls.
-  //
-  // Active only when shouldShow is true. Cleaned up on non-device pages.
+  const shouldShowRef = useRef(shouldShow);
+  shouldShowRef.current = shouldShow;
+
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (!iframe || !url || isEmbedBlocked || !shouldShow) return;
+    if (!iframe || !url || isEmbedBlocked) return;
 
     const isFormControl = (el: EventTarget | null): boolean =>
       el instanceof HTMLInputElement ||
       el instanceof HTMLTextAreaElement ||
       el instanceof HTMLSelectElement;
 
-    // (1) Prevent focus theft — exempt form controls so sliders work
+    const focusIframe = () => {
+      try { iframe.focus(); } catch { /* cross-origin */ }
+    };
+
+    // (1) Prevent focus theft — only when streaming page is active
     const onMouseDown = (e: MouseEvent) => {
+      if (!shouldShowRef.current) return;
       if (isFormControl(e.target)) return;
       e.preventDefault();
     };
@@ -101,33 +111,29 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
 
     // (2) Reclaim after form control interaction ends
     const onMouseUp = (e: MouseEvent) => {
+      if (!shouldShowRef.current) return;
       if (!isFormControl(e.target)) return;
       if (e.target instanceof HTMLSelectElement) return;
-      requestAnimationFrame(() => {
-        try { iframe.focus(); } catch { /* cross-origin */ }
-      });
+      requestAnimationFrame(focusIframe);
     };
     document.addEventListener('mouseup', onMouseUp, true);
 
     // (3) Reclaim after <select> change / checkbox toggle
     const onChange = (e: Event) => {
+      if (!shouldShowRef.current) return;
       if (!isFormControl(e.target)) return;
-      requestAnimationFrame(() => {
-        try { iframe.focus(); } catch { /* cross-origin */ }
-      });
+      requestAnimationFrame(focusIframe);
     };
     document.addEventListener('change', onChange);
 
     // (4) Polling safety net
     const poll = () => {
+      if (!shouldShowRef.current) return;
       if (isFormControl(document.activeElement)) return;
       if (document.activeElement === iframe) return;
-      try { iframe.focus(); } catch { /* cross-origin */ }
+      focusIframe();
     };
     const pollId = window.setInterval(poll, 200);
-
-    // Initial focus
-    poll();
 
     return () => {
       document.removeEventListener('mousedown', onMouseDown, true);
@@ -135,7 +141,19 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
       document.removeEventListener('change', onChange);
       window.clearInterval(pollId);
     };
-  }, [url, isEmbedBlocked, shouldShow]);
+  }, [url, isEmbedBlocked]);
+
+  // Explicit focus grab whenever shouldShow transitions to true.
+  // Deferred by one frame so the browser processes visibility/z-index first.
+  useEffect(() => {
+    if (!shouldShow) return;
+    const iframe = iframeRef.current;
+    if (!iframe || isEmbedBlocked) return;
+    const id = requestAnimationFrame(() => {
+      try { iframe.focus(); } catch { /* cross-origin */ }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [shouldShow, isEmbedBlocked]);
 
   const handleLoad = useCallback(() => {
     const iframe = iframeRef.current;
@@ -202,6 +220,11 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   // the rounded clip + overflow:hidden forces the browser to recomposite the
   // WebRTC video layer, which freezes the stream (observed on keba-kiosk).
   // The device frame image (z-index 2) visually masks the corners anyway.
+  //
+  // IMPORTANT: we never use visibility:hidden — Chrome silently ignores
+  // .focus() on hidden elements, which breaks the focus guard after
+  // rapid page switching.  Instead, z-index:-1 puts the iframe behind
+  // the page content while keeping it focusable.
   const wrapperStyle = useMemo<CSSProperties>(
     () =>
       viewport
@@ -212,10 +235,9 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
             width: viewport.width,
             height: viewport.height,
             overflow: 'hidden',
-            zIndex: 3,
+            zIndex: shouldShow && !loading ? 3 : -1,
             background: '#0a0c14',
             pointerEvents: shouldShow ? 'auto' : 'none',
-            visibility: shouldShow && !loading ? 'visible' : 'hidden',
           }
         : {
             position: 'fixed',
