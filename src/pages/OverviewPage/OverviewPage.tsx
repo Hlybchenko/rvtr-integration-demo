@@ -368,9 +368,7 @@ export function OverviewPage() {
     setProcessError(null);
 
     try {
-      const result = processRunning
-        ? await restartProcess()
-        : await startProcess(storeExePath);
+      const result = await startProcess(storeExePath);
 
       if (!result.ok) {
         setProcessError(result.error ?? 'Failed to start process');
@@ -380,7 +378,7 @@ export function OverviewPage() {
     } finally {
       setIsStartingProcess(false);
     }
-  }, [isExeConfigured, processRunning, storeExePath]);
+  }, [isExeConfigured, storeExePath]);
 
   const handleStopProcess = useCallback(async () => {
     setIsStartingProcess(true);
@@ -523,45 +521,6 @@ export function OverviewPage() {
               </div>
             </div>
 
-            {/* Process status bar + actions */}
-            <div className={styles.processStatusBar}>
-              <div className={styles.processStatusInfo}>
-                <span
-                  className={`${styles.processStatusDot} ${
-                    processRunning ? styles.processStatusDotRunning : styles.processStatusDotStopped
-                  }`}
-                />
-                <span className={`${styles.processStatusText} ${processRunning ? styles.processStatusTextRunning : ''}`}>
-                  {processRunning ? 'Running' : isExeConfigured ? 'Not running — click Start' : 'Configure executable to start'}
-                </span>
-              </div>
-              <div className={styles.processActions}>
-                {processRunning && (
-                  <button
-                    type="button"
-                    className={styles.stopButton}
-                    onClick={() => void handleStopProcess()}
-                    disabled={isStartingProcess}
-                  >
-                    Stop
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className={styles.applyButton}
-                  onClick={() => void handleStartProcess()}
-                  disabled={!isExeConfigured || isStartingProcess}
-                >
-                  {isStartingProcess
-                    ? 'Starting...'
-                    : processRunning
-                      ? 'Restart'
-                      : 'Start'}
-                </button>
-              </div>
-            </div>
-
-            {processError && <p className={styles.filePathValidationError}>{processError}</p>}
           </section>
 
           {/* -- Agent Provider -- */}
@@ -697,10 +656,10 @@ export function OverviewPage() {
                   </span>
                 )}
                 {psReachable === true && psAllGood && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Reachable</span>
+                  <span className={`${styles.badge} ${styles.badgeRunning}`}>Reachable</span>
                 )}
                 {psReachable === false && psAllGood && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>○ Not responding</span>
+                  <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
                 )}
               </div>
               <input
@@ -733,10 +692,10 @@ export function OverviewPage() {
                   </span>
                 )}
                 {ueReachable === true && ueApiUrl && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>● Reachable</span>
+                  <span className={`${styles.badge} ${styles.badgeRunning}`}>Reachable</span>
                 )}
                 {ueReachable === false && ueApiUrl && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>○ Not responding</span>
+                  <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
                 )}
               </div>
               <input
@@ -762,6 +721,35 @@ export function OverviewPage() {
           </section>
         </div>
       </div>
+
+      {/* -- Process launch bar (full width, below columns) -- */}
+      <div className={styles.processLaunchBar}>
+        <div className={styles.processLaunchActions}>
+          {processRunning ? (
+            <button
+              type="button"
+              className={styles.stopButtonLarge}
+              onClick={() => void handleStopProcess()}
+              disabled={isStartingProcess}
+            >
+              {isStartingProcess ? 'Stopping...' : 'Stop'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.startButtonLarge}
+              onClick={() => void handleStartProcess()}
+              disabled={!isExeConfigured || isStartingProcess}
+            >
+              {isStartingProcess ? 'Starting...' : 'Start'}
+            </button>
+          )}
+        </div>
+        <span className={`${styles.processHint} ${processRunning ? styles.processHintRunning : ''}`}>
+          {processRunning ? 'Process is running' : isExeConfigured ? 'Ready to launch' : 'Configure executable to start'}
+        </span>
+      </div>
+      {processError && <p className={styles.filePathValidationError}>{processError}</p>}
     </div>
   );
 }
