@@ -30,6 +30,68 @@ const SLIDER_RANGES = {
   cameraPitch:      { min: -20, max: 20, scale: 2.25 },
 } as const;
 
+// ── Focus-free slider ──────────────────────────────────────────────────
+// Uses <div> instead of <input type="range"> so it never enters the
+// browser focus system. The global mousedown capture handler in
+// PersistentPixelStreaming calls preventDefault() on non-form-control
+// elements, which blocks focus theft WITHOUT blocking our mouse events.
+// Result: slider drags work perfectly while focus stays on the iframe.
+
+interface DivSliderProps {
+  min: number;
+  max: number;
+  value: number;
+  onChange: (value: number) => void;
+}
+
+function DivSlider({ min, max, value, onChange }: DivSliderProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const rangeRef = useRef({ min, max });
+  rangeRef.current = { min, max };
+
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const track = trackRef.current;
+    if (!track) return;
+
+    const calc = (clientX: number): number => {
+      const { min: mn, max: mx } = rangeRef.current;
+      const rect = track.getBoundingClientRect();
+      const r = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      return Math.round(mn + r * (mx - mn));
+    };
+
+    setDragging(true);
+    onChangeRef.current(calc(e.clientX));
+
+    const onMove = (ev: MouseEvent) => onChangeRef.current(calc(ev.clientX));
+    const onUp = () => {
+      setDragging(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  return (
+    <div
+      ref={trackRef}
+      className={`${styles.sliderTrack} ${dragging ? styles.sliderTrackActive : ''}`}
+      onMouseDown={handleMouseDown}
+    >
+      <div
+        className={`${styles.sliderThumb} ${dragging ? styles.sliderThumbActive : ''}`}
+        style={{ left: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 interface UeControlPanelProps {
   deviceId: string;
 }
@@ -208,64 +270,44 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
             <div className={styles.controlRow}>
               <span className={styles.controlLabel}>Zoom</span>
-              <input
-                type="range"
-                className={styles.slider}
+              <DivSlider
                 min={SLIDER_RANGES.zoom.min}
                 max={SLIDER_RANGES.zoom.max}
-                step={1}
                 value={Math.round(settings.zoom / SLIDER_RANGES.zoom.scale)}
-                onChange={(e) =>
-                  handleSlider('zoom', Number(e.target.value) * SLIDER_RANGES.zoom.scale)
-                }
+                onChange={(v) => handleSlider('zoom', v * SLIDER_RANGES.zoom.scale)}
               />
               <span className={styles.controlValue}>{Math.round(settings.zoom / SLIDER_RANGES.zoom.scale)}</span>
             </div>
 
             <div className={styles.controlRow}>
               <span className={styles.controlLabel}>Vertical</span>
-              <input
-                type="range"
-                className={styles.slider}
+              <DivSlider
                 min={SLIDER_RANGES.cameraVertical.min}
                 max={SLIDER_RANGES.cameraVertical.max}
-                step={1}
                 value={Math.round(settings.cameraVertical / SLIDER_RANGES.cameraVertical.scale)}
-                onChange={(e) =>
-                  handleSlider('cameraVertical', Number(e.target.value) * SLIDER_RANGES.cameraVertical.scale)
-                }
+                onChange={(v) => handleSlider('cameraVertical', v * SLIDER_RANGES.cameraVertical.scale)}
               />
               <span className={styles.controlValue}>{Math.round(settings.cameraVertical / SLIDER_RANGES.cameraVertical.scale)}</span>
             </div>
 
             <div className={styles.controlRow}>
               <span className={styles.controlLabel}>Horizontal</span>
-              <input
-                type="range"
-                className={styles.slider}
+              <DivSlider
                 min={SLIDER_RANGES.cameraHorizontal.min}
                 max={SLIDER_RANGES.cameraHorizontal.max}
-                step={1}
                 value={Math.round(settings.cameraHorizontal / SLIDER_RANGES.cameraHorizontal.scale)}
-                onChange={(e) =>
-                  handleSlider('cameraHorizontal', Number(e.target.value) * SLIDER_RANGES.cameraHorizontal.scale)
-                }
+                onChange={(v) => handleSlider('cameraHorizontal', v * SLIDER_RANGES.cameraHorizontal.scale)}
               />
               <span className={styles.controlValue}>{Math.round(settings.cameraHorizontal / SLIDER_RANGES.cameraHorizontal.scale)}</span>
             </div>
 
             <div className={styles.controlRow}>
               <span className={styles.controlLabel}>Pitch</span>
-              <input
-                type="range"
-                className={styles.slider}
+              <DivSlider
                 min={SLIDER_RANGES.cameraPitch.min}
                 max={SLIDER_RANGES.cameraPitch.max}
-                step={1}
                 value={Math.round(settings.cameraPitch / SLIDER_RANGES.cameraPitch.scale)}
-                onChange={(e) =>
-                  handleSlider('cameraPitch', Number(e.target.value) * SLIDER_RANGES.cameraPitch.scale)
-                }
+                onChange={(v) => handleSlider('cameraPitch', v * SLIDER_RANGES.cameraPitch.scale)}
               />
               <span className={styles.controlValue}>{Math.round(settings.cameraPitch / SLIDER_RANGES.cameraPitch.scale)}</span>
             </div>
