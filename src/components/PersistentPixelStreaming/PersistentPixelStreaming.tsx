@@ -159,6 +159,21 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   }, [url]);
 
   const shouldShow = isVisible && !!viewport;
+
+  // Focus iframe when it becomes visible (e.g. navigating to a device page).
+  // onLoad only fires once on initial load; subsequent show/hide via isVisible
+  // needs an explicit focus call for keyboard events to reach the iframe.
+  useEffect(() => {
+    if (shouldShow && !loading && !isEmbedBlocked) {
+      requestAnimationFrame(() => {
+        try {
+          iframeRef.current?.focus();
+        } catch {
+          // cross-origin
+        }
+      });
+    }
+  }, [shouldShow, loading, isEmbedBlocked]);
   const resolvedSandbox = SANDBOX === 'none' ? undefined : SANDBOX;
 
   // Wrapper handles positioning only.
