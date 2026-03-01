@@ -135,7 +135,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
       if (document.activeElement === iframe) return;
       focusIframe();
     };
-    const pollId = window.setInterval(poll, 100);
+    const pollId = window.setInterval(poll, 200);
 
     return () => {
       document.removeEventListener('mousedown', onMouseDown, true);
@@ -145,16 +145,15 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     };
   }, [url, isEmbedBlocked]);
 
-  // Aggressive focus grab whenever shouldShow transitions to true.
-  // Multiple attempts cover page-transition timing, animations, and the
-  // case where an input on a previous page held focus until unmount.
+  // Focus grab when shouldShow transitions to true (page switch).
   useEffect(() => {
     if (!shouldShow) return;
     const iframe = iframeRef.current;
     if (!iframe || isEmbedBlocked) return;
-    const grab = () => { try { iframe.focus(); } catch { /* cross-origin */ } };
-    const ids = [0, 50, 150, 300].map((ms) => window.setTimeout(grab, ms));
-    return () => ids.forEach((id) => clearTimeout(id));
+    const id = requestAnimationFrame(() => {
+      try { iframe.focus(); } catch { /* cross-origin */ }
+    });
+    return () => cancelAnimationFrame(id);
   }, [shouldShow, isEmbedBlocked]);
 
   const handleLoad = useCallback(() => {
