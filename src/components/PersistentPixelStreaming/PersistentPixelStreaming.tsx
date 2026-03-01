@@ -65,93 +65,69 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const shouldShow = isVisible && !!viewport;
 
   // ── Focus lock ─────────────────────────────────────────────────────────
+  // Keeps keyboard focus on the PS iframe so keystrokes reach the stream.
   //
-  // Keeps keyboard focus on the PS iframe so keystrokes always reach the
-  // stream. The page is split into two zones:
+  //   1. mousedown capture — preventDefault() on every click that isn't
+  //      a form control (input/textarea/select). Blocks empty-space,
+  //      buttons, links, etc. from stealing focus.
   //
-  //   IFRAME  — must own focus at all times
-  //   PANEL   — [data-ue-panel] overlay; controls need native mouse
-  //             interaction (slider drag, select dropdown, checkbox toggle)
+  //   2. mouseup capture — after releasing a form control (slider drag
+  //      end, checkbox click), returns focus to iframe. Without this,
+  //      focus stays stuck on the control because polling exempts them.
+  //      <select> exempted: dropdown may still be open at mouseup time.
   //
-  // Browser constraint: the ONLY way to prevent a mousedown from moving
-  // focus is calling preventDefault(). But preventDefault() also kills
-  // native <input type="range"> drag. So we can't blanket-prevent inside
-  // the panel — we have to let panel mousedowns through and reclaim focus
-  // afterwards.
+  //   3. change event — reclaims focus after <select> value change
+  //      (dropdown closes) or checkbox toggle.
   //
-  // Four layers, each covering what the previous one can't:
+  //   4. Polling (200ms) — safety net for silent focus loss: React DOM
+  //      removal, Tab navigation, programmatic .focus() calls.
   //
-  //   1. mousedown capture — preventDefault() for clicks OUTSIDE the panel
-  //      and the iframe. Stops empty-space, sidebar, backdrop, etc. from
-  //      stealing focus. Panel clicks proceed naturally.
-  //
-  //   2. mouseup capture — after releasing the mouse following a panel
-  //      interaction, returns focus to iframe via rAF (lets click handlers
-  //      fire first). <select> is exempted: its dropdown is still open
-  //      at mouseup time.
-  //
-  //   3. change event delegation — fires when a <select> dropdown closes
-  //      with a new value, or a checkbox toggles. Reclaims focus.
-  //
-  //   4. Polling safety net (200ms) — catches edge cases that produce NO
-  //      DOM events: React unmounting a focused element (focus silently
-  //      falls to <body>), Tab navigation, programmatic .focus() calls.
-  //      Skips when mouse is held down or focus is inside the panel
-  //      (don't fight active interaction).
-  //
-  // Active only when shouldShow is true (device page with iframe visible).
-  // On other pages the effect cleans up — zero interference.
+  // Active only when shouldShow is true. Cleaned up on non-device pages.
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked || !shouldShow) return;
 
-    let mouseDownInPanel = false;
+    const isFormControl = (el: EventTarget | null): boolean =>
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement;
 
-    const inPanel = (el: EventTarget | null): boolean =>
-      el instanceof Element && !!el.closest('[data-ue-panel]');
-
-    // (1) Block focus theft from everything outside panel & iframe
+    // (1) Prevent focus theft — exempt form controls so sliders work
     const onMouseDown = (e: MouseEvent) => {
-      if (inPanel(e.target)) {
-        mouseDownInPanel = true;
-        return;
-      }
+      if (isFormControl(e.target)) return;
       e.preventDefault();
     };
+    document.addEventListener('mousedown', onMouseDown, true);
 
-    // (2) Reclaim focus after panel interaction
+    // (2) Reclaim after form control interaction ends
     const onMouseUp = (e: MouseEvent) => {
-      if (!mouseDownInPanel) return;
-      mouseDownInPanel = false;
-      // <select> dropdown may still be open — let onChange handle it
+      if (!isFormControl(e.target)) return;
       if (e.target instanceof HTMLSelectElement) return;
       requestAnimationFrame(() => {
         try { iframe.focus(); } catch { /* cross-origin */ }
       });
     };
+    document.addEventListener('mouseup', onMouseUp, true);
 
-    // (3) Handle <select>/<checkbox> completion
+    // (3) Reclaim after <select> change / checkbox toggle
     const onChange = (e: Event) => {
-      if (!inPanel(e.target)) return;
+      if (!isFormControl(e.target)) return;
       requestAnimationFrame(() => {
         try { iframe.focus(); } catch { /* cross-origin */ }
       });
     };
+    document.addEventListener('change', onChange);
 
     // (4) Polling safety net
     const poll = () => {
-      if (mouseDownInPanel) return;
+      if (isFormControl(document.activeElement)) return;
       if (document.activeElement === iframe) return;
-      if (inPanel(document.activeElement)) return;
       try { iframe.focus(); } catch { /* cross-origin */ }
     };
-
-    document.addEventListener('mousedown', onMouseDown, true);
-    document.addEventListener('mouseup', onMouseUp, true);
-    document.addEventListener('change', onChange);
     const pollId = window.setInterval(poll, 200);
 
-    iframe.focus();
+    // Initial focus
+    poll();
 
     return () => {
       document.removeEventListener('mousedown', onMouseDown, true);
