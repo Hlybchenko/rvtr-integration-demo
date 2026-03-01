@@ -121,7 +121,7 @@ export function DevicePage() {
         : styles.previewIdle;
 
   return (
-    <div className={styles.devicePage}>
+    <div className={styles.devicePage} onMouseDown={(e) => e.preventDefault()}>
       <div className={`${styles.previewStage} ${transitionClass}`}>
         <DevicePreview
           device={displayedDevice}
