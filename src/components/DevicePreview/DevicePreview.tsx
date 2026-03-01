@@ -261,17 +261,23 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
         }
       : null;
 
+    // When streaming, force borderRadius to 0 on the screen slot.
+    // overflow:hidden + border-radius forces the browser to recomposite the
+    // WebRTC video layer, freezing the stream. The device frame PNG (z-index 2)
+    // visually masks the corners anyway.
     const screenStyle: CSSProperties | undefined = rect
       ? {
           left: (rect.x / sourceWidth) * size.width,
           top: (rect.y / sourceHeight) * size.height,
           width: (rect.w / sourceWidth) * size.width,
           height: (rect.h / sourceHeight) * size.height,
-          borderRadius: device.screenRadius
-            ? (device.screenRadius / sourceWidth) * size.width
-            : 'r' in rect
-              ? ((rect as typeof device.screenRect).r / sourceWidth) * size.width
-              : 0,
+          borderRadius: isStreaming
+            ? 0
+            : device.screenRadius
+              ? (device.screenRadius / sourceWidth) * size.width
+              : 'r' in rect
+                ? ((rect as typeof device.screenRect).r / sourceWidth) * size.width
+                : 0,
           zIndex: device.screenOnTop ? 4 : undefined,
         }
       : undefined;
