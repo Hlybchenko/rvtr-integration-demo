@@ -65,10 +65,12 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const shouldShow = isVisible && !!viewport;
 
   // ── Focus guard ────────────────────────────────────────────────────────
-  // Polling-only: every 200ms reclaim focus for the iframe unless the user
-  // is actively typing in a text field or has a <select> dropdown open.
-  // Sliders, checkboxes, radio buttons, and regular buttons are NOT
-  // protected — polling reclaims from them within 200ms after interaction.
+  // Two mechanisms:
+  //   1. Polling (200ms) — reclaims focus unless an interactive element
+  //      (input/textarea/select/button) is focused. Protects typing and
+  //      keeps device switching stable.
+  //   2. pointerup — after releasing a slider, checkbox, or radio button,
+  //      reclaims focus (polling alone can't because it protects these).
   const shouldShowRef = useRef(shouldShow);
   shouldShowRef.current = shouldShow;
 
@@ -76,20 +78,40 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
-    const isTyping = (el: Element | null): boolean =>
-      (el instanceof HTMLInputElement &&
-        /^(text|url|email|password|search|tel|number)$/.test(el.type)) ||
+    const isInteractive = (el: Element | null): boolean =>
+      el instanceof HTMLInputElement ||
       el instanceof HTMLTextAreaElement ||
-      el instanceof HTMLSelectElement;
+      el instanceof HTMLSelectElement ||
+      el instanceof HTMLButtonElement ||
+      (el instanceof HTMLElement && el.closest('button') !== null);
 
+    const focusIframe = () => {
+      try { iframe.focus(); } catch { /* cross-origin */ }
+    };
+
+    // (1) Polling — safety net, skips interactive elements
     const poll = () => {
       if (!shouldShowRef.current) return;
       if (document.activeElement === iframe) return;
-      if (isTyping(document.activeElement)) return;
-      try { iframe.focus(); } catch { /* cross-origin */ }
+      if (isInteractive(document.activeElement)) return;
+      focusIframe();
     };
     const pollId = window.setInterval(poll, 200);
-    return () => window.clearInterval(pollId);
+
+    // (2) Reclaim after releasing sliders / checkboxes / radios
+    const onPointerUp = (e: PointerEvent) => {
+      if (!shouldShowRef.current) return;
+      const t = e.target;
+      if (t instanceof HTMLInputElement && /^(range|checkbox|radio)$/.test(t.type)) {
+        setTimeout(focusIframe, 50);
+      }
+    };
+    document.addEventListener('pointerup', onPointerUp, true);
+
+    return () => {
+      window.clearInterval(pollId);
+      document.removeEventListener('pointerup', onPointerUp, true);
+    };
   }, [url, isEmbedBlocked]);
 
   // Immediate focus grab when streaming page becomes visible.
