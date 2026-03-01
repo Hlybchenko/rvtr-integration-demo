@@ -92,10 +92,12 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
-    const isFormControl = (el: EventTarget | null): boolean =>
+    const isInteractive = (el: EventTarget | null): boolean =>
       el instanceof HTMLInputElement ||
       el instanceof HTMLTextAreaElement ||
-      el instanceof HTMLSelectElement;
+      el instanceof HTMLSelectElement ||
+      el instanceof HTMLButtonElement ||
+      (el instanceof HTMLElement && el.closest('button') !== null);
 
     const focusIframe = () => {
       try { iframe.focus(); } catch { /* cross-origin */ }
@@ -104,7 +106,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     // (1) Prevent focus theft — only when streaming page is active
     const onMouseDown = (e: MouseEvent) => {
       if (!shouldShowRef.current) return;
-      if (isFormControl(e.target)) return;
+      if (isInteractive(e.target)) return;
       e.preventDefault();
     };
     document.addEventListener('mousedown', onMouseDown, true);
@@ -112,7 +114,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     // (2) Reclaim after form control interaction ends
     const onMouseUp = (e: MouseEvent) => {
       if (!shouldShowRef.current) return;
-      if (!isFormControl(e.target)) return;
+      if (!isInteractive(e.target)) return;
       if (e.target instanceof HTMLSelectElement) return;
       requestAnimationFrame(focusIframe);
     };
@@ -121,7 +123,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     // (3) Reclaim after <select> change / checkbox toggle
     const onChange = (e: Event) => {
       if (!shouldShowRef.current) return;
-      if (!isFormControl(e.target)) return;
+      if (!isInteractive(e.target)) return;
       requestAnimationFrame(focusIframe);
     };
     document.addEventListener('change', onChange);
@@ -129,7 +131,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     // (4) Polling safety net
     const poll = () => {
       if (!shouldShowRef.current) return;
-      if (isFormControl(document.activeElement)) return;
+      if (isInteractive(document.activeElement)) return;
       if (document.activeElement === iframe) return;
       focusIframe();
     };
