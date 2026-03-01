@@ -128,8 +128,9 @@ export function OverviewPage() {
   // -- UE API URL state (health stored centrally in ueControlStore) --
   const ueApiUrl = useUeControlStore((s) => s.ueApiUrl);
   const setUeApiUrl = useUeControlStore((s) => s.setUeApiUrl);
-  const ueReachable = useUeControlStore((s) => s.ueReachable);
-  const setUeReachable = useUeControlStore((s) => s.setUeReachable);
+  // UE health badges — disabled until backend provides a real ping endpoint
+  // const ueReachable = useUeControlStore((s) => s.ueReachable);
+  // const setUeReachable = useUeControlStore((s) => s.setUeReachable);
   const [ueApiUrlInput, setUeApiUrlInput] = useState(ueApiUrl);
   const ueUrlDirtyRef = useRef(false);
 
@@ -310,12 +311,12 @@ export function OverviewPage() {
 
     const timer = setTimeout(() => {
       setUeApiUrl(trimmed);
-      if (!trimmed) setUeReachable(null);
+      // if (!trimmed) setUeReachable(null);
       ueUrlDirtyRef.current = false;
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [ueApiUrlInput, ueApiUrl, setUeApiUrl, setUeReachable]);
+  }, [ueApiUrlInput, ueApiUrl, setUeApiUrl]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -695,6 +696,7 @@ export function OverviewPage() {
                 spellCheck={false}
                 autoComplete="url"
               />
+              {/* UE health badges — disabled until real ping endpoint exists
               {ueApiUrl && (ueReachable === true || ueReachable === false) && (
                 <div className={styles.badgeRow}>
                   {ueReachable === true && (
@@ -704,7 +706,7 @@ export function OverviewPage() {
                     <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
                   )}
                 </div>
-              )}
+              )} */}
             </div>
           </section>
         </div>

@@ -57,7 +57,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   const ueApiUrl = useUeControlStore((s) => s.ueApiUrl);
-  const ueConnected = useUeControlStore((s) => s.ueReachable);
   // Stable selector: memoize per deviceId to avoid re-subscriptions
   const settingsSelector = useMemo(
     () => (s: { deviceSettings: Record<string, UeDeviceSettings> }) =>
@@ -91,10 +90,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
     resetSliderState(desired);
 
-    const { ueApiUrl: url, ueReachable } = useUeControlStore.getState();
-    // Skip the entire batch when UE is known-unreachable — health polling
-    // will detect when it comes back and resetUeCommittedCamera automatically.
-    if (!url || ueReachable === false) return;
+    const { ueApiUrl: url } = useUeControlStore.getState();
+    if (!url) return;
 
     const gen = ++applyGenRef.current;
     const committed = useUeControlStore.getState().ueCommittedCamera;
@@ -164,19 +161,10 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
   return (
     <div ref={panelRef} className={styles.wrapper} data-ue-panel>
-      {/* Status label — centered at top */}
-      {ueApiUrl && ueConnected !== null && (
-        <div className={`${styles.statusLabel} ${ueConnected ? styles.statusConnected : styles.statusDisconnected}`}>
-          <span
-            className={`${styles.statusDot} ${
-              ueConnected ? styles.statusDotConnected : styles.statusDotDisconnected
-            }`}
-          />
-          <span className={styles.statusText}>
-            {ueConnected ? 'UE Connected' : 'UE Offline'}
-          </span>
-        </div>
-      )}
+      {/* Status label — HIDDEN until backend provides a dedicated health-check endpoint.
+          The previous `{ command: 'ping' }` was not a real UE command, causing false
+          "UE Offline" reports. To re-enable: add a real ping endpoint, uncomment
+          the health check in useStatusPolling.ts, and restore this block. */}
 
       {/* Trigger button — always visible, dimmed when no UE URL */}
       <button
