@@ -74,7 +74,6 @@ export function AppShell() {
         <button
           type="button"
           className={styles.burger}
-          onMouseDown={(e) => e.preventDefault()}
           onClick={toggleSidebar}
           aria-label="Toggle navigation"
           aria-expanded={sidebarOpen}
@@ -89,7 +88,6 @@ export function AppShell() {
       {!pinned && (
         <div
           className={`${styles.backdrop} ${sidebarOpen ? styles.backdropVisible : ''}`}
-          onMouseDown={(e) => e.preventDefault()}
           onClick={closeSidebar}
           aria-hidden="true"
         />
