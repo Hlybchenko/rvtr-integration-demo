@@ -128,6 +128,8 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const sliderTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   /** Last value that was sent (or initial) — used to track the "sent" baseline */
   const sentValueRef = useRef(new Map<string, number>());
+  /** True while an HTTP send is in-flight for a given key — prevents concurrent sends */
+  const inFlightRef = useRef(new Set<string>());
   // Clean up all pending timers on unmount.
   // Copy ref to local var so cleanup captures the same Map instance.
   useEffect(() => {
@@ -143,6 +145,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
   const resetSliderState = (camera: CameraPosition) => {
     sliderTimersRef.current.forEach((t) => clearTimeout(t));
     sliderTimersRef.current.clear();
+    inFlightRef.current.clear();
     sentValueRef.current.clear();
     sentValueRef.current.set('zoom', camera.zoom);
     sentValueRef.current.set('cameraVertical', camera.cameraVertical);
@@ -177,6 +180,47 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     })();
   }, [deviceId]);
 
+  // Sends the delta for a single slider key. Extracted so it can be called
+  // both from the debounce timer and as a catch-up after an in-flight send.
+  const fireSliderSend = useCallback(
+    (key: SliderKey) => {
+      const url = useUeControlStore.getState().ueApiUrl;
+      if (!url) return;
+      const cmd = SLIDER_COMMANDS[key];
+      if (!cmd) return;
+
+      // Only one send per key at a time — prevents baseline races
+      if (inFlightRef.current.has(key)) return;
+
+      const baseline = sentValueRef.current.get(key) ?? 0;
+      const target = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
+      const delta = target - baseline;
+      if (delta === 0) return;
+
+      inFlightRef.current.add(key);
+      sentValueRef.current.set(key, target);
+
+      void sendUeCommand(url, {
+        command: cmd.command,
+        [cmd.param]: String(delta),
+      }).then((ok) => {
+        if (ok) {
+          useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
+        } else {
+          sentValueRef.current.set(key, baseline);
+        }
+        inFlightRef.current.delete(key);
+
+        // Catch-up: if slider moved while we were in-flight, send again
+        const latest = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
+        if (latest !== (sentValueRef.current.get(key) ?? 0)) {
+          fireSliderSend(key);
+        }
+      });
+    },
+    [deviceId],
+  );
+
   const handleSlider = useCallback(
     (key: SliderKey, value: number) => {
       // Update store immediately (optimistic UI)
@@ -188,38 +232,10 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
       sliderTimersRef.current.set(
         key,
-        setTimeout(() => {
-          const url = useUeControlStore.getState().ueApiUrl;
-          if (!url) return;
-          const cmd = SLIDER_COMMANDS[key];
-          if (!cmd) return;
-
-          // Compute delta AT FIRE TIME: baseline is the last confirmed position,
-          // target is the latest store value (may differ from `value` if user
-          // kept dragging after this timer was scheduled).
-          const baseline = sentValueRef.current.get(key) ?? 0;
-          const target = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
-          const delta = target - baseline;
-          if (delta === 0) return;
-
-          // Optimistically advance baseline so concurrent sends don't double-count
-          sentValueRef.current.set(key, target);
-
-          void sendUeCommand(url, {
-            command: cmd.command,
-            [cmd.param]: String(delta),
-          }).then((ok) => {
-            if (ok) {
-              useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
-            } else {
-              // Revert baseline — next fire will re-include the missed delta
-              sentValueRef.current.set(key, baseline);
-            }
-          });
-        }, SLIDER_DEBOUNCE_MS),
+        setTimeout(() => fireSliderSend(key), SLIDER_DEBOUNCE_MS),
       );
     },
-    [deviceId, updateSettings],
+    [deviceId, updateSettings, fireSliderSend],
   );
 
   // ── Toggle handler ────────────────────────────────────────────────────────
