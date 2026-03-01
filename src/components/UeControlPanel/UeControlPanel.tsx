@@ -112,8 +112,10 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
     resetSliderState(desired);
 
-    const url = useUeControlStore.getState().ueApiUrl;
-    if (!url) return;
+    const { ueApiUrl: url, ueReachable } = useUeControlStore.getState();
+    // Skip the entire batch when UE is known-unreachable — health polling
+    // will detect when it comes back and resetUeCommittedCamera automatically.
+    if (!url || ueReachable === false) return;
 
     const gen = ++applyGenRef.current;
     const committed = useUeControlStore.getState().ueCommittedCamera;

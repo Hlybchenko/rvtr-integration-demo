@@ -179,12 +179,14 @@ export async function applyCameraTransition(
     const delta = Math.max(-MAX_CAMERA_DELTA, Math.min(MAX_CAMERA_DELTA, rawDelta));
 
     const sendFn = CAMERA_SENDERS[key];
-    let ok = await sendFn(baseUrl, delta);
-    if (!ok && !signal?.aborted) ok = await sendFn(baseUrl, delta);
+    const ok = await sendFn(baseUrl, delta);
 
     if (ok) {
       // Use committed + clamped delta (not desired) when delta was clamped
       newCommitted[key] = committed[key] + delta;
+    } else {
+      // UE likely unreachable — skip remaining axes to avoid request spam
+      break;
     }
   }
 
@@ -256,9 +258,13 @@ export async function applyDeviceSettings(
 
   for (const cmd of absoluteCommands) {
     if (signal?.aborted) break;
-    let ok = await cmd();
-    if (!ok && !signal?.aborted) ok = await cmd();
-    if (ok) success++;
+    const ok = await cmd();
+    if (ok) {
+      success++;
+    } else {
+      // UE likely unreachable — skip remaining commands to avoid request spam
+      break;
+    }
   }
 
   // Camera offset commands — delta from committed to desired

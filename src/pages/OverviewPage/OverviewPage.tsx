@@ -430,14 +430,10 @@ export function OverviewPage() {
                   License file path
                 </label>
                 {filePath.saved && !filePath.error && (
-                  <span className={`${styles.badge} ${styles.badgeValid}`}>
-                    ✓ Configured
-                  </span>
+                  <span className={`${styles.badge} ${styles.badgeValid}`}>✓ Configured</span>
                 )}
                 {filePath.error && (
-                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                    ✗ Path not found
-                  </span>
+                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>✗ Path not found</span>
                 )}
               </div>
 
@@ -479,14 +475,10 @@ export function OverviewPage() {
                   Executable
                 </label>
                 {exePath.saved && !exePath.error && (
-                  <span className={`${styles.badge} ${styles.badgeValid}`}>
-                    ✓ Configured
-                  </span>
+                  <span className={`${styles.badge} ${styles.badgeValid}`}>✓ Configured</span>
                 )}
                 {exePath.error && (
-                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                    ✗ Invalid
-                  </span>
+                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>✗ Invalid</span>
                 )}
               </div>
 
@@ -556,10 +548,12 @@ export function OverviewPage() {
                   type="radio"
                   name="voice-agent"
                   value="elevenlabs"
+                  className={styles.radioInput}
                   checked={pendingVoiceAgent === 'elevenlabs'}
                   onChange={() => setPendingVoiceAgent('elevenlabs')}
                   disabled={!isFileConfigured || isApplying}
                 />
+                <span className={styles.radioMark} />
                 <span>ElevenLabs</span>
               </label>
 
@@ -568,10 +562,12 @@ export function OverviewPage() {
                   type="radio"
                   name="voice-agent"
                   value="gemini-live"
+                  className={styles.radioInput}
                   checked={pendingVoiceAgent === 'gemini-live'}
                   onChange={() => setPendingVoiceAgent('gemini-live')}
                   disabled={!isFileConfigured || isApplying}
                 />
+                <span className={styles.radioMark} />
                 <span>Gemini Live</span>
               </label>
             </div>
@@ -655,12 +651,6 @@ export function OverviewPage() {
                     {psUrlValid ? '✓ Valid' : '✗ Invalid URL'}
                   </span>
                 )}
-                {psReachable === true && psAllGood && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>Reachable</span>
-                )}
-                {psReachable === false && psAllGood && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
-                )}
               </div>
               <input
                 id="pixel-streaming-url"
@@ -672,9 +662,16 @@ export function OverviewPage() {
                 spellCheck={false}
                 autoComplete="url"
               />
-              <p className={styles.hint}>
-                Shared URL for all streaming devices. Session persists across page navigation.
-              </p>
+              {psAllGood && (psReachable === true || psReachable === false) && (
+                <div className={styles.badgeRow}>
+                  {psReachable === true && (
+                    <span className={`${styles.badge} ${styles.badgeRunning}`}>Reachable</span>
+                  )}
+                  {psReachable === false && (
+                    <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* UE Remote API URL */}
@@ -682,20 +679,10 @@ export function OverviewPage() {
               <div className={styles.fieldHeader}>
                 <label className={styles.label} htmlFor="ue-api-url">UE Remote API</label>
                 {ueApiUrlInput.trim() && isValidUrl(ueApiUrlInput) && (
-                  <span className={`${styles.badge} ${styles.badgeValid}`}>
-                    ✓ Valid
-                  </span>
+                  <span className={`${styles.badge} ${styles.badgeValid}`}>✓ Valid</span>
                 )}
                 {ueApiUrlInput.trim() && !isValidUrl(ueApiUrlInput) && (
-                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>
-                    ✗ Invalid URL
-                  </span>
-                )}
-                {ueReachable === true && ueApiUrl && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>Reachable</span>
-                )}
-                {ueReachable === false && ueApiUrl && (
-                  <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
+                  <span className={`${styles.badge} ${styles.badgeInvalid}`}>✗ Invalid URL</span>
                 )}
               </div>
               <input
@@ -708,16 +695,17 @@ export function OverviewPage() {
                 spellCheck={false}
                 autoComplete="url"
               />
-              <p className={styles.hint}>
-                UE app built-in HTTP server for runtime control (camera, levels, avatars).
-              </p>
+              {ueApiUrl && (ueReachable === true || ueReachable === false) && (
+                <div className={styles.badgeRow}>
+                  {ueReachable === true && (
+                    <span className={`${styles.badge} ${styles.badgeRunning}`}>Reachable</span>
+                  )}
+                  {ueReachable === false && (
+                    <span className={`${styles.badge} ${styles.badgeStopped}`}>Not responding</span>
+                  )}
+                </div>
+              )}
             </div>
-
-            {psAllGood && (
-              <p className={styles.hint}>
-                Stream auto-connects when you open a streaming device page.
-              </p>
-            )}
           </section>
         </div>
       </div>

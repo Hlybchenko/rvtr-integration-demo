@@ -67,11 +67,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--glass-bg) 72%, transparent);
-  /* backdrop-filter removed — causes PS iframe recompositing freeze */
-  opacity: 1;
-  transition: opacity 420ms ease-in-out;
+  background: color-mix(in srgb, var(--glass-bg) 98%, transparent);
+  /* Start invisible — .deviceBootOverlayActive fades in */
+  opacity: 0;
+  backdrop-filter: blur(0);
+  -webkit-backdrop-filter: blur(0);
+  transition:
+    opacity 600ms ease-in-out,
+    backdrop-filter 600ms ease-in-out,
+    -webkit-backdrop-filter 600ms ease-in-out;
   pointer-events: none;
+}
+
+.deviceBootOverlayActive {
+  opacity: 1;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .loaderMinimal {
@@ -81,28 +92,102 @@
   justify-content: center;
   gap: 9px;
   pointer-events: none;
+  padding: 24px;
+  animation: loaderFadeIn 600ms ease-out both;
 }
 
-.loaderText {
+@keyframes loaderFadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.loaderTextWrap {
+  display: flex;
+  opacity: 0.7;
+}
+
+.loaderChar {
+  display: inline-block;
   font-size: var(--font-xs);
-  font-weight: 600;
-  letter-spacing: 0.2px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
   color: var(--accent);
+  animation: loaderWave 3.5s ease-in-out infinite;
+  will-change: transform;
 }
 
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+@keyframes loaderWave {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1.5px); }
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.loaderDot {
+  display: inline-block;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  color: var(--accent);
+  position: relative;
+  top: -2px;
+  animation: loaderDotPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes loaderDotPulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50%      { transform: scale(1.6); opacity: 1; }
+}
+
+/* ── Prism logo loader ── */
+.loaderLogo {
+  position: relative;
+  width: 44px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+/* Central prism — rocks side to side */
+.loaderPrism {
+  position: relative;
+  z-index: 1;
+  animation: loaderPrismRock 4s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes loaderPrismRock {
+  0%   { transform: rotate(0deg); }
+  25%  { transform: rotate(3deg); }
+  50%  { transform: rotate(-2.5deg); }
+  75%  { transform: rotate(1.5deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* Arrow ring — orbits + stabs inward + opacity pulse */
+.loaderArrows {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  /* (20, 12) in viewBox 40×36 → 50% 33.3% */
+  transform-origin: 50% 33.3%;
+  animation:
+    loaderOrbit 5s linear infinite,
+    loaderStab 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  will-change: transform;
+}
+
+@keyframes loaderOrbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes loaderStab {
+  0%   { scale: 1; }
+  20%  { scale: 0.9; }
+  40%  { scale: 1.03; }
+  60%  { scale: 0.96; }
+  80%  { scale: 1.01; }
+  100% { scale: 1; }
 }
 
 /* Empty slot for streaming devices — persistent iframe sits on top */
@@ -136,6 +221,19 @@
   background: color-mix(in srgb, var(--danger-soft) 45%, transparent);
 }
 
+/* ── Light theme: glass prism + dark edges (match sidebar logo) ── */
+:global([data-theme='light']) .loaderFacetFill {
+  fill: rgba(180, 185, 200, 0.25);
+  filter: blur(0.5px);
+}
+:global([data-theme='light']) .loaderPrismOuter {
+  stroke: #3a3f55;
+}
+:global([data-theme='light']) .loaderEdgeInner {
+  stroke: #3a3f55;
+  opacity: 0.75;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .deviceBootOverlay {
     transition: none;
@@ -149,7 +247,9 @@
     transition: none;
   }
 
-  .spinner {
+  .loaderPrism,
+  .loaderArrows,
+  .loaderText {
     animation: none;
   }
 }

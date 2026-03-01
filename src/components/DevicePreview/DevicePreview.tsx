@@ -51,6 +51,9 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     const [isEmbedBlocked, setIsEmbedBlocked] = useState(false);
     const [frameLoaded, setFrameLoaded] = useState(false);
     const [isIframeRevealed, setIsIframeRevealed] = useState(true);
+    // Overlay lifecycle: mount → (rAF) → fade in → loader done → fade out → unmount
+    const [overlayMounted, setOverlayMounted] = useState(false);
+    const [overlayActive, setOverlayActive] = useState(false);
     const [size, setSize] = useState({ width: 0, height: 0 });
     const [naturalSize, setNaturalSize] = useState({
       width: device.frameWidth,
@@ -300,6 +303,32 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     const shouldRenderIframe = !isStreaming && Boolean(url) && isGeometryReady;
     const showGlobalLoader = !isStreaming && (!isGeometryReady || (Boolean(url) && loading));
 
+    // Overlay enter: mount first (opacity 0), then activate next frame (opacity 1)
+    // Overlay exit:  deactivate (opacity 1→0 via transition), then unmount after transition
+    const overlayExitTimer = useRef<number | null>(null);
+    useEffect(() => {
+      if (showGlobalLoader) {
+        // Cancel pending unmount
+        if (overlayExitTimer.current) {
+          window.clearTimeout(overlayExitTimer.current);
+          overlayExitTimer.current = null;
+        }
+        // Mount, then activate next frame so browser sees opacity:0 → opacity:1
+        setOverlayMounted(true);
+        requestAnimationFrame(() => requestAnimationFrame(() => setOverlayActive(true)));
+      } else if (overlayMounted) {
+        // Deactivate → CSS transition fades to 0, then unmount
+        setOverlayActive(false);
+        overlayExitTimer.current = window.setTimeout(() => {
+          setOverlayMounted(false);
+          overlayExitTimer.current = null;
+        }, 700);
+      }
+      return () => {
+        if (overlayExitTimer.current) window.clearTimeout(overlayExitTimer.current);
+      };
+    }, [showGlobalLoader]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // Keep focus on the iframe — re-focus whenever it loses it (non-streaming only).
     useEffect(() => {
       if (isStreaming) return;
@@ -410,11 +439,55 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
           ) : null}
         </div>
 
-        {showGlobalLoader ? (
-          <div className={styles.deviceBootOverlay}>
+        {overlayMounted ? (
+          <div className={`${styles.deviceBootOverlay} ${overlayActive ? styles.deviceBootOverlayActive : ''}`}>
             <div className={styles.loaderMinimal}>
-              <div className={styles.spinner} />
-              <div className={styles.loaderText}>Preparing preview…</div>
+              <div className={styles.loaderLogo}>
+                {/* Central prism — static, pulses */}
+                <svg className={styles.loaderPrism} width="44" height="40" viewBox="0 0 40 36" fill="none">
+                  <defs>
+                    <linearGradient id="ldPrism" x1="0.2" y1="0" x2="0.8" y2="1">
+                      <stop offset="0%" stopColor="#1a1d28" />
+                      <stop offset="50%" stopColor="#363c4e" />
+                      <stop offset="100%" stopColor="#14171f" />
+                    </linearGradient>
+                    <linearGradient id="ldEdge" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#6a7290" />
+                      <stop offset="50%" stopColor="#8890a8" />
+                      <stop offset="100%" stopColor="#5a6280" />
+                    </linearGradient>
+                  </defs>
+                  <path className={styles.loaderFacetFill} d="M11.5 6.3 H28.5 L20 23.5 Z" fill="url(#ldPrism)" />
+                  <path className={styles.loaderPrismOuter} d="M11.5 6.3 H28.5 L20 23.5 Z" stroke="url(#ldEdge)" strokeWidth="1.1" strokeLinejoin="round" fill="none" />
+                  <path className={styles.loaderEdgeInner} d="M28.5 6.3 L20 12.5 L11.5 6.3 M20 12.5 L20 23.5" stroke="url(#ldEdge)" strokeWidth="0.6" fill="none" opacity="0.5" />
+                </svg>
+                {/* Orbiting arrows — rotate around prism bottom vertex (20, 23.5) */}
+                <svg className={styles.loaderArrows} width="44" height="40" viewBox="0 0 40 36" fill="none" overflow="visible">
+                  <defs>
+                    <linearGradient id="ldArrow" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#9a2820" />
+                      <stop offset="30%" stopColor="#EB4D3D" />
+                      <stop offset="50%" stopColor="#ff8a7a" />
+                      <stop offset="70%" stopColor="#EB4D3D" />
+                      <stop offset="100%" stopColor="#9a2820" />
+                    </linearGradient>
+                  </defs>
+                  {/* Three V-chevrons at 120° around prism centroid (20, 12) */}
+                  <path d="M16 -8 L20 -14 L24 -8" stroke="url(#ldArrow)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <path d="M16 -8 L20 -14 L24 -8" stroke="url(#ldArrow)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" transform="rotate(120 20 12)" />
+                  <path d="M16 -8 L20 -14 L24 -8" stroke="url(#ldArrow)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" transform="rotate(240 20 12)" />
+                </svg>
+              </div>
+              <div className={styles.loaderTextWrap}>
+                {'Preparing preview'.split('').map((ch, i) => (
+                  <span key={i} className={styles.loaderChar} style={{ animationDelay: `${i * 0.07}s` }}>
+                    {ch === ' ' ? '\u00A0' : ch}
+                  </span>
+                ))}
+                <span className={styles.loaderDot} style={{ animationDelay: '0s' }}>.</span>
+                <span className={styles.loaderDot} style={{ animationDelay: '0.3s' }}>.</span>
+                <span className={styles.loaderDot} style={{ animationDelay: '0.6s' }}>.</span>
+              </div>
             </div>
           </div>
         ) : null}

@@ -10,6 +10,16 @@
   }
 }
 
+/* ── Gentle float — lightweight translateY only (GPU-friendly) ── */
+@keyframes blockFloat {
+  0%   { transform: translateY(0); }
+  25%  { transform: translateY(-1px); }
+  50%  { transform: translateY(0.5px); }
+  75%  { transform: translateY(-0.6px); }
+  100% { transform: translateY(0); }
+}
+
+
 /* ── Settings page ── */
 .settings {
   display: flex;
@@ -41,6 +51,7 @@
 
 /* ── Settings block (card) ── */
 .settingsBlock {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -49,18 +60,19 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   box-shadow: var(--glass-shadow);
-  animation: fadeInUp 500ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation:
+    fadeInUp 500ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
+    blockFloat var(--float-dur, 18s) ease-in-out var(--float-delay, 0s) infinite;
   transition:
     border-color var(--transition-normal),
-    box-shadow var(--transition-normal),
-    background var(--transition-normal),
-    transform var(--transition-fast);
+    background var(--transition-normal);
 }
 
-/* Stagger cards within each column */
-.column > :nth-child(1) { animation-delay: 60ms; }
-.column > :nth-child(2) { animation-delay: 140ms; }
-.column > :nth-child(3) { animation-delay: 220ms; }
+
+/* Desync — each card floats at a different rhythm */
+.column > :nth-child(1) { animation-delay: 60ms, 0s; --float-dur: 18s; }
+.column > :nth-child(2) { animation-delay: 140ms, -4s; --float-dur: 22s; }
+.column > :nth-child(3) { animation-delay: 220ms, -9s; --float-dur: 16s; }
 
 .settingsBlock:hover {
   border-color: color-mix(in srgb, var(--glass-border) 80%, var(--accent));
@@ -114,15 +126,19 @@
 }
 
 /* Badge */
-@keyframes badgePop {
-  from {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+@keyframes badgeFadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes badgeBreath {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+@keyframes badgeInvalidFadeIn {
+  from { opacity: 0; transform: translateX(-2px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 .badge {
@@ -132,8 +148,8 @@
   border-radius: 999px;
   letter-spacing: 0.3px;
   white-space: nowrap;
-  animation: badgePop 250ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  animation: badgeFadeIn 300ms ease both;
+  transition: background 250ms ease, color 250ms ease;
 }
 
 .badgeValid {
@@ -144,16 +160,17 @@
 .badgeInvalid {
   background: var(--danger-soft);
   color: var(--danger);
+  animation: badgeInvalidFadeIn 350ms ease both;
 }
 
-@keyframes dotPulseSuccess {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 40%, transparent); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 0%, transparent); }
+@keyframes dotBreath {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
-@keyframes dotPulseStopped {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.6; }
+@keyframes dotFade {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.5; }
 }
 
 .badgeRunning {
@@ -170,12 +187,13 @@
   background: var(--success);
   margin-right: 4px;
   vertical-align: middle;
-  animation: dotPulseSuccess 2s ease-in-out infinite;
+  animation: dotBreath 2.5s ease-in-out infinite;
 }
 
 .badgeStopped {
   background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
   color: var(--text-secondary);
+  animation: badgeFadeIn 300ms ease both, badgeBreath 4s ease-in-out 1s infinite;
 }
 
 .badgeStopped::before {
@@ -187,26 +205,71 @@
   background: var(--text-secondary);
   margin-right: 4px;
   vertical-align: middle;
-  animation: dotPulseStopped 3s ease-in-out infinite;
+  animation: dotFade 3.5s ease-in-out infinite;
 }
 
 /* ── Input ── */
+@keyframes inputFocusIn {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  40%  { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 14%, transparent); }
+  100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 0 8px color-mix(in srgb, var(--accent) 8%, transparent); }
+}
+
+@keyframes inputErrorPulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 0%, transparent); }
+  30%  { box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 30%, transparent), 0 0 10px color-mix(in srgb, var(--danger) 16%, transparent); }
+  60%  { box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 20%, transparent); }
+  100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent); }
+}
+
+@keyframes inputShakeNo {
+  0%   { transform: translateX(0); }
+  12%  { transform: translateX(-6px); }
+  28%  { transform: translateX(5px); }
+  42%  { transform: translateX(-4px); }
+  58%  { transform: translateX(3px); }
+  72%  { transform: translateX(-1.5px); }
+  86%  { transform: translateX(0.5px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes inputSuccessFlash {
+  0%   { border-color: var(--glass-border); }
+  20%  { border-color: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent), 0 0 10px color-mix(in srgb, var(--success) 12%, transparent); }
+  100% { border-color: var(--glass-border); box-shadow: none; }
+}
+
 .input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px 14px;
   font-size: var(--font-md);
   font-family: inherit;
   color: var(--text-primary);
-  background: var(--glass-bg);
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.06) 0%, transparent 30%, rgba(255, 255, 255, 0.015) 100%),
+    var(--card-nested-bg);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   outline: none;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.15) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 1px 2px rgba(0, 0, 0, 0.1);
   transition:
-    border-color 200ms ease,
-    box-shadow 250ms ease,
-    background 200ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    border-color 250ms ease,
+    box-shadow 300ms ease,
+    background 250ms ease,
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
   box-sizing: border-box;
+}
+
+/* Override browser autofill white bg */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0 1000px color-mix(in srgb, var(--accent) 6%, var(--bg)) inset;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 .input::placeholder {
@@ -221,18 +284,23 @@
 
 .input:focus {
   border-color: var(--accent);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),
-    0 0 8px color-mix(in srgb, var(--accent) 10%, transparent);
+  background: color-mix(in srgb, var(--accent) 4%, var(--card-nested-bg));
+  animation: inputFocusIn 350ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
   transform: translateY(-0.5px);
 }
 
 .inputError {
   border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 3%, var(--card-nested-bg));
+  animation: inputShakeNo 450ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
 .inputError:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 24%, transparent);
+  animation: inputErrorPulse 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+.inputSuccess {
+  animation: inputSuccessFlash 800ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
 
 /* ── Radio group ── */
@@ -255,8 +323,82 @@
   cursor: pointer;
 }
 
-.radioOption input[type='radio'] {
-  accent-color: var(--accent);
+/* Hide native radio — use custom mark */
+.radioInput {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Custom radio mark — visible circle */
+.radioMark {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--text-secondary);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: border-color 300ms ease, box-shadow 300ms ease;
+}
+
+.radioInput:checked + .radioMark {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.radioInput:focus-visible + .radioMark {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* Inner dot — spring bounce pop */
+.radioMark::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 200ms ease, opacity 200ms ease;
+}
+
+.radioInput:checked + .radioMark::after {
+  transform: scale(1);
+  opacity: 1;
+  animation: radioDotPop 550ms cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+
+/* Ripple ring burst */
+.radioMark::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  transform: scale(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.radioInput:checked + .radioMark::before {
+  animation: radioRipple 650ms ease-out both;
+}
+
+@keyframes radioDotPop {
+  0%   { transform: scale(0) rotate(-60deg); opacity: 0; }
+  20%  { transform: scale(1.6) rotate(15deg); opacity: 1; }
+  38%  { transform: scale(0.7) rotate(-8deg); }
+  52%  { transform: scale(1.25) rotate(4deg); }
+  68%  { transform: scale(0.9) rotate(-1.5deg); }
+  82%  { transform: scale(1.06) rotate(0.5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes radioRipple {
+  0%   { transform: scale(0.5); opacity: 0.75; }
+  100% { transform: scale(2.2); opacity: 0; }
 }
 
 .radioGroupDisabled {
@@ -264,37 +406,55 @@
   pointer-events: none;
 }
 
-/* ── Hint ── */
-.hint {
-  font-size: var(--font-xs);
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0;
-  opacity: 0.8;
+/* ── Badge row (under input) ── */
+.badgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 2px;
 }
 
-/* ── Apply / action button ── */
+/* ── 3D Button shared effects ── */
+
+/* Shine sweep across button surface on hover (GPU — uses transform, not left) */
+@keyframes buttonShineSweep {
+  0%   { transform: translateX(-200%); opacity: 0; }
+  20%  { opacity: 0.7; }
+  100% { transform: translateX(400%); opacity: 0; }
+}
+
+/* Press ripple burst */
 @keyframes buttonPressRipple {
   0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent); }
   50%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
   100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
 }
 
+/* ── Apply / action button ── */
+
 .applyButton {
   appearance: none;
+  position: relative;
+  overflow: hidden;
   align-self: center;
   min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
   color: var(--accent);
   border-radius: var(--radius-md);
   padding: 4px 28px;
   font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.15);
   transition:
     border-color 200ms ease,
     background 200ms ease,
@@ -304,14 +464,54 @@
     box-shadow 200ms ease;
 }
 
+/* Glossy top-edge highlight */
+.applyButton::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* Sweep glint on hover */
+.applyButton::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  will-change: transform;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.15) 48%, rgba(255, 255, 255, 0.25) 50%, rgba(255, 255, 255, 0.15) 52%, transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+}
+
 .applyButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
-  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 16%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
   transform: translateY(-1px);
 }
 
+.applyButton:hover:not(:disabled)::after {
+  animation: buttonShineSweep 600ms ease-out;
+}
+
 .applyButton:active:not(:disabled) {
-  transform: scale(0.95) translateY(0);
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 3px rgba(0, 0, 0, 0.1) inset,
+    0 1px 2px rgba(0, 0, 0, 0.1);
   animation: buttonPressRipple 400ms ease;
 }
 
@@ -321,6 +521,7 @@
   color: var(--text-secondary);
   opacity: 0.5;
   cursor: default;
+  box-shadow: none;
 }
 
 /* ── File path row ── */
@@ -337,19 +538,27 @@
 
 .filePathAction {
   appearance: none;
+  position: relative;
+  overflow: hidden;
   flex-shrink: 0;
   min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.05) 100%),
+    var(--glass-bg);
   color: var(--text-primary);
   border-radius: var(--radius-md);
   padding: 6px 14px;
   font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.1) inset,
+    0 2px 4px rgba(0, 0, 0, 0.12);
   transition:
     border-color 200ms ease,
     background 200ms ease,
@@ -358,20 +567,58 @@
     box-shadow 200ms ease;
 }
 
+.filePathAction::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  pointer-events: none;
+}
+
+.filePathAction::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  will-change: transform;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.12) 48%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.12) 52%, transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+}
+
 .filePathAction:hover:not(:disabled) {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.03) 100%),
+    color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.1) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.06) inset,
+    0 4px 10px color-mix(in srgb, var(--accent) 14%, transparent);
   transform: translateY(-1px);
 }
 
+.filePathAction:hover:not(:disabled)::after {
+  animation: buttonShineSweep 600ms ease-out;
+}
+
 .filePathAction:active:not(:disabled) {
-  transform: scale(0.95) translateY(0);
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 2px 3px rgba(0, 0, 0, 0.1) inset,
+    0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .filePathAction:disabled {
   opacity: 0.5;
   cursor: default;
+  box-shadow: none;
 }
 
 /* ── File path validation ── */
@@ -400,6 +647,7 @@
 
 /* ── Process launch bar ── */
 .processLaunchBar {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -408,11 +656,15 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--glass-border);
   background: var(--glass-highlight), var(--glass-bg);
-  animation: fadeInUp 500ms 200ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  transform-style: preserve-3d;
+  animation:
+    fadeInUp 500ms 200ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
+    blockFloat 20s ease-in-out -5s infinite;
   transition:
     border-color var(--transition-normal),
     background var(--transition-normal);
 }
+
 
 .processLaunchActions {
   display: flex;
@@ -462,6 +714,8 @@
 
 .startButtonLarge {
   appearance: none;
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -474,9 +728,15 @@
   letter-spacing: 0.4px;
   border: 1px solid var(--accent);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 16%, var(--glass-bg));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--accent) 16%, var(--glass-bg));
   color: var(--accent);
   cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 8px rgba(0, 0, 0, 0.18);
   transition:
     background 200ms ease,
     border-color 200ms ease,
@@ -486,14 +746,51 @@
     opacity 200ms ease;
 }
 
+.startButtonLarge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  pointer-events: none;
+}
+
+.startButtonLarge::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  will-change: transform;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.12) 48%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.12) 52%, transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+}
+
 .startButtonLarge:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 26%, var(--glass-bg));
-  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 22%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--accent) 26%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 6px 20px color-mix(in srgb, var(--accent) 22%, transparent);
   transform: translateY(-2px) scale(1.02);
 }
 
+.startButtonLarge:hover:not(:disabled)::after {
+  animation: buttonShineSweep 700ms ease-out;
+}
+
 .startButtonLarge:active:not(:disabled) {
-  transform: scale(0.96) translateY(0);
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 4px rgba(0, 0, 0, 0.12) inset,
+    0 1px 3px rgba(0, 0, 0, 0.1);
   animation: startButtonGlow 450ms ease;
 }
 
@@ -503,6 +800,7 @@
   color: var(--text-secondary);
   opacity: 0.45;
   cursor: default;
+  box-shadow: none;
 }
 
 .startButtonRunning {
@@ -529,6 +827,8 @@
 
 .stopButtonLarge {
   appearance: none;
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -538,9 +838,15 @@
   font-weight: 700;
   border: 1px solid var(--danger);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--danger) 10%, var(--glass-bg));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--danger) 10%, var(--glass-bg));
   color: var(--danger);
   cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 8px rgba(0, 0, 0, 0.18);
   transition:
     background 200ms ease,
     box-shadow 200ms ease,
@@ -548,20 +854,58 @@
     opacity 200ms ease;
 }
 
+.stopButtonLarge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  pointer-events: none;
+}
+
+.stopButtonLarge::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  will-change: transform;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.12) 48%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.12) 52%, transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+}
+
 .stopButtonLarge:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 20%, var(--glass-bg));
-  box-shadow: 0 0 20px color-mix(in srgb, var(--danger) 20%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--danger) 20%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 6px 20px color-mix(in srgb, var(--danger) 20%, transparent);
   transform: translateY(-2px) scale(1.02);
 }
 
+.stopButtonLarge:hover:not(:disabled)::after {
+  animation: buttonShineSweep 700ms ease-out;
+}
+
 .stopButtonLarge:active:not(:disabled) {
-  transform: scale(0.96) translateY(0);
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 4px rgba(0, 0, 0, 0.12) inset,
+    0 1px 3px rgba(0, 0, 0, 0.1);
   animation: dangerButtonGlow 450ms ease;
 }
 
 .stopButtonLarge:disabled {
   opacity: 0.45;
   cursor: default;
+  box-shadow: none;
 }
 
 /* Hint under button */
@@ -594,14 +938,17 @@
   .settings,
   .settingsBlock,
   .badge,
-  .processLaunchBar,
-  .processStatusDotRunning,
+  .badgeInvalid,
+  .badgeStopped,
   .badgeRunning::before,
   .badgeStopped::before,
+  .processLaunchBar,
+  .processStatusDotRunning,
   .applyButton,
   .startButtonLarge,
   .stopButtonLarge,
-  .filePathAction {
+  .filePathAction,
+  .inputSuccess {
     animation: none;
   }
 
@@ -609,7 +956,8 @@
   .startButtonLarge,
   .stopButtonLarge,
   .filePathAction,
-  .input {
+  .input,
+  .badge {
     transition: none;
   }
 }
