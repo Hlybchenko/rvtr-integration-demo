@@ -223,8 +223,9 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   //
   // IMPORTANT: we never use visibility:hidden — Chrome silently ignores
   // .focus() on hidden elements, which breaks the focus guard after
-  // rapid page switching.  Instead, z-index:-1 puts the iframe behind
-  // the page content while keeping it focusable.
+  // rapid page switching.  Instead we use z-index:-1 + opacity:0 to
+  // hide the iframe while keeping it focusable.
+  const active = shouldShow && !loading;
   const wrapperStyle = useMemo<CSSProperties>(
     () =>
       viewport
@@ -235,9 +236,10 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
             width: viewport.width,
             height: viewport.height,
             overflow: 'hidden',
-            zIndex: shouldShow && !loading ? 3 : -1,
+            zIndex: active ? 3 : -1,
+            opacity: active ? 1 : 0,
             background: '#0a0c14',
-            pointerEvents: shouldShow ? 'auto' : 'none',
+            pointerEvents: active ? 'auto' : 'none',
           }
         : {
             position: 'fixed',
@@ -249,7 +251,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
             pointerEvents: 'none',
             overflow: 'hidden',
           },
-    [viewport, shouldShow, loading],
+    [viewport, active],
   );
 
   if (!url) {
