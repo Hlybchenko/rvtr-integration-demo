@@ -24,8 +24,8 @@
 .settings {
   display: flex;
   flex-direction: column;
-  padding: 40px 40px;
-  gap: var(--space-6);
+  padding: 24px 28px;
+  gap: var(--space-5);
   max-width: 1100px;
   animation: fadeInUp 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
@@ -34,14 +34,14 @@
 .form {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-5);
+  gap: var(--space-4);
   align-items: stretch;
 }
 
 .column {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 /* Last card in each column stretches to fill remaining space */
@@ -54,8 +54,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: var(--space-4);
+  gap: 10px;
+  padding: var(--space-3) var(--space-4);
   background: var(--glass-highlight), var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
@@ -94,7 +94,7 @@
 
 .settingsBlockTitle {
   margin: 0;
-  font-size: var(--font-lg, 18px);
+  font-size: var(--font-lg, 15px);
   font-weight: 700;
   color: var(--text-primary);
   text-align: center;
@@ -241,8 +241,8 @@
 
 .input {
   width: 100%;
-  padding: 10px 14px;
-  font-size: var(--font-md);
+  padding: 8px 12px;
+  font-size: var(--font-sm);
   font-family: inherit;
   color: var(--text-primary);
   background:
@@ -307,8 +307,8 @@
 .radioGroup {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 8px 12px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
@@ -317,9 +317,9 @@
 .radioOption {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: var(--text-primary);
-  font-size: var(--font-md);
+  font-size: var(--font-sm);
   cursor: pointer;
 }
 
@@ -651,8 +651,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 20px 14px;
+  gap: 8px;
+  padding: 14px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--glass-border);
   background: var(--glass-highlight), var(--glass-bg);
@@ -719,11 +719,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-width: 180px;
-  min-height: 46px;
-  padding: 10px 36px;
-  font-size: 16px;
+  gap: 8px;
+  min-width: 160px;
+  min-height: 38px;
+  padding: 8px 28px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.4px;
   border: 1px solid var(--accent);
@@ -832,9 +832,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
-  padding: 10px 28px;
-  font-size: 16px;
+  min-height: 38px;
+  padding: 8px 24px;
+  font-size: 13px;
   font-weight: 700;
   border: 1px solid var(--danger);
   border-radius: var(--radius-md);
@@ -972,6 +972,6 @@
 /* ── Mobile adjustments ── */
 @media (max-width: 767px) {
   .settings {
-    padding: 56px 16px 24px;
+    padding: 48px 12px 20px;
   }
 }
