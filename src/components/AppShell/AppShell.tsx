@@ -89,6 +89,7 @@ export function AppShell() {
       {!pinned && (
         <div
           className={`${styles.backdrop} ${sidebarOpen ? styles.backdropVisible : ''}`}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={closeSidebar}
           aria-hidden="true"
         />
