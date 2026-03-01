@@ -64,59 +64,58 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
 
   const shouldShow = isVisible && !!viewport;
 
-  // ── Focus guard ────────────────────────────────────────────────────────
-  // Keeps keyboard focus on the PS iframe so keystrokes (play/pause, etc.)
-  // always reach the stream. Uses two complementary strategies:
+  // ── Focus lock ─────────────────────────────────────────────────────────
+  // Single low-level mechanism that keeps keyboard focus on the PS iframe.
   //
-  //  A) Event-based (instant): focusin / focusout / iframe blur.
-  //  B) Polling fallback (200ms): catches silent focus loss that fires NO
-  //     events — e.g. a React unmount removes a focused <input> and the
-  //     browser moves activeElement to <body> without any focus event.
+  // How it works:
+  //   1. A `mousedown` capture listener on `document` calls preventDefault()
+  //      for every click that would steal focus from the iframe. This stops
+  //      focus theft at the source — no element on the page can take focus.
+  //      Form controls (inputs, textareas, selects) are exempted so the
+  //      UE control panel remains interactive.
   //
-  // Form controls (inputs, textareas, selects) are allowed to keep focus
-  // so the UE control panel sliders/dropdowns remain interactive.
+  //   2. A 200ms polling interval calls iframe.focus() whenever
+  //      document.activeElement isn't the iframe or a form control.
+  //      This handles edge cases that mousedown can't prevent:
+  //      React unmounting a focused element, Tab navigation, programmatic
+  //      focus changes, etc.
+  //
+  //   3. Initial focus is set immediately when the effect runs (iframe
+  //      becomes visible).
+  //
+  // Active only when shouldShow is true (iframe visible on a device page).
+  // On non-device pages the effect is cleaned up — no interference.
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked || !shouldShow) return;
 
+    const isFormControl = (el: EventTarget | null): boolean =>
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement;
+
+    // (1) Prevent focus theft at the source — capture phase runs before
+    // any component-level handlers.
+    const blockFocusTheft = (e: MouseEvent) => {
+      if (isFormControl(e.target)) return;  // let UE panel controls work
+      e.preventDefault();
+    };
+    document.addEventListener('mousedown', blockFocusTheft, true);
+
+    // (2) Polling fallback — catches silent focus loss (DOM removal,
+    // Tab navigation, programmatic focus, etc.)
     const reclaimFocus = () => {
-      const active = document.activeElement;
-      // Let form controls keep focus (UE panel sliders, inputs, selects)
-      if (
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        active instanceof HTMLSelectElement
-      ) {
-        return;
-      }
-      // Already on iframe — nothing to do
-      if (active === iframe) return;
-      try {
-        iframe.focus();
-      } catch {
-        // cross-origin — safe to ignore
-      }
+      if (isFormControl(document.activeElement)) return;
+      if (document.activeElement === iframe) return;
+      try { iframe.focus(); } catch { /* cross-origin */ }
     };
-
-    // Strategy A: event-based — immediate reclaim on any focus change
-    let rafId: number | null = null;
-    const guardFocus = () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(reclaimFocus);
-    };
-
-    document.addEventListener('focusin', guardFocus);
-    document.addEventListener('focusout', guardFocus);
-    iframe.addEventListener('blur', guardFocus);
-
-    // Strategy B: polling fallback — catches silent focus loss (DOM removal)
     const pollId = window.setInterval(reclaimFocus, 200);
 
+    // (3) Initial focus
+    reclaimFocus();
+
     return () => {
-      document.removeEventListener('focusin', guardFocus);
-      document.removeEventListener('focusout', guardFocus);
-      iframe.removeEventListener('blur', guardFocus);
-      if (rafId !== null) cancelAnimationFrame(rafId);
+      document.removeEventListener('mousedown', blockFocusTheft, true);
       window.clearInterval(pollId);
     };
   }, [url, isEmbedBlocked, shouldShow]);
