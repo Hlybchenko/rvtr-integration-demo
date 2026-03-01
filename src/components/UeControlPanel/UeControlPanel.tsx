@@ -4,12 +4,10 @@ import {
   UE_LEVELS,
   DEFAULT_DEVICE_SETTINGS,
   ZERO_CAMERA,
-  type CameraPosition,
   type UeDeviceSettings,
   type UeLevelId,
 } from '@/stores/ueControlStore';
 import {
-  sendUeCommand,
   changeLevel,
   setLogo,
   setInterruption,
@@ -20,9 +18,8 @@ import {
   resetCameraToZero,
   applyDeviceSettings,
 } from '@/services/ueRemoteApi';
+import { useSliderSend } from '@/hooks/useSliderSend';
 import styles from './UeControlPanel.module.css';
-
-const SLIDER_DEBOUNCE_MS = 200;
 
 /** Slider min/max ranges per camera axis.
  *  Zoom/pan are positional offsets (UE units). Pitch is an angle. */
@@ -32,16 +29,6 @@ const SLIDER_RANGES = {
   cameraHorizontal: { min: -300,  max: 300  },
   cameraPitch:      { min: -45,   max: 45   },
 } as const;
-
-/** Slider key → UE command name mapping */
-const SLIDER_COMMANDS: Record<string, { command: string; param: string }> = {
-  zoom: { command: 'zoom', param: 'offset' },
-  cameraVertical: { command: 'CameraVertical', param: 'offset' },
-  cameraHorizontal: { command: 'CameraHorizontal', param: 'offset' },
-  cameraPitch: { command: 'cameraPitch', param: 'angle' },
-};
-
-type SliderKey = 'zoom' | 'cameraVertical' | 'cameraHorizontal' | 'cameraPitch';
 
 interface UeControlPanelProps {
   deviceId: string;
@@ -115,43 +102,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     prevOpenRef.current = isOpen;
   }, [isOpen]);
 
-  // ── Debounced slider handler ──────────────────────────────────────────────
-  // Per-key timers so concurrent slider movements don't cancel each other.
-  //
-  // NOTE: `useUeControlStore.getState()` is used inside setTimeout callbacks
-  // and onClick handlers instead of reading from hook state. In debounced
-  // callbacks this avoids stale closures — the timer fires after the closure
-  // was created, so hook-level state would be outdated. In onClick handlers
-  // the same pattern is used for consistency. `.getState()` reads the latest
-  // Zustand snapshot directly.
-
-  const sliderTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  /** Last value that was sent (or initial) — used to track the "sent" baseline */
-  const sentValueRef = useRef(new Map<string, number>());
-  /** True while an HTTP send is in-flight for a given key — prevents concurrent sends */
-  const inFlightRef = useRef(new Set<string>());
-  // Clean up all pending timers on unmount.
-  // Copy ref to local var so cleanup captures the same Map instance.
-  useEffect(() => {
-    const timers = sliderTimersRef.current;
-    return () => {
-      timers.forEach((t) => clearTimeout(t));
-    };
-  }, []);
-
-  // Cancel pending slider timers and seed baselines at the given camera
-  // values. After this call, slider drags compute deltas from `camera`
-  // which must reflect what we believe UE currently has.
-  const resetSliderState = (camera: CameraPosition) => {
-    sliderTimersRef.current.forEach((t) => clearTimeout(t));
-    sliderTimersRef.current.clear();
-    inFlightRef.current.clear();
-    sentValueRef.current.clear();
-    sentValueRef.current.set('zoom', camera.zoom);
-    sentValueRef.current.set('cameraVertical', camera.cameraVertical);
-    sentValueRef.current.set('cameraHorizontal', camera.cameraHorizontal);
-    sentValueRef.current.set('cameraPitch', camera.cameraPitch);
-  };
+  const { handleSlider, resetSliderState } = useSliderSend({ deviceId });
 
   // ── Auto-apply saved settings on device switch ──────────────────────────
   // Generation counter ensures rapid device switches don't overlap: only the
@@ -179,66 +130,6 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
       useUeControlStore.getState().setUeCommittedCamera(newCommitted);
     })();
   }, [deviceId]);
-
-  // Sends the delta for a single slider key. Extracted so it can be called
-  // both from the debounce timer and as a catch-up after an in-flight send.
-  const fireSliderSend = useCallback(
-    (key: SliderKey) => {
-      const url = useUeControlStore.getState().ueApiUrl;
-      if (!url) return;
-      const cmd = SLIDER_COMMANDS[key];
-      if (!cmd) return;
-
-      // Only one send per key at a time — prevents baseline races
-      if (inFlightRef.current.has(key)) return;
-
-      const baseline = sentValueRef.current.get(key) ?? 0;
-      const target = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
-      const delta = target - baseline;
-      if (delta === 0) return;
-
-      inFlightRef.current.add(key);
-      sentValueRef.current.set(key, target);
-
-      void sendUeCommand(url, {
-        command: cmd.command,
-        [cmd.param]: String(delta),
-      }).then((ok) => {
-        inFlightRef.current.delete(key);
-
-        if (ok) {
-          useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
-          // Catch-up: if slider moved while we were in-flight, send again.
-          // Only on success — on failure baseline reverts, and retrying
-          // would loop infinitely when UE is unreachable.
-          const latest = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
-          if (latest !== target) {
-            fireSliderSend(key);
-          }
-        } else {
-          sentValueRef.current.set(key, baseline);
-        }
-      });
-    },
-    [deviceId],
-  );
-
-  const handleSlider = useCallback(
-    (key: SliderKey, value: number) => {
-      // Update store immediately (optimistic UI)
-      updateSettings(deviceId, { [key]: value });
-
-      // Debounce the actual UE command (per slider key)
-      const existing = sliderTimersRef.current.get(key);
-      if (existing) clearTimeout(existing);
-
-      sliderTimersRef.current.set(
-        key,
-        setTimeout(() => fireSliderSend(key), SLIDER_DEBOUNCE_MS),
-      );
-    },
-    [deviceId, updateSettings, fireSliderSend],
-  );
 
   // ── Toggle handler ────────────────────────────────────────────────────────
 
@@ -288,7 +179,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
         await applyDeviceSettings(url, DEFAULT_DEVICE_SETTINGS, newCommitted);
       })();
     }
-  }, [deviceId, resetSettings]);
+  }, [deviceId, resetSettings, resetSliderState]);
 
   if (!ueApiUrl) return null;
 
