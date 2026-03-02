@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { devices } from '@/config/devices';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { isValidUrl } from '@/utils/isValidUrl';
@@ -78,6 +78,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
   const logoMarkRef = useRef<SVGSVGElement>(null);
   const logoRafRef = useRef<number | null>(null);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // UI scale
   const uiScale = useSettingsStore((s) => s.uiScale);
@@ -282,6 +283,10 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
       <div
         ref={logoRef}
         className={styles.logo}
+        role="link"
+        tabIndex={0}
+        onClick={() => navigate('/')}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/'); }}
         onMouseMove={handleLogoMouseMove}
         onMouseLeave={handleLogoMouseLeave}
       >

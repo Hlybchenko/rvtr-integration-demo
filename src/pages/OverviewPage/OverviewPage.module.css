@@ -303,6 +303,22 @@
   animation: inputSuccessFlash 800ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
 
+@keyframes inputSavingPulse {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  50% {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
+                0 0 8px color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+}
+
+.inputSaving {
+  animation: inputSavingPulse 1.5s ease-in-out infinite;
+}
+
 /* ── Radio group ── */
 .radioGroup {
   display: flex;
@@ -404,6 +420,16 @@
 .radioGroupDisabled {
   opacity: 0.45;
   pointer-events: none;
+}
+
+.disabledHint {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  opacity: 0.7;
+  font-style: italic;
+  padding: 2px 0;
+  text-align: center;
+  animation: badgeFadeIn 300ms ease both;
 }
 
 /* ── Badge row (under input) ── */
@@ -522,6 +548,21 @@
   opacity: 0.5;
   cursor: default;
   box-shadow: none;
+}
+
+.applyProgress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 0 0;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  animation: badgeFadeIn 300ms ease both;
+}
+
+.applyProgressDone {
+  color: var(--success);
 }
 
 /* ── File path row ── */
@@ -948,7 +989,8 @@
   .startButtonLarge,
   .stopButtonLarge,
   .filePathAction,
-  .inputSuccess {
+  .inputSuccess,
+  .inputSaving {
     animation: none;
   }
 

@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { devices, preloadDeviceFrameImages } from '@/config/devices';
 import { warmDetectScreenRect } from '@/hooks/useDetectScreenRect';
 import { usePathConfig, type BrowseResult } from '@/hooks/usePathConfig';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useDebouncedUrlSave } from '@/hooks/useDebouncedUrlSave';
+import { useBackendReconciliation } from '@/hooks/useBackendReconciliation';
 import { useSettingsStore, type VoiceAgent } from '@/stores/settingsStore';
 import { useUeControlStore } from '@/stores/ueControlStore';
 import { useStatusStore } from '@/stores/statusStore';
 import { useStreamingStore } from '@/stores/streamingStore';
 import {
   forceRewriteVoiceAgentFile,
-  readVoiceAgentFromFile,
   setWriterFilePath,
-  getWriterConfig,
-  browseForFile,
   setGlobalExePath,
+  browseForFile,
   browseForExe,
   startProcess,
   stopProcess,
@@ -47,6 +48,8 @@ const IS_WINDOWS =
   (/win/i.test(navigator.userAgent) ||
     (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ===
       'Windows');
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Descriptor for a non-streaming (widget) device URL field. */
 interface DeviceField {
@@ -108,22 +111,8 @@ export function OverviewPage() {
   });
 
   // ── Local state ──────────────────────────────────────────────────────────
-  const [backendError, setBackendError] = useState<string | null>(null);
-
-  // -- pixel streaming URL local state --
-  const [psUrlInput, setPsUrlInput] = useState(pixelStreamingUrl);
-  // Tracks whether user has actively typed in the PS URL input.
-  // Prevents Zustand hydration race from clearing the URL on mount.
-  const psUrlDirtyRef = useRef(false);
-
-  // -- voice agent state --
   const [pendingVoiceAgent, setPendingVoiceAgent] = useState<VoiceAgent>(voiceAgent);
-  const [isApplying, setIsApplying] = useState(false);
-  const [applyError, setApplyError] = useState<string | null>(null);
-
-  // -- process start/restart --
-  const [isStartingProcess, setIsStartingProcess] = useState(false);
-  const [processError, setProcessError] = useState<string | null>(null);
+  const [applyStep, setApplyStep] = useState<string | null>(null);
 
   // -- UE API URL state (health stored centrally in ueControlStore) --
   const ueApiUrl = useUeControlStore((s) => s.ueApiUrl);
@@ -131,8 +120,6 @@ export function OverviewPage() {
   // UE health badges — disabled until backend provides a real ping endpoint
   // const ueReachable = useUeControlStore((s) => s.ueReachable);
   // const setUeReachable = useUeControlStore((s) => s.setUeReachable);
-  const [ueApiUrlInput, setUeApiUrlInput] = useState(ueApiUrl);
-  const ueUrlDirtyRef = useRef(false);
 
   // -- global status (polling runs in AppShell) --
   const processRunning = useStatusStore((s) => s.processRunning);
@@ -141,29 +128,50 @@ export function OverviewPage() {
   // -- streaming remount (used after voice agent change to rebuild iframe) --
   const psRemount = useStreamingStore((s) => s.remount);
 
-  const valuesByDevice: Record<'phone' | 'laptop', string> = {
-    phone: phoneUrl,
-    laptop: laptopUrl,
-  };
-
   const isFileConfigured = filePath.isConfigured;
   const isExeConfigured = exePath.isConfigured;
 
-  // Block-level validation for Widget
+  // ── Debounced URL saves ──────────────────────────────────────────────────
+  const psUrl = useDebouncedUrlSave({ storeValue: pixelStreamingUrl, saveFn: setPixelStreamingUrl });
+  const ueUrl = useDebouncedUrlSave({ storeValue: ueApiUrl, saveFn: setUeApiUrl });
+  const phoneUrlSave = useDebouncedUrlSave({ storeValue: phoneUrl, saveFn: (url) => setDeviceUrl('phone', url) });
+  const laptopUrlSave = useDebouncedUrlSave({ storeValue: laptopUrl, saveFn: (url) => setDeviceUrl('laptop', url) });
+
+  const urlSaveByDevice: Record<'phone' | 'laptop', typeof phoneUrlSave> = {
+    phone: phoneUrlSave,
+    laptop: laptopUrlSave,
+  };
+
+  // ── Backend reconciliation ──────────────────────────────────────────────
+  const { backendError } = useBackendReconciliation({
+    filePath,
+    exePath,
+    licenseFilePath,
+    setLicenseFilePath,
+    storeExePath,
+    setExePathStore,
+    setPsUrlInput: psUrl.setInput,
+    setPixelStreamingUrl,
+    isFileConfigured,
+    setPendingVoiceAgent,
+  });
+
+  // ── Validation ─────────────────────────────────────────────────────────
   const widgetHasError = WIDGET_DEVICES.some((d) => {
-    const v = valuesByDevice[d.id];
+    const v = urlSaveByDevice[d.id].input;
     return v.trim().length > 0 && !isValidUrl(v);
   });
   const widgetAllGood = WIDGET_DEVICES.every((d) => {
-    const v = valuesByDevice[d.id];
+    const v = urlSaveByDevice[d.id].input;
     return v.trim().length > 0 && isValidUrl(v);
   });
 
-  // Pixel Streaming URL validation
-  const psHasUrl = psUrlInput.trim().length > 0;
-  const psUrlValid = !psHasUrl || isValidUrl(psUrlInput);
+  const psHasUrl = psUrl.input.trim().length > 0;
+  const psUrlValid = !psHasUrl || isValidUrl(psUrl.input);
   const psHasError = psHasUrl && !psUrlValid;
   const psAllGood = psHasUrl && psUrlValid;
+
+  const hasPendingAgentChange = pendingVoiceAgent !== voiceAgent;
 
   // ── Side effects ─────────────────────────────────────────────────────────
 
@@ -176,226 +184,51 @@ export function OverviewPage() {
     });
   }, []);
 
-  // Reconcile frontend store with backend config on mount
-  useEffect(() => {
-    let cancelled = false;
+  // ── Async actions ──────────────────────────────────────────────────────
 
-    void (async () => {
-      try {
-        const cfg = await getWriterConfig();
-        if (cancelled) return;
-        setBackendError(null);
+  const applyAction = useAsyncAction(
+    useCallback(async () => {
+      if (!isFileConfigured) return;
 
-        // License file path — prefer backend value, fall back to store
-        const backendLicensePath = cfg.licenseFilePath || '';
-        const effectiveLicensePath = backendLicensePath || licenseFilePath;
-
-        if (effectiveLicensePath) {
-          if (!backendLicensePath && licenseFilePath) {
-            const result = await setWriterFilePath(licenseFilePath);
-            if (cancelled) return;
-            if (result.ok) {
-              setLicenseFilePath(result.resolvedPath ?? licenseFilePath);
-              filePath.setFromBackend(effectiveLicensePath, true);
-            } else {
-              filePath.setFromBackend(
-                effectiveLicensePath,
-                false,
-                result.error ?? 'Previously saved path no longer exists',
-              );
-            }
-          } else {
-            setLicenseFilePath(backendLicensePath);
-            filePath.setFromBackend(effectiveLicensePath, true);
-          }
-        }
-
-        // Exe path — prefer backend value, fall back to store
-        const backendExePath = cfg.exePath || '';
-        const effectiveExePath = backendExePath || storeExePath;
-        if (effectiveExePath) {
-          if (!backendExePath && storeExePath) {
-            const result = await setGlobalExePath(storeExePath);
-            if (cancelled) return;
-            if (result.ok) {
-              setExePathStore(result.resolvedPath ?? storeExePath);
-              exePath.setFromBackend(effectiveExePath, true);
-            } else {
-              exePath.setFromBackend(
-                effectiveExePath,
-                false,
-                result.error ?? 'Previously saved path no longer exists',
-              );
-            }
-          } else if (backendExePath) {
-            setExePathStore(backendExePath);
-            exePath.setFromBackend(effectiveExePath, true);
-          }
-        }
-
-        // Pixel Streaming URL
-        const backendPsUrl = cfg.pixelStreamingUrl || '';
-        if (backendPsUrl) {
-          setPsUrlInput(backendPsUrl);
-          setPixelStreamingUrl(backendPsUrl);
-        }
-
-        if (cancelled) return;
-      } catch (err) {
-        if (cancelled) return;
-        setBackendError(
-          `Local server unavailable. Start the backend service and reload.${err instanceof Error ? ` (${err.message})` : ''}`,
-        );
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // -- sync pendingVoiceAgent from file on mount --
-  useEffect(() => {
-    if (!isFileConfigured) return;
-    let cancelled = false;
-
-    void readVoiceAgentFromFile()
-      .then((result) => {
-        if (cancelled || !result.configured || !result.voiceAgent) return;
-        setPendingVoiceAgent(result.voiceAgent);
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isFileConfigured]);
-
-  const hasPendingAgentChange = pendingVoiceAgent !== voiceAgent;
-
-  // Debounced auto-save for file/exe paths is handled by usePathConfig hooks above.
-
-  // -- debounced auto-save for Pixel Streaming URL --
-  // Allows clearing (empty string) only when user has actively typed (dirty).
-  // Without the dirty guard, Zustand async hydration can race: psUrlInput starts
-  // as '' while pixelStreamingUrl hydrates from localStorage, causing an unwanted clear.
-  useEffect(() => {
-    const trimmed = psUrlInput.trim();
-    if (trimmed === pixelStreamingUrl) {
-      psUrlDirtyRef.current = false;
-      return;
-    }
-    // Allow clearing only from explicit user action, not hydration race
-    if (!trimmed && !psUrlDirtyRef.current) return;
-    if (trimmed && !isValidUrl(trimmed)) return;
-
-    const timer = setTimeout(() => {
-      setPixelStreamingUrl(trimmed);
-      psUrlDirtyRef.current = false;
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [psUrlInput, pixelStreamingUrl, setPixelStreamingUrl]);
-
-  // -- debounced auto-save for UE API URL --
-  // Same dirty guard as PS URL above to prevent hydration race.
-  useEffect(() => {
-    const trimmed = ueApiUrlInput.trim();
-    if (trimmed === ueApiUrl) {
-      ueUrlDirtyRef.current = false;
-      return;
-    }
-    if (!trimmed && !ueUrlDirtyRef.current) return;
-    if (trimmed && !isValidUrl(trimmed)) return;
-
-    const timer = setTimeout(() => {
-      setUeApiUrl(trimmed);
-      // if (!trimmed) setUeReachable(null);
-      ueUrlDirtyRef.current = false;
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [ueApiUrlInput, ueApiUrl, setUeApiUrl]);
-
-  // ── Handlers ─────────────────────────────────────────────────────────────
-
-  const handleApplyAgent = useCallback(async () => {
-    if (!isFileConfigured) return;
-    setIsApplying(true);
-    setApplyError(null);
-
-    try {
+      setApplyStep('Writing agent config...');
       const result = await forceRewriteVoiceAgentFile(pendingVoiceAgent);
+      await delay(1000);
 
-      if (result.matched) {
-        setVoiceAgent(pendingVoiceAgent);
+      if (!result.matched) throw new Error('File verification failed. Try again.');
+      setVoiceAgent(pendingVoiceAgent);
 
-        // Restart process after applying agent change
-        if (isExeConfigured) {
-          try {
-            const restart = await restartProcess();
-            if (!restart.ok) {
-              setApplyError(
-                `Agent applied, but process restart failed: ${restart.error ?? 'unknown error'}`,
-              );
-            }
-          } catch (err) {
-            setApplyError(
-              `Agent applied, but process restart failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        }
-
-        // Force PS iframe remount so it picks up the new agent provider
-        if (useSettingsStore.getState().pixelStreamingUrl) {
-          psRemount();
-        }
-      } else {
-        setApplyError('Agent config saved, but file verification failed. Try applying again.');
+      if (isExeConfigured) {
+        setApplyStep('Restarting process...');
+        await delay(1000);
+        const restart = await restartProcess();
+        if (!restart.ok) throw new Error(`Restart failed: ${restart.error ?? 'unknown'}`);
       }
-    } catch (error) {
-      setApplyError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsApplying(false);
-    }
-  }, [pendingVoiceAgent, isFileConfigured, isExeConfigured, setVoiceAgent, psRemount]);
 
-  // Browse handlers are now provided by usePathConfig (filePath.onBrowse, exePath.onBrowse).
-
-  const handleStartProcess = useCallback(async () => {
-    if (!isExeConfigured) return;
-    setIsStartingProcess(true);
-    setProcessError(null);
-
-    try {
-      const result = await startProcess(storeExePath);
-
-      if (!result.ok) {
-        setProcessError(result.error ?? 'Failed to start process');
+      if (useSettingsStore.getState().pixelStreamingUrl) {
+        setApplyStep('Reconnecting stream...');
+        await delay(1000);
+        psRemount();
       }
-    } catch (err) {
-      setProcessError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsStartingProcess(false);
-    }
-  }, [isExeConfigured, storeExePath]);
 
-  const handleStopProcess = useCallback(async () => {
-    setIsStartingProcess(true);
-    setProcessError(null);
+      setApplyStep('Done');
+      await delay(1000);
+      setApplyStep(null);
+    }, [isFileConfigured, isExeConfigured, pendingVoiceAgent, setVoiceAgent, psRemount]),
+  );
 
-    try {
-      const result = await stopProcess();
-      if (!result.ok) {
-        setProcessError(result.error ?? 'Failed to stop process');
-      }
-    } catch (err) {
-      setProcessError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsStartingProcess(false);
-    }
-  }, []);
+  const startAction = useAsyncAction(
+    useCallback(async () => {
+      const r = await startProcess(storeExePath);
+      if (!r.ok) throw new Error(r.error ?? 'Failed to start');
+    }, [storeExePath]),
+  );
+
+  const stopAction = useAsyncAction(
+    useCallback(async () => {
+      const r = await stopProcess();
+      if (!r.ok) throw new Error(r.error ?? 'Failed to stop');
+    }, []),
+  );
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -552,7 +385,7 @@ export function OverviewPage() {
                   className={styles.radioInput}
                   checked={pendingVoiceAgent === 'elevenlabs'}
                   onChange={() => setPendingVoiceAgent('elevenlabs')}
-                  disabled={!isFileConfigured || isApplying}
+                  disabled={!isFileConfigured || applyAction.isRunning}
                 />
                 <span className={styles.radioMark} />
                 <span>ElevenLabs</span>
@@ -566,23 +399,33 @@ export function OverviewPage() {
                   className={styles.radioInput}
                   checked={pendingVoiceAgent === 'gemini-live'}
                   onChange={() => setPendingVoiceAgent('gemini-live')}
-                  disabled={!isFileConfigured || isApplying}
+                  disabled={!isFileConfigured || applyAction.isRunning}
                 />
                 <span className={styles.radioMark} />
                 <span>Gemini Live</span>
               </label>
             </div>
 
+            {!isFileConfigured && (
+              <p className={styles.disabledHint}>Configure a license file path above to enable agent selection</p>
+            )}
+
             <button
               type="button"
               className={styles.applyButton}
-              onClick={() => void handleApplyAgent()}
-              disabled={!isFileConfigured || isApplying || !hasPendingAgentChange}
+              onClick={() => void applyAction.execute()}
+              disabled={!isFileConfigured || applyAction.isRunning || !hasPendingAgentChange}
             >
-              {isApplying ? 'Applying...' : 'Apply & restart'}
+              {applyAction.isRunning ? 'Applying...' : 'Apply & restart'}
             </button>
 
-            {applyError && <p className={styles.filePathValidationError}>{applyError}</p>}
+            {applyStep && (
+              <div className={`${styles.applyProgress} ${applyStep === 'Done' ? styles.applyProgressDone : ''}`}>
+                {applyStep}
+              </div>
+            )}
+
+            {applyAction.error && <p className={styles.filePathValidationError}>{applyAction.error}</p>}
           </section>
         </div>
 
@@ -601,7 +444,8 @@ export function OverviewPage() {
             <h2 className={styles.settingsBlockTitle}>Widget</h2>
 
             {WIDGET_DEVICES.map((field) => {
-              const urlValue = valuesByDevice[field.id];
+              const urlHook = urlSaveByDevice[field.id];
+              const urlValue = urlHook.input;
               const hasUrl = urlValue.trim().length > 0;
               const urlValid = !hasUrl || isValidUrl(urlValue);
 
@@ -619,11 +463,11 @@ export function OverviewPage() {
                   </div>
                   <input
                     id={`${field.id}-url`}
-                    className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''}`}
+                    className={`${styles.input} ${hasUrl && !urlValid ? styles.inputError : ''} ${urlHook.isSaving ? styles.inputSaving : ''}`}
                     type="url"
                     placeholder={field.placeholder}
                     value={urlValue}
-                    onChange={(e) => setDeviceUrl(field.id, e.target.value)}
+                    onChange={(e) => urlHook.setInput(e.target.value)}
                     spellCheck={false}
                     autoComplete="url"
                   />
@@ -655,11 +499,11 @@ export function OverviewPage() {
               </div>
               <input
                 id="pixel-streaming-url"
-                className={`${styles.input} ${psHasError ? styles.inputError : ''}`}
+                className={`${styles.input} ${psHasError ? styles.inputError : ''} ${psUrl.isSaving ? styles.inputSaving : ''}`}
                 type="url"
                 placeholder="https://stream.example.com"
-                value={psUrlInput}
-                onChange={(e) => { psUrlDirtyRef.current = true; setPsUrlInput(e.target.value); }}
+                value={psUrl.input}
+                onChange={(e) => psUrl.setInput(e.target.value)}
                 spellCheck={false}
                 autoComplete="url"
               />
@@ -679,20 +523,20 @@ export function OverviewPage() {
             <div className={styles.field}>
               <div className={styles.fieldHeader}>
                 <label className={styles.label} htmlFor="ue-api-url">UE Remote API</label>
-                {ueApiUrlInput.trim() && isValidUrl(ueApiUrlInput) && (
+                {ueUrl.input.trim() && isValidUrl(ueUrl.input) && (
                   <span className={`${styles.badge} ${styles.badgeValid}`}>✓ Valid</span>
                 )}
-                {ueApiUrlInput.trim() && !isValidUrl(ueApiUrlInput) && (
+                {ueUrl.input.trim() && !isValidUrl(ueUrl.input) && (
                   <span className={`${styles.badge} ${styles.badgeInvalid}`}>✗ Invalid URL</span>
                 )}
               </div>
               <input
                 id="ue-api-url"
-                className={`${styles.input} ${ueApiUrlInput.trim() && !isValidUrl(ueApiUrlInput) ? styles.inputError : ''}`}
+                className={`${styles.input} ${ueUrl.input.trim() && !isValidUrl(ueUrl.input) ? styles.inputError : ''} ${ueUrl.isSaving ? styles.inputSaving : ''}`}
                 type="url"
                 placeholder="http://127.0.0.1:8081"
-                value={ueApiUrlInput}
-                onChange={(e) => { ueUrlDirtyRef.current = true; setUeApiUrlInput(e.target.value); }}
+                value={ueUrl.input}
+                onChange={(e) => ueUrl.setInput(e.target.value)}
                 spellCheck={false}
                 autoComplete="url"
               />
@@ -718,27 +562,31 @@ export function OverviewPage() {
             <button
               type="button"
               className={styles.stopButtonLarge}
-              onClick={() => void handleStopProcess()}
-              disabled={isStartingProcess}
+              onClick={() => void stopAction.execute()}
+              disabled={stopAction.isRunning}
             >
-              {isStartingProcess ? 'Stopping...' : 'Stop'}
+              {stopAction.isRunning ? 'Stopping...' : 'Stop'}
             </button>
           ) : (
             <button
               type="button"
               className={styles.startButtonLarge}
-              onClick={() => void handleStartProcess()}
-              disabled={!isExeConfigured || isStartingProcess}
+              onClick={() => void startAction.execute()}
+              disabled={!isExeConfigured || startAction.isRunning}
             >
-              {isStartingProcess ? 'Starting...' : 'Start'}
+              {startAction.isRunning ? 'Starting...' : 'Start'}
             </button>
           )}
         </div>
         <span className={`${styles.processHint} ${processRunning ? styles.processHintRunning : ''}`}>
           {processRunning ? 'Process is running' : isExeConfigured ? 'Ready to launch' : 'Configure executable to start'}
         </span>
+        {!isExeConfigured && !processRunning && (
+          <span className={styles.disabledHint}>Set an executable path to enable launching</span>
+        )}
       </div>
-      {processError && <p className={styles.filePathValidationError}>{processError}</p>}
+      {startAction.error && <p className={styles.filePathValidationError}>{startAction.error}</p>}
+      {stopAction.error && <p className={styles.filePathValidationError}>{stopAction.error}</p>}
     </div>
   );
 }

@@ -23,7 +23,7 @@
   min-height: calc(80px * var(--scale));
   padding: calc(18px * var(--scale)) calc(14px * var(--scale)) calc(18px * var(--scale)) calc(70px * var(--scale));
   border-bottom: 1px solid var(--glass-border);
-  cursor: default;
+  cursor: pointer;
 }
 
 /* When pinned — reduce logo left padding (no burger overlap) */
