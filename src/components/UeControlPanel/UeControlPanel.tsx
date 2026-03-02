@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   useUeControlStore,
   UE_LEVELS,
@@ -21,6 +22,9 @@ import {
 import { useSliderSend } from '@/hooks/useSliderSend';
 import styles from './UeControlPanel.module.css';
 
+/** Prevent mousedown from stealing focus from the PS iframe. */
+const noFocusSteal = (e: React.MouseEvent) => e.preventDefault();
+
 /** Slider min/max ranges per camera axis (UI steps).
  *  `scale` converts a UI step to UE units (offset / angle). */
 const SLIDER_RANGES = {
@@ -32,9 +36,9 @@ const SLIDER_RANGES = {
 
 // ── Focus-free slider ──────────────────────────────────────────────────
 // Uses <div> instead of <input type="range"> so it never enters the
-// browser focus system. The global mousedown capture handler in
-// PersistentPixelStreaming calls preventDefault() on non-form-control
-// elements, which blocks focus theft WITHOUT blocking our mouse events.
+// browser focus system.  Mouse events work normally on non-focusable
+// elements, and the PS iframe focus guard (polling + pointerup) in
+// PersistentPixelStreaming reclaims focus after any interaction.
 // Result: slider drags work perfectly while focus stays on the iframe.
 
 interface DivSliderProps {
@@ -236,7 +240,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
           {!ueApiUrl && (
             <div className={styles.noUrlHint}>
               Set <strong>UE API URL</strong> on the{' '}
-              <a href="/" className={styles.noUrlLink}>Settings</a> page to enable controls.
+              <Link to="/" className={styles.noUrlLink} onMouseDown={noFocusSteal}>Settings</Link> page to enable controls.
             </div>
           )}
 
@@ -323,6 +327,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <button
                 type="button"
                 className={styles.smallButton}
+                onMouseDown={noFocusSteal}
                 onClick={() => { const u = useUeControlStore.getState().ueApiUrl; if (u) void stopAnswer(u); }}
               >
                 Stop Answer
@@ -338,6 +343,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <button
                 type="button"
                 className={styles.smallButton}
+                onMouseDown={noFocusSteal}
                 onClick={() => { const u = useUeControlStore.getState().ueApiUrl; if (u) void lightUp(u); }}
               >
                 Light +
@@ -345,6 +351,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <button
                 type="button"
                 className={styles.smallButton}
+                onMouseDown={noFocusSteal}
                 onClick={() => { const u = useUeControlStore.getState().ueApiUrl; if (u) void lightDown(u); }}
               >
                 Light -
@@ -352,6 +359,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
               <button
                 type="button"
                 className={styles.smallButton}
+                onMouseDown={noFocusSteal}
                 onClick={() => { const u = useUeControlStore.getState().ueApiUrl; if (u) void changeLight(u); }}
               >
                 Toggle type
@@ -376,12 +384,13 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
           {/* Reset / Re-sync */}
           <div className={styles.buttonRow}>
-            <button type="button" className={styles.resetButton} onClick={handleReset}>
+            <button type="button" className={styles.resetButton} onMouseDown={noFocusSteal} onClick={handleReset}>
               Reset to defaults
             </button>
             <button
               type="button"
               className={styles.resetButton}
+              onMouseDown={noFocusSteal}
               onClick={() => {
                 // Invalidate any in-flight auto-apply or previous reset
                 const gen = ++applyGenRef.current;

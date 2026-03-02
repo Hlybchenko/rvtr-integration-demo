@@ -71,9 +71,11 @@
 /* Whole pin: springy rotate with overshoot + wobble */
 @keyframes pinSlamIn {
   0%   { transform: rotate(45deg) scale(1); }
-  25%  { transform: rotate(-12deg) scale(1.1); }
-  45%  { transform: rotate(6deg) scale(0.95); }
-  62%  { transform: rotate(-3deg) scale(1.02); }
+  18%  { transform: rotate(-15deg) scale(1.14); }
+  34%  { transform: rotate(8deg) scale(0.93); }
+  48%  { transform: rotate(-6deg) scale(1.05); }
+  62%  { transform: rotate(3deg) scale(0.97); }
+  78%  { transform: rotate(-1.5deg) scale(1.02); }
   100% { transform: rotate(0deg) scale(1); }
 }
 
@@ -131,8 +133,8 @@
 /* Shadow: appear/disappear under tip */
 @keyframes shadowFadeIn {
   0%   { transform: translateX(-50%) scaleX(0) scaleY(0.5); opacity: 0; }
-  50%  { transform: translateX(-50%) scaleX(1.4) scaleY(0.7); opacity: 0.35; }
-  100% { transform: translateX(-50%) scaleX(1) scaleY(0.5); opacity: 0.25; }
+  40%  { transform: translateX(-50%) scaleX(1.6) scaleY(0.9); opacity: 0.5; }
+  100% { transform: translateX(-50%) scaleX(1.3) scaleY(0.7); opacity: 0.4; }
 }
 
 @keyframes shadowFadeOut {
@@ -163,13 +165,14 @@
 
 .pinned .pinIconWrap {
   animation: pinSlamIn 750ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.25));
 }
 
 .pinButton:not(.pinned) .pinIconWrap {
   animation: pinYankOut 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
 
-/* --- Pin head — round cartoon ball --- */
+/* --- Pin head — 3D metallic ball --- */
 .pinHead {
   position: absolute;
   top: 0;
@@ -177,15 +180,28 @@
   width: calc(14px * var(--scale));
   height: calc(14px * var(--scale));
   border-radius: 50%;
-  background: var(--text-secondary);
+  background:
+    radial-gradient(ellipse 60% 40% at 35% 30%, rgba(255,255,255,0.35) 0%, transparent 55%),
+    radial-gradient(circle at 50% 65%, rgba(0,0,0,0.2) 0%, transparent 50%),
+    var(--text-secondary);
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.15);
   transform: translateX(-50%) scaleY(1) scaleX(1);
   transform-origin: center bottom;
   overflow: hidden;
-  transition: background 300ms ease;
+  transition: background 300ms ease, box-shadow 300ms ease;
 }
 
 .pinned .pinHead {
-  background: var(--accent);
+  background:
+    radial-gradient(ellipse 60% 40% at 35% 30%, rgba(255,255,255,0.4) 0%, transparent 55%),
+    radial-gradient(circle at 50% 65%, rgba(0,0,0,0.25) 0%, transparent 50%),
+    var(--accent);
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--accent) 40%, transparent),
+    0 1px 3px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.2);
   animation:
     headSmashIn 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
     aliveGlow 2.5s 900ms ease-in-out infinite;
@@ -219,14 +235,19 @@
   animation: shineFlash 500ms 200ms ease-out both;
 }
 
-/* --- Needle — thick tapered cartoon shaft --- */
+/* --- Needle — metallic tapered shaft --- */
 .pinNeedle {
   position: absolute;
   top: calc(12px * var(--scale));
   left: 50%;
   width: 4px;
   height: calc(10px * var(--scale));
-  background: var(--text-secondary);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--text-secondary) 70%, #000),
+    var(--text-secondary) 40%,
+    color-mix(in srgb, var(--text-secondary) 85%, #fff) 60%,
+    color-mix(in srgb, var(--text-secondary) 70%, #000)
+  );
   transform: translateX(-50%);
   clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
   transform-origin: center top;
@@ -234,7 +255,12 @@
 }
 
 .pinned .pinNeedle {
-  background: var(--accent);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent) 60%, #1a1040),
+    var(--accent) 40%,
+    color-mix(in srgb, var(--accent) 80%, #fff) 60%,
+    color-mix(in srgb, var(--accent) 60%, #1a1040)
+  );
   animation: needleDriveIn 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
 
@@ -250,7 +276,7 @@
   width: calc(10px * var(--scale));
   height: 5px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
   transform: translateX(-50%) scaleX(0) scaleY(0.5);
   opacity: 0;
   pointer-events: none;
@@ -707,15 +733,15 @@
 
 /* Track background colour breathes on switch */
 @keyframes trackPulseDark {
-  0%   { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
-  50%  { background: color-mix(in srgb, #1a1a3e 30%, var(--panel)); }
-  100% { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+  0%   { box-shadow: inset 0 1px 3px rgba(0,0,0,0.2), 0 0 0 0 color-mix(in srgb, var(--accent) 15%, transparent); }
+  50%  { box-shadow: inset 0 1px 3px rgba(0,0,0,0.2), 0 0 8px 1px color-mix(in srgb, var(--accent) 10%, transparent); }
+  100% { box-shadow: inset 0 1px 3px rgba(0,0,0,0.2), 0 0 0 0 transparent; }
 }
 
 @keyframes trackPulseLight {
-  0%   { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
-  50%  { background: color-mix(in srgb, #ffeebb 25%, var(--panel)); }
-  100% { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+  0%   { box-shadow: inset 0 1px 3px rgba(0,0,0,0.1), 0 0 0 0 color-mix(in srgb, var(--accent) 12%, transparent); }
+  50%  { box-shadow: inset 0 1px 3px rgba(0,0,0,0.1), 0 0 8px 1px color-mix(in srgb, var(--accent) 8%, transparent); }
+  100% { box-shadow: inset 0 1px 3px rgba(0,0,0,0.1), 0 0 0 0 transparent; }
 }
 
 /* Track tilts so the thumb "rolls downhill" — jelly squash on tilt */
@@ -755,17 +781,30 @@
   border-radius: 999px;
 }
 
-/* --- Track --- */
+/* --- Track — glass border matching dial bezel --- */
 .themeToggleTrack {
   position: relative;
   width: calc(56px * var(--scale));
   height: calc(30px * var(--scale));
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1.5px solid var(--glass-border);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 50%),
+    color-mix(in srgb, var(--glass-bg) 80%, var(--panel));
   overflow: hidden;
   flex-shrink: 0;
-  transition: border-color 440ms ease;
+  box-shadow:
+    inset 0 1px 3px rgba(0,0,0,0.2),
+    inset 0 -1px 0 rgba(255,255,255,0.05),
+    0 1px 0 rgba(255,255,255,0.04);
+  transition: border-color 440ms ease, box-shadow 440ms ease;
+}
+
+.themeToggle:hover .themeToggleTrack {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
+  box-shadow:
+    inset 0 1px 3px rgba(0,0,0,0.2),
+    0 0 5px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .themeToggleDark .themeToggleTrack {
@@ -780,7 +819,7 @@
     trackTiltToLight 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
-/* --- Thumb --- */
+/* --- Thumb — metallic like dial lens --- */
 .themeToggleThumb {
   position: absolute;
   left: calc(3px * var(--scale));
@@ -788,9 +827,13 @@
   width: calc(22px * var(--scale));
   height: calc(22px * var(--scale));
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 30%, var(--panel-hover));
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
-  box-shadow: var(--shadow-sm);
+  background:
+    radial-gradient(ellipse 70% 50% at 38% 30%, rgba(255,255,255,0.12) 0%, transparent 60%),
+    color-mix(in srgb, var(--accent) 15%, var(--glass-bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--glass-border));
+  box-shadow:
+    0 1px 4px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.08);
   transform: translateX(0) rotate(0turn) scale(1);
   transform-origin: center;
   will-change: transform;
@@ -902,8 +945,10 @@
 
 .themeToggleLight .themeToggleThumb {
   animation: thumbSlideToLight 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-  background: color-mix(in srgb, var(--panel-hover) 84%, var(--accent));
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background:
+    radial-gradient(ellipse 70% 50% at 38% 30%, rgba(255,255,255,0.15) 0%, transparent 60%),
+    color-mix(in srgb, var(--panel-hover) 84%, var(--accent));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--glass-border));
 }
 
 .themeToggleLight .themeGlyph {

@@ -16,13 +16,58 @@ export function PersistentPixelStreaming() {
   const isVisible = useStreamingStore((s) => s.isVisible);
   const viewport = useStreamingStore((s) => s.viewport);
   const mountGeneration = useStreamingStore((s) => s.mountGeneration);
+  const [proxiedUrl, setProxiedUrl] = useState<string | null>(null);
 
-  if (!pixelStreamingUrl) return null;
+  // Configure the Vite PS proxy and compute same-origin iframe src.
+  // This makes iframe.contentDocument accessible for the keyboard bridge.
+  useEffect(() => {
+    if (!pixelStreamingUrl) {
+      setProxiedUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    try {
+      const parsed = new URL(pixelStreamingUrl);
+      const origin = parsed.origin;
+
+      fetch('/api/ps-target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: origin }),
+      })
+        .then(() => {
+          if (cancelled) return;
+          let src = '/ps-proxy' + parsed.pathname + parsed.search;
+          // Route signaling WebSocket through our proxy so the server
+          // sees Origin: https://box.rvtr.ai instead of http://localhost
+          if (!parsed.searchParams.has('ss')) {
+            const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProto}//${window.location.host}/ps-proxy/`;
+            const sep = src.includes('?') ? '&' : '?';
+            src += `${sep}ss=${wsUrl}`;
+          }
+          setProxiedUrl(src);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setProxiedUrl(pixelStreamingUrl); // fallback: cross-origin
+        });
+    } catch {
+      setProxiedUrl(pixelStreamingUrl);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pixelStreamingUrl]);
+
+  if (!proxiedUrl) return null;
 
   return (
     <PersistentIframe
       key={mountGeneration}
-      url={pixelStreamingUrl}
+      url={proxiedUrl}
       isVisible={isVisible}
       viewport={viewport}
     />
@@ -37,9 +82,10 @@ interface PersistentIframeProps {
   viewport: StreamingViewport | null;
 }
 
-const SANDBOX =
-  import.meta.env.VITE_IFRAME_SANDBOX ||
-  'allow-scripts allow-same-origin allow-forms allow-popups';
+// EXPERIMENT: sandbox disabled to test keyboard event delivery.
+// const SANDBOX =
+//   import.meta.env.VITE_IFRAME_SANDBOX ||
+//   'allow-scripts allow-same-origin allow-forms allow-popups';
 
 function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -64,13 +110,18 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
 
   const shouldShow = isVisible && !!viewport;
 
-  // ── Focus guard ────────────────────────────────────────────────────────
-  // Two mechanisms:
-  //   1. Polling (200ms) — reclaims focus unless an interactive element
-  //      (input/textarea/select/button) is focused. Protects typing and
-  //      keeps device switching stable.
-  //   2. pointerup — after releasing a slider, checkbox, or radio button,
-  //      reclaims focus (polling alone can't because it protects these).
+  // ── Keyboard bridge ──────────────────────────────────────────────────
+  // NO iframe.focus() polling — programmatic focus creates a "black hole"
+  // where keyboard events reach NEITHER the parent NOR the iframe content
+  // (confirmed by badge showing ✅ iframe but keys not working).
+  //
+  // Instead: capture ALL keyboard events on the parent document and
+  // forward them into the iframe's contentDocument (same-origin) or
+  // via postMessage (cross-origin).
+  //
+  // When the user CLICKS on the iframe, it gets real browsing-context
+  // focus — keyboard events go directly inside and never reach the parent,
+  // so this bridge stays silent (no double-fire).
   const shouldShowRef = useRef(shouldShow);
   shouldShowRef.current = shouldShow;
 
@@ -78,52 +129,64 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
-    const isInteractive = (el: Element | null): boolean =>
-      el instanceof HTMLInputElement ||
-      el instanceof HTMLTextAreaElement ||
-      el instanceof HTMLSelectElement ||
-      el instanceof HTMLButtonElement ||
-      (el instanceof HTMLElement && el.closest('button') !== null);
+    const isTypingInput = (el: Element | null): boolean =>
+      el instanceof HTMLInputElement && /^(text|email|password|search|url|tel|number)$/.test(el.type) ||
+      el instanceof HTMLTextAreaElement;
 
-    const focusIframe = () => {
-      try { iframe.focus(); } catch { /* cross-origin */ }
-    };
-
-    // (1) Polling — safety net, skips interactive elements
-    const poll = () => {
+    const forwardKeyEvent = (e: KeyboardEvent) => {
       if (!shouldShowRef.current) return;
+      // If iframe has real focus (user clicked it), keys go directly inside —
+      // they never reach here, but guard just in case.
       if (document.activeElement === iframe) return;
-      if (isInteractive(document.activeElement)) return;
-      focusIframe();
-    };
-    const pollId = window.setInterval(poll, 200);
+      // Don't intercept typing in text fields
+      if (isTypingInput(document.activeElement)) return;
 
-    // (2) Reclaim after releasing sliders / checkboxes / radios
-    const onPointerUp = (e: PointerEvent) => {
-      if (!shouldShowRef.current) return;
-      const t = e.target;
-      if (t instanceof HTMLInputElement && /^(range|checkbox|radio)$/.test(t.type)) {
-        setTimeout(focusIframe, 50);
+      const init: KeyboardEventInit = {
+        key: e.key,
+        code: e.code,
+        keyCode: e.keyCode,
+        which: e.which,
+        altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        shiftKey: e.shiftKey,
+        repeat: e.repeat,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      };
+
+      // Same-origin: dispatch directly on content document
+      try {
+        const doc = iframe.contentDocument;
+        if (doc) {
+          // Use iframe's own KeyboardEvent constructor (correct JS realm)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const KbdEvent = (iframe.contentWindow as any)?.KeyboardEvent ?? KeyboardEvent;
+          doc.dispatchEvent(new KbdEvent(e.type, init));
+          return;
+        }
+      } catch {
+        // cross-origin → fall through to postMessage
       }
+
+      // Cross-origin: postMessage
+      try {
+        iframe.contentWindow?.postMessage(
+          { type: 'rvtr-keyboard', eventType: e.type, ...init },
+          '*',
+        );
+      } catch { /* contentWindow not accessible */ }
     };
-    document.addEventListener('pointerup', onPointerUp, true);
+
+    document.addEventListener('keydown', forwardKeyEvent, true);
+    document.addEventListener('keyup', forwardKeyEvent, true);
 
     return () => {
-      window.clearInterval(pollId);
-      document.removeEventListener('pointerup', onPointerUp, true);
+      document.removeEventListener('keydown', forwardKeyEvent, true);
+      document.removeEventListener('keyup', forwardKeyEvent, true);
     };
   }, [url, isEmbedBlocked]);
-
-  // Immediate focus grab when streaming page becomes visible.
-  useEffect(() => {
-    if (!shouldShow) return;
-    const iframe = iframeRef.current;
-    if (!iframe || isEmbedBlocked) return;
-    const id = requestAnimationFrame(() => {
-      try { iframe.focus(); } catch { /* cross-origin */ }
-    });
-    return () => cancelAnimationFrame(id);
-  }, [shouldShow, isEmbedBlocked]);
 
   const handleLoad = useCallback(() => {
     const iframe = iframeRef.current;
@@ -156,20 +219,31 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     setIsEmbedBlocked(blocked);
     setLoading(false);
 
-    if (!blocked) {
-      requestAnimationFrame(() => {
-        try {
-          iframeRef.current?.focus();
-        } catch {
-          // cross-origin
+    // Same-origin: inject click→focus inside iframe (like the game-iframe trick).
+    // When user clicks inside the iframe, window.focus() gives it real
+    // browsing-context focus so keyboard events go directly to PS.
+    if (!blocked && iframe) {
+      try {
+        const win = iframe.contentWindow;
+        const doc = iframe.contentDocument;
+        if (win && doc) {
+          win.focus();
+          doc.addEventListener('click', () => win.focus());
         }
-      });
+      } catch { /* cross-origin: keyboard bridge handles it */ }
     }
   }, []);
 
   const handleError = useCallback(() => {
     setIsEmbedBlocked(true);
     setLoading(false);
+  }, []);
+
+  // Parent-side: clicking the wrapper also focuses the iframe content window
+  const handleWrapperClick = useCallback(() => {
+    try {
+      iframeRef.current?.contentWindow?.focus();
+    } catch { /* cross-origin */ }
   }, []);
 
   // Reset loading state when URL changes; add timeout fallback so loading
@@ -182,8 +256,6 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const timer = window.setTimeout(() => setLoading(false), 15_000);
     return () => window.clearTimeout(timer);
   }, [url]);
-
-  const resolvedSandbox = SANDBOX === 'none' ? undefined : SANDBOX;
 
   // Wrapper handles positioning only.
   // border-radius is intentionally NOT applied — even on the wrapper — because
@@ -229,7 +301,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
 
   return (
     <>
-      <div style={wrapperStyle}>
+      <div style={wrapperStyle} onClick={handleWrapperClick}>
         <iframe
           ref={iframeRef}
           className={styles.persistentIframe}
@@ -237,10 +309,11 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
           src={url}
           title="Pixel Streaming"
           tabIndex={0}
-          sandbox={resolvedSandbox}
+          // sandbox disabled — all permissions granted
           onLoad={handleLoad}
           onError={handleError}
-          allow="autoplay; microphone; fullscreen"
+          allow="autoplay; camera; microphone; fullscreen; display-capture; encrypted-media; picture-in-picture; clipboard-read; clipboard-write; gamepad; keyboard-map; screen-wake-lock; web-share; geolocation; midi; xr-spatial-tracking; window-management; idle-detection; hid; serial; usb; bluetooth; accelerometer; gyroscope; magnetometer; payment; local-fonts; compute-pressure; browsing-topics; identity-credentials-get; storage-access"
+          referrerPolicy="no-referrer-when-downgrade"
         />
       </div>
       {shouldShow && isEmbedBlocked ? (
@@ -259,6 +332,56 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
           <span>This URL blocks embedding. Check CSP headers.</span>
         </div>
       ) : null}
+      {shouldShow && <FocusBadge iframeRef={iframeRef} />}
     </>
+  );
+}
+
+// ─── Debug badge — shows live focus state on screen ───
+
+function FocusBadge({ iframeRef }: { iframeRef: React.RefObject<HTMLIFrameElement | null> }) {
+  const [info, setInfo] = useState('…');
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+
+    const tick = () => {
+      // Origin check
+      let origin = '?';
+      if (iframe) {
+        try {
+          origin = iframe.contentDocument ? 'same' : 'cross';
+        } catch {
+          origin = 'cross';
+        }
+      }
+
+      const ae = document.activeElement;
+      const isIframe = ae === iframe;
+      const tag = isIframe ? 'iframe' : (ae?.tagName?.toLowerCase() ?? 'null');
+      setInfo(`${tag} | ${origin}`);
+    };
+    const id = window.setInterval(tick, 300);
+    return () => window.clearInterval(id);
+  }, [iframeRef]);
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 8,
+        left: 8,
+        padding: '4px 10px',
+        borderRadius: 6,
+        background: 'rgba(0,0,0,0.75)',
+        color: '#fff',
+        fontSize: 11,
+        fontFamily: 'monospace',
+        zIndex: 99999,
+        pointerEvents: 'none',
+      }}
+    >
+      focus: {info}
+    </div>
   );
 }

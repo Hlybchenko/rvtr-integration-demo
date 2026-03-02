@@ -286,7 +286,6 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         role="link"
         tabIndex={0}
         onClick={() => navigate('/')}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/'); }}
         onMouseMove={handleLogoMouseMove}
         onMouseLeave={handleLogoMouseLeave}
       >
