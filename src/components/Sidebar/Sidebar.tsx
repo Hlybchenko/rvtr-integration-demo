@@ -241,13 +241,18 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
     return () => cancelAnimationFrame(id);
   }, [location.pathname, updateIndicator]);
 
-  // Re-position the indicator when scale changes (including during the --scale CSS transition)
+  // Re-position the indicator when scale changes (including during the --scale CSS transition).
+  // Uses rAF polling during the 450ms bounce transition for smooth tracking.
   useEffect(() => {
-    // Immediate update + updates during the bounce transition
     updateIndicator();
-    const t1 = setTimeout(updateIndicator, 250);
-    const t2 = setTimeout(updateIndicator, 500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    let frameId: number;
+    const start = performance.now();
+    const poll = () => {
+      updateIndicator();
+      if (performance.now() - start < 500) frameId = requestAnimationFrame(poll);
+    };
+    frameId = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(frameId);
   }, [uiScale, updateIndicator]);
 
   const switchTheme = (nextTheme: ThemeMode) => {
@@ -457,6 +462,10 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
               title={uiScale === null ? 'Auto (DPI-aware) · Double-click to reset' : `${Math.round(uiScale * 100)}% · Double-click to reset`}
               tabIndex={-1}
             >
+              <div
+                className={styles.scaleDialWave}
+                style={{ '--dial-angle': `${scaleRotation}deg` } as React.CSSProperties}
+              />
               <div
                 className={styles.scaleDialRing}
                 style={{ transform: `rotate(${scaleRotation}deg)` }}

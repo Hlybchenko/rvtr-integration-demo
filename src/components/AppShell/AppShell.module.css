@@ -146,13 +146,13 @@
 
 .burgerOpen::before {
   top: 0;
-  width: 18px;
+  width: calc(18px * var(--scale));
   transform: rotate(225deg);
 }
 
 .burgerOpen::after {
   top: 0;
-  width: 18px;
+  width: calc(18px * var(--scale));
   transform: rotate(-225deg);
 }
 

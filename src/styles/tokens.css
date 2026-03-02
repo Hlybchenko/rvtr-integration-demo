@@ -9,8 +9,9 @@
 :root {
   /* UI scale multiplier — overridden by inline style on <html> when user sets manual scale */
   --scale: 1;
-  /* Bouncy transition — overshoots briefly, creating a jelly-settle on all scaled elements */
-  transition: --scale 450ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Bouncy transition — overshoots briefly, creating a jelly-settle on all scaled elements.
+     Disabled until JS sets data-scale-ready to prevent DPI media-query flash on load. */
+  transition: none;
 
   /* Background — dark charcoal-navy (lifted from pure black for depth) */
   --bg: #14171f;
@@ -169,6 +170,11 @@
   --radius-sm: calc(10px * var(--scale));
   --radius-md: calc(16px * var(--scale));
   --radius-lg: calc(24px * var(--scale));
+}
+
+/* Enable jelly-bounce transition only after first paint (JS sets data-scale-ready) */
+:root[data-scale-ready] {
+  transition: --scale 450ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* ── DPI-aware auto-scaling ── */
