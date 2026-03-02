@@ -67,11 +67,11 @@
 .burger {
   display: flex;
   position: fixed;
-  top: 14px;
-  left: 14px;
+  top: calc(14px * var(--scale));
+  left: calc(14px * var(--scale));
   z-index: 30;
-  width: 40px;
-  height: 40px;
+  width: calc(40px * var(--scale));
+  height: calc(40px * var(--scale));
   padding: 0;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
@@ -104,7 +104,7 @@
 .burgerLine::before,
 .burgerLine::after {
   display: block;
-  width: 18px;
+  width: calc(18px * var(--scale));
   height: 2px;
   background: var(--text);
   border-radius: 2px;
@@ -131,12 +131,12 @@
 
 .burgerLine::before {
   top: -6px;
-  width: 14px;
+  width: calc(14px * var(--scale));
 }
 
 .burgerLine::after {
   top: 6px;
-  width: 12px;
+  width: calc(12px * var(--scale));
 }
 
 /* Animated X state — lines converge with overshoot rotation */

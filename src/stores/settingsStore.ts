@@ -35,22 +35,26 @@ interface SettingsState {
   licenseFilePath: string;
   /** Path to the start2stream executable (.bat / .sh) */
   exePath: string;
+  /** UI scale multiplier (null = auto DPI-aware via media query) */
+  uiScale: number | null;
 
   setDeviceUrl: (deviceId: 'phone' | 'laptop', url: string) => void;
   setPixelStreamingUrl: (url: string) => void;
   setVoiceAgent: (agent: VoiceAgent) => void;
   setLicenseFilePath: (filePath: string) => void;
   setExePath: (path: string) => void;
+  setUiScale: (scale: number | null) => void;
 }
 
 /**
- * Zustand persist migration: handles all schema versions from v1 to v10.
+ * Zustand persist migration: handles all schema versions from v1 to v11.
  *
  * Key migrations:
  *   v1 → v2:   widgetUrl split into phoneUrl + laptopUrl
  *   v7 → v8:   single start2streamPath → per-device deviceExePaths
  *   v8 → v9:   per-device streaming URLs + deviceExePaths → single pixelStreamingUrl
  *   v9 → v10:  add global exePath (collapse legacy per-device deviceExePaths)
+ *   v10 → v11: add uiScale (null = auto DPI-aware)
  *   any:       google-native-audio → gemini-live (voice agent rename)
  *
  * @internal Exported for unit tests only
@@ -65,6 +69,7 @@ export function migrateSettingsState(
   | 'setVoiceAgent'
   | 'setLicenseFilePath'
   | 'setExePath'
+  | 'setUiScale'
 > {
   const state = persistedState as
     | {
@@ -91,6 +96,7 @@ export function migrateSettingsState(
       voiceAgent: 'elevenlabs' as VoiceAgent,
       licenseFilePath: '',
       exePath: '',
+      uiScale: null,
     };
   }
 
@@ -114,6 +120,7 @@ export function migrateSettingsState(
       voiceAgent: normalizeVoiceAgent(state.voiceAgent),
       licenseFilePath: state.licenseFilePath ?? '',
       exePath: state.exePath ?? '',
+      uiScale: (state as Record<string, unknown>).uiScale as number | null ?? null,
     };
   }
 
@@ -126,6 +133,7 @@ export function migrateSettingsState(
       voiceAgent: normalizeVoiceAgent(state.voiceAgent),
       licenseFilePath: state.licenseFilePath ?? '',
       exePath: resolvedExePath,
+      uiScale: null,
     };
   }
 
@@ -146,6 +154,7 @@ export function migrateSettingsState(
       voiceAgent: normalizeVoiceAgent(state.voiceAgent),
       licenseFilePath: state.licenseFilePath ?? '',
       exePath: resolvedExePath,
+      uiScale: null,
     };
   }
 
@@ -156,6 +165,7 @@ export function migrateSettingsState(
     voiceAgent: normalizeVoiceAgent(state.voiceAgent),
     licenseFilePath: state.licenseFilePath ?? '',
     exePath: resolvedExePath,
+    uiScale: null,
   };
 }
 
@@ -168,6 +178,7 @@ export const useSettingsStore = create<SettingsState>()(
       voiceAgent: 'elevenlabs',
       licenseFilePath: '',
       exePath: '',
+      uiScale: null,
 
       setDeviceUrl: (deviceId, url) => {
         if (deviceId === 'phone') set({ phoneUrl: url });
@@ -181,10 +192,12 @@ export const useSettingsStore = create<SettingsState>()(
       setLicenseFilePath: (filePath) => set({ licenseFilePath: filePath }),
 
       setExePath: (path) => set({ exePath: path }),
+
+      setUiScale: (scale) => set({ uiScale: scale }),
     }),
     {
       name: 'rvtr-settings',
-      version: 10,
+      version: 11,
       migrate: migrateSettingsState,
     },
   ),

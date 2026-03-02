@@ -42,11 +42,11 @@
   flex-direction: column;
   gap: 12px;
   color: var(--muted);
-  font-size: 16px;
+  font-size: calc(16px * var(--scale));
 }
 
 .notFoundIcon {
-  font-size: 48px;
+  font-size: calc(48px * var(--scale));
   opacity: 0.4;
 }
 

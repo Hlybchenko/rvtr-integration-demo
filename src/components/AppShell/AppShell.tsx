@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { PersistentPixelStreaming } from '@/components/PersistentPixelStreaming/PersistentPixelStreaming';
 import { useStatusPolling } from '@/hooks/useStatusPolling';
+import { useUiScale } from '@/hooks/useUiScale';
 import styles from './AppShell.module.css';
 
 const PIN_STORAGE_KEY = 'rvtr-sidebar-pinned-v2';
@@ -33,6 +34,7 @@ export function AppShell() {
 
   // Global status polling (process, PS reachability, UE health)
   useStatusPolling();
+  useUiScale();
 
   // Unpin when window shrinks below desktop breakpoint
   useEffect(() => {

@@ -208,7 +208,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
             height: viewport.height,
             overflow: 'hidden',
             zIndex: 3,
-            background: '#0a0c14',
+            background: '#1a1e2a',
             pointerEvents: 'auto',
           }
         : {

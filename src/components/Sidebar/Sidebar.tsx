@@ -79,6 +79,58 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
   const logoRafRef = useRef<number | null>(null);
   const location = useLocation();
 
+  // UI scale
+  const uiScale = useSettingsStore((s) => s.uiScale);
+  const setUiScale = useSettingsStore((s) => s.setUiScale);
+  const scaleDialRef = useRef<HTMLDivElement>(null);
+  const [isDraggingScale, setIsDraggingScale] = useState(false);
+
+  const scaleValue = uiScale ?? 1;
+  const scaleRotation = ((scaleValue - 0.7) / 0.6) * 270 - 135;
+
+  // Dial drag — horizontal mouse movement maps to scale value
+  const handleScaleDialDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingScale(true);
+    document.body.style.cursor = 'grabbing';
+    const startX = e.clientX;
+    const startVal = useSettingsStore.getState().uiScale ?? 1;
+
+    const handleMove = (ev: MouseEvent) => {
+      const delta = (ev.clientX - startX) / 150;
+      const raw = startVal + delta * 0.6;
+      const clamped = Math.min(1.3, Math.max(0.7, raw));
+      const snapped = Math.round(clamped * 20) / 20;
+      useSettingsStore.getState().setUiScale(snapped);
+    };
+
+    const handleUp = () => {
+      setIsDraggingScale(false);
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }, []);
+
+  // Wheel support on the dial (passive: false to prevent nav scroll)
+  useEffect(() => {
+    const el = scaleDialRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const current = useSettingsStore.getState().uiScale ?? 1;
+      const step = e.deltaY > 0 ? -0.05 : 0.05;
+      const next = Math.round(Math.min(1.3, Math.max(0.7, current + step)) * 20) / 20;
+      useSettingsStore.getState().setUiScale(next);
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+
   // Hide phone/laptop nav items when no valid URL is configured
   const phoneUrl = useSettingsStore((s) => s.phoneUrl);
   const laptopUrl = useSettingsStore((s) => s.laptopUrl);
@@ -188,6 +240,15 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
     const id = requestAnimationFrame(updateIndicator);
     return () => cancelAnimationFrame(id);
   }, [location.pathname, updateIndicator]);
+
+  // Re-position the indicator when scale changes (including during the --scale CSS transition)
+  useEffect(() => {
+    // Immediate update + updates during the bounce transition
+    updateIndicator();
+    const t1 = setTimeout(updateIndicator, 250);
+    const t2 = setTimeout(updateIndicator, 500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [uiScale, updateIndicator]);
 
   const switchTheme = (nextTheme: ThemeMode) => {
     setTheme(nextTheme);
@@ -386,6 +447,27 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
               </span>
             </button>
           )}
+          <div className={styles.scaleRow}>
+            <span className={styles.scaleLabel}>UI Scale</span>
+            <div
+              ref={scaleDialRef}
+              className={`${styles.scaleDial} ${isDraggingScale ? styles.scaleDialActive : ''}`}
+              onMouseDown={handleScaleDialDown}
+              onDoubleClick={() => setUiScale(null)}
+              title={uiScale === null ? 'Auto (DPI-aware) · Double-click to reset' : `${Math.round(uiScale * 100)}% · Double-click to reset`}
+              tabIndex={-1}
+            >
+              <div
+                className={styles.scaleDialRing}
+                style={{ transform: `rotate(${scaleRotation}deg)` }}
+              />
+              <div className={styles.scaleDialLens}>
+                <span className={styles.scaleDialValue}>
+                  {uiScale === null ? 'Auto' : Math.round(uiScale * 100)}
+                </span>
+              </div>
+            </div>
+          </div>
           <div className={styles.themeRow}>
             <span className={styles.themeModeText}>
               {theme === 'dark' ? 'Dark mode' : 'Light mode'}
