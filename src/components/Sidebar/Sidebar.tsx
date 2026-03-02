@@ -97,7 +97,8 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
     const startVal = useSettingsStore.getState().uiScale ?? 1;
 
     const handleMove = (ev: MouseEvent) => {
-      const delta = (ev.clientX - startX) / 150;
+      // ~400px of horizontal drag covers the full 0.7–1.3 range (0.6 / 400)
+      const delta = (ev.clientX - startX) / 400;
       const raw = startVal + delta * 0.6;
       const clamped = Math.min(1.3, Math.max(0.7, raw));
       const snapped = Math.round(clamped * 20) / 20;
