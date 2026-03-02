@@ -115,17 +115,29 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
     window.addEventListener('mouseup', handleUp);
   }, []);
 
-  // Wheel support on the dial (passive: false to prevent nav scroll)
+  // Wheel support on the dial (passive: false to prevent nav scroll).
+  // Accumulates sub-pixel deltas so trackpad inertia scrolling is very smooth —
+  // you need a long swipe for meaningful change (~600px of scroll = full range).
   useEffect(() => {
     const el = scaleDialRef.current;
     if (!el) return;
+    let accum = 0;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      // deltaMode 1 = lines (~40px each), 0 = pixels
+      const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
+      // ~600px of scroll covers the full 0.7–1.3 range (0.6 / 600 = 0.001 per px)
+      accum -= px * 0.001;
+      // Snap to nearest 0.05 only when accumulated enough
       const current = useSettingsStore.getState().uiScale ?? 1;
-      const step = e.deltaY > 0 ? -0.05 : 0.05;
-      const next = Math.round(Math.min(1.3, Math.max(0.7, current + step)) * 20) / 20;
-      useSettingsStore.getState().setUiScale(next);
+      const target = current + accum;
+      const snapped = Math.round(Math.min(1.3, Math.max(0.7, target)) * 20) / 20;
+      if (snapped !== current) {
+        useSettingsStore.getState().setUiScale(snapped);
+        // Consume only the portion that caused the step, keep leftover
+        accum = target - snapped;
+      }
     };
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
