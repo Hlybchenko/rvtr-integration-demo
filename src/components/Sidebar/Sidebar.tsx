@@ -457,15 +457,13 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
             <div
               ref={scaleDialRef}
               className={`${styles.scaleDial} ${isDraggingScale ? styles.scaleDialActive : ''}`}
+              style={{ '--dial-angle': `${scaleRotation}deg` } as React.CSSProperties}
               onMouseDown={handleScaleDialDown}
               onDoubleClick={() => setUiScale(null)}
               title={uiScale === null ? 'Auto (DPI-aware) · Double-click to reset' : `${Math.round(uiScale * 100)}% · Double-click to reset`}
               tabIndex={-1}
             >
-              <div
-                className={styles.scaleDialWave}
-                style={{ '--dial-angle': `${scaleRotation}deg` } as React.CSSProperties}
-              />
+              <div className={styles.scaleDialWave} />
               <div
                 className={styles.scaleDialRing}
                 style={{ transform: `rotate(${scaleRotation}deg)` }}

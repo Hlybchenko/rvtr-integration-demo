@@ -917,10 +917,10 @@
 
 /* ── UI Scale — Zoom Lens Dial ── */
 
-/* Angle tracks indicator position; transitions create trailing wave effect */
+/* Angle tracks indicator position; inherits so ::before and children can use it */
 @property --dial-angle {
   syntax: '<angle>';
-  inherits: false;
+  inherits: true;
   initial-value: 0deg;
 }
 
@@ -987,6 +987,7 @@
 
 /* ── Dial container — adds 3D depth shadow beneath ── */
 .scaleDial {
+  --dial-angle: 0deg;
   position: relative;
   width: calc(48px * var(--scale));
   height: calc(48px * var(--scale));
@@ -995,51 +996,51 @@
   cursor: grab;
   user-select: none;
   touch-action: none;
-  /* Softer 3D shadow */
+  /* Very subtle 3D shadow */
   filter:
-    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25))
-    drop-shadow(0 3px 6px rgba(0, 0, 0, 0.12));
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15))
+    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
   transition: filter 250ms ease;
 }
 
-/* Top specular arc — catches overhead light */
+/* Specular highlight — follows the indicator angle (counter-rotated to stay
+   roughly at the "light catch" point, shifts ±20° as dial turns) */
 .scaleDial::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 40%;
-  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.12) 0%,
-    transparent 100%
+  inset: 1px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from calc(var(--dial-angle) * -0.15 + 340deg),
+    transparent 0deg,
+    rgba(255, 255, 255, 0.06) 15deg,
+    rgba(255, 255, 255, 0.14) 30deg,
+    rgba(255, 255, 255, 0.06) 45deg,
+    transparent 60deg,
+    transparent 360deg
   );
   pointer-events: none;
   z-index: 4;
-  opacity: 0.7;
-  transition: opacity 250ms ease;
+  transition: --dial-angle 500ms cubic-bezier(0.22, 0.9, 0.25, 1);
 }
 
 /* Bottom ambient reflection */
 .scaleDial::after {
   content: '';
   position: absolute;
-  bottom: -6px;
-  left: 25%;
-  right: 25%;
-  height: 5px;
+  bottom: -4px;
+  left: 28%;
+  right: 28%;
+  height: 4px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.08);
-  filter: blur(3px);
+  background: rgba(0, 0, 0, 0.05);
+  filter: blur(2px);
   pointer-events: none;
   transition: opacity 300ms ease;
 }
 
 /* ── Trailing wave ring — conic glow that follows the indicator ── */
 .scaleDialWave {
-  --dial-angle: 0deg;
   position: absolute;
   inset: -3px;
   border-radius: 50%;
@@ -1072,17 +1073,17 @@
   cursor: grabbing;
   animation: dialSquashIn 350ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
   filter:
-    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3))
-    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.15));
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.08));
 }
 
-.scaleDialActive::after { opacity: 0.3; }
+.scaleDialActive::after { opacity: 0.2; }
 
 .scaleDial:not(.scaleDialActive):hover {
   filter:
-    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3))
-    drop-shadow(0 5px 10px rgba(0, 0, 0, 0.14))
-    drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 10%, transparent));
+    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 3px 8px rgba(0, 0, 0, 0.10))
+    drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 8%, transparent));
 }
 
 .scaleDial:not(.scaleDialActive):hover::before { opacity: 1; }
@@ -1136,20 +1137,30 @@
   pointer-events: none;
 }
 
-/* Position indicator — elongated tick mark on the ring edge */
+/* Position indicator — faceted gem tick with gradient + glint */
 .scaleDialRing::before {
   content: '';
   position: absolute;
-  top: 2px;
+  top: 1px;
   left: 50%;
-  width: 2.5px;
-  height: 7px;
-  margin-left: -1.25px;
-  border-radius: 1.5px;
-  background: var(--accent);
+  width: 3.5px;
+  height: 9px;
+  margin-left: -1.75px;
+  border-radius: 2px 2px 1px 1px;
+  /* Metallic gradient: bright highlight → core accent → darker base */
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.85) 0%,
+    color-mix(in srgb, var(--accent) 80%, white) 18%,
+    var(--accent) 45%,
+    color-mix(in srgb, var(--accent) 65%, #1a1040) 100%
+  );
+  /* Layered glow: tight core + mid spread + wide ambient */
   box-shadow:
+    0 0 2px var(--accent),
     0 0 6px var(--accent-glow),
-    0 0 2px var(--accent);
+    0 0 12px color-mix(in srgb, var(--accent) 15%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.5);
   animation: dialIndicatorPulse 3s ease-in-out infinite;
 }
 
@@ -1252,7 +1263,7 @@
   background:
     repeating-conic-gradient(
       from 0deg,
-      rgba(0, 0, 0, 0.06) 0deg 1.5deg,
+      rgba(0, 0, 0, 0.05) 0deg 1.5deg,
       transparent 1.5deg 6deg
     ),
     conic-gradient(
@@ -1265,13 +1276,13 @@
       rgba(255, 255, 255, 0.8) 95%,
       rgba(255, 255, 255, 0.5) 100%
     ),
-    rgba(230, 232, 240, 0.95);
-  border-color: rgba(20, 27, 45, 0.12);
+    rgba(235, 237, 244, 0.95);
+  border-color: rgba(20, 27, 45, 0.08);
   box-shadow:
-    0 2px 6px rgba(20, 27, 45, 0.12),
-    0 4px 14px rgba(20, 27, 45, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 -1px 0 rgba(20, 27, 45, 0.08);
+    0 1px 3px rgba(20, 27, 45, 0.06),
+    0 2px 8px rgba(20, 27, 45, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1px 0 rgba(20, 27, 45, 0.04);
 }
 
 :global([data-theme='light']) .scaleDialLens {
@@ -1288,20 +1299,28 @@
 
 :global([data-theme='light']) .scaleDial {
   filter:
-    drop-shadow(0 1px 1px rgba(20, 27, 45, 0.08))
-    drop-shadow(0 2px 5px rgba(20, 27, 45, 0.05));
+    drop-shadow(0 1px 1px rgba(20, 27, 45, 0.05))
+    drop-shadow(0 2px 4px rgba(20, 27, 45, 0.03));
 }
 
 :global([data-theme='light']) .scaleDial::before {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, transparent 100%);
+  background: conic-gradient(
+    from calc(var(--dial-angle) * -0.15 + 340deg),
+    transparent 0deg,
+    rgba(255, 255, 255, 0.25) 15deg,
+    rgba(255, 255, 255, 0.5) 30deg,
+    rgba(255, 255, 255, 0.25) 45deg,
+    transparent 60deg,
+    transparent 360deg
+  );
 }
 
 :global([data-theme='light']) .scaleDial::after {
-  background: rgba(20, 27, 45, 0.04);
+  background: rgba(20, 27, 45, 0.02);
 }
 
 :global([data-theme='light']) .scaleDialWave {
-  opacity: 0.85;
+  opacity: 0.9;
   filter: blur(1px);
 }
 
