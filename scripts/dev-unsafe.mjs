@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const FIXED_PORT = 5173;
 const WRITER_PORT = 3210;
@@ -75,7 +76,7 @@ function getListeningPidsOnUnix(port) {
 
 function killPidCrossPlatform(pid) {
   if (process.platform === 'win32') {
-    spawnSync('taskkill', ['/PID', pid, '/F'], {
+    spawnSync('taskkill', ['/PID', pid, '/T', '/F'], {
       stdio: 'ignore',
       shell: true,
     });
@@ -167,6 +168,36 @@ function clearChromeExitFlag(userDataDir) {
   }
 }
 
+/** Create / update a desktop shortcut (.lnk) on Windows so the icon stays current. */
+function ensureDesktopShortcut() {
+  if (process.platform !== 'win32') return;
+
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const icoPath = path.join(repoRoot, 'public', 'logomark.ico');
+
+  if (!existsSync(icoPath)) return;
+
+  const desktop = path.join(process.env.USERPROFILE ?? '.', 'Desktop');
+  const lnkPath = path.join(desktop, 'RVTR Demo.lnk');
+
+  // PowerShell script to create a .lnk via WScript.Shell COM
+  const ps = [
+    `$ws = New-Object -ComObject WScript.Shell`,
+    `$s = $ws.CreateShortcut('${lnkPath.replaceAll("'", "''")}')`,
+    `$s.TargetPath = 'cmd.exe'`,
+    `$s.Arguments = '/k cd /d "${repoRoot}" && yarn dev:unsafe'`,
+    `$s.WorkingDirectory = '${repoRoot}'`,
+    `$s.IconLocation = '${icoPath}, 0'`,
+    `$s.Description = 'RVTR Integration Demo (unsafe Chrome)'`,
+    `$s.Save()`,
+  ].join('; ');
+
+  spawnSync('powershell.exe', ['-NoProfile', '-Command', ps], {
+    stdio: 'ignore',
+    shell: false,
+  });
+}
+
 function openChromeUnsafe(chromeExecutable, appUrl) {
   const userDataDir =
     process.platform === 'win32'
@@ -196,6 +227,12 @@ function openChromeUnsafe(chromeExecutable, appUrl) {
 }
 
 async function main() {
+  // Clean up any previous dev session (Chrome, ports, orphan processes)
+  spawnSync('node', ['./scripts/stop-dev.mjs'], {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+
   // Pull latest changes before starting
   console.log('Pulling latest changes from demo…');
   const pull = spawnSync('git', ['pull', 'origin', 'demo'], {
@@ -206,20 +243,37 @@ async function main() {
     console.error('git pull failed — starting with local version.');
   }
 
+  // Create / refresh desktop shortcut with current icon after git pull
+  ensureDesktopShortcut();
+
   const port = FIXED_PORT;
 
-  stopPortListener(port);
-  stopPortListener(WRITER_PORT);
-  await sleep(300);
+  // Wait for OS to release ports after stop-dev cleanup.
+  // On Windows, ports may linger in TIME_WAIT after taskkill.
+  const PORT_RELEASE_ATTEMPTS = 10;
+  const PORT_RELEASE_DELAY_MS = 500;
 
-  if (await isPortOpen(port)) {
-    console.error(`Port ${port} is busy and could not be stopped automatically.`);
-    process.exit(1);
-  }
+  for (let i = 0; i < PORT_RELEASE_ATTEMPTS; i += 1) {
+    const portBusy = await isPortOpen(port);
+    const writerBusy = await isPortOpen(WRITER_PORT);
 
-  if (await isPortOpen(WRITER_PORT)) {
-    console.error(`Port ${WRITER_PORT} (agent-option-writer) is busy and could not be stopped automatically.`);
-    process.exit(1);
+    if (!portBusy && !writerBusy) break;
+
+    if (i === PORT_RELEASE_ATTEMPTS - 1) {
+      if (portBusy) {
+        console.error(`Port ${port} is busy and could not be stopped automatically.`);
+        process.exit(1);
+      }
+      if (writerBusy) {
+        console.error(`Port ${WRITER_PORT} (agent-option-writer) is busy and could not be stopped automatically.`);
+        process.exit(1);
+      }
+    }
+
+    // Re-attempt kill before next wait
+    if (portBusy) stopPortListener(port);
+    if (writerBusy) stopPortListener(WRITER_PORT);
+    await sleep(PORT_RELEASE_DELAY_MS);
   }
 
   const appUrl = `http://localhost:${port}`;
