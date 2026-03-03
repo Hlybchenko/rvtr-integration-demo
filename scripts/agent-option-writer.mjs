@@ -119,7 +119,12 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
   // Fallback: on Windows, the exe may have detached from the shell wrapper.
   // Kill by image name to ensure the actual process is stopped.
   if (isWin && exeName) {
-    execFileSync(taskkill, ['/F', '/IM', exeName], { stdio: 'ignore' });
+    try { execFileSync(taskkill, ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+  }
+
+  // Kill node.exe processes spawned from the same directory (e.g. .lnk → .bat → node)
+  if (isWin && proc.exePath) {
+    killNodeProcessesInDir(path.dirname(proc.exePath));
   }
 
   activeProcesses.delete(processId);
@@ -149,6 +154,23 @@ function resolveImageName(filePath) {
   }
 
   return path.basename(filePath);
+}
+
+/** Kill node.exe processes whose command line references the given directory.
+ *  Skips the current agent-option-writer process (our own PID). */
+function killNodeProcessesInDir(dirPath) {
+  if (os.platform() !== 'win32' || !dirPath) return;
+  const escaped = dirPath.replaceAll("'", "''").replaceAll('\\', '\\\\');
+  try {
+    execFileSync('powershell.exe', [
+      '-NoProfile', '-Command',
+      [
+        `Get-CimInstance Win32_Process -Filter "Name='node.exe'"`,
+        `| Where-Object { $_.ProcessId -ne ${process.pid} -and $_.CommandLine -like '*${escaped}*' }`,
+        `| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+      ].join(' '),
+    ], { stdio: 'ignore' });
+  } catch { /* ignore */ }
 }
 
 /**
@@ -1026,10 +1048,11 @@ const server = createServer(async (req, res) => {
         // Kill only the process with the same processId (not others)
         await killProcess(pid_key);
 
-        // Fallback: kill any orphaned instance by image name (e.g. after server restart)
+        // Fallback: kill any orphaned instance by image name + node.exe in same dir
         if (os.platform() === 'win32') {
           const exeName = resolveImageName(resolved);
           try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+          killNodeProcessesInDir(path.dirname(resolved));
         }
 
         const child = await spawnStart2stream(resolved);
@@ -1065,10 +1088,11 @@ const server = createServer(async (req, res) => {
 
       const killedDeviceId = await killProcess(pid_key);
 
-      // Fallback: kill by image name (handles orphaned processes and .lnk shortcuts)
+      // Fallback: kill by image name + node.exe in same dir
       if (exePath && os.platform() === 'win32') {
         const exeName = resolveImageName(exePath);
         try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+        killNodeProcessesInDir(path.dirname(path.resolve(exePath)));
       }
 
       sendJson(res, 200, {
@@ -1123,10 +1147,11 @@ const server = createServer(async (req, res) => {
       try {
         await killProcess(pid_key);
 
-        // Fallback: kill any orphaned instance by image name (handles .lnk shortcuts)
+        // Fallback: kill any orphaned instance by image name + node.exe in same dir
         if (os.platform() === 'win32') {
           const exeName = resolveImageName(resolved);
           try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+          killNodeProcessesInDir(path.dirname(resolved));
         }
 
         const child = await spawnStart2stream(resolved);
