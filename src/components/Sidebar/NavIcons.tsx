@@ -155,3 +155,27 @@ export function IconFullscreen() {
     </svg>
   );
 }
+
+export function IconKiosks() {
+  return (
+    <svg {...S}>
+      {/* 2×2 grid of mini kiosk screens */}
+      {/* Top-left */}
+      <rect x="1.5" y="1.5" width="6" height="5.5" rx="0.8" />
+      <rect x="2.6" y="2.6" width="3.8" height="3" rx="0.3" strokeWidth={0.6} opacity={0.25} />
+      <line x1="3.5" y1="7" x2="5.5" y2="7" strokeWidth={0.8} opacity={0.4} />
+      {/* Top-right */}
+      <rect x="10.5" y="1.5" width="6" height="5.5" rx="0.8" />
+      <rect x="11.6" y="2.6" width="3.8" height="3" rx="0.3" strokeWidth={0.6} opacity={0.25} />
+      <line x1="12.5" y1="7" x2="14.5" y2="7" strokeWidth={0.8} opacity={0.4} />
+      {/* Bottom-left */}
+      <rect x="1.5" y="10" width="6" height="5.5" rx="0.8" />
+      <rect x="2.6" y="11.1" width="3.8" height="3" rx="0.3" strokeWidth={0.6} opacity={0.25} />
+      <line x1="3.5" y1="15.5" x2="5.5" y2="15.5" strokeWidth={0.8} opacity={0.4} />
+      {/* Bottom-right */}
+      <rect x="10.5" y="10" width="6" height="5.5" rx="0.8" />
+      <rect x="11.6" y="11.1" width="3.8" height="3" rx="0.3" strokeWidth={0.6} opacity={0.25} />
+      <line x1="12.5" y1="15.5" x2="14.5" y2="15.5" strokeWidth={0.8} opacity={0.4} />
+    </svg>
+  );
+}

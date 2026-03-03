@@ -37,8 +37,8 @@ const SLIDER_RANGES = {
 // ── Focus-free slider ──────────────────────────────────────────────────
 // Uses <div> instead of <input type="range"> so it never enters the
 // browser focus system.  Mouse events work normally on non-focusable
-// elements, and the PS iframe focus guard (polling + pointerup) in
-// PersistentPixelStreaming reclaims focus after any interaction.
+// elements, and the PS iframe focus guard (blur + pointerup + polling)
+// in PersistentPixelStreaming reclaims focus after any interaction.
 // Result: slider drags work perfectly while focus stays on the iframe.
 
 interface DivSliderProps {
@@ -59,6 +59,7 @@ function DivSlider({ min, max, value, onChange }: DivSliderProps) {
   const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent focus from leaving the PS iframe
     const track = trackRef.current;
     if (!track) return;
 
@@ -148,8 +149,27 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
 
   const { handleSlider, resetSliderState } = useSliderSend({ deviceId });
 
-  // DEBUG: auto-apply disabled to isolate focus bug
   const applyGenRef = useRef(0);
+
+  // ── Auto-apply device settings when switching devices ───────────────────
+  // Sends camera deltas (committed → desired) + absolute commands to UE.
+  const prevDeviceIdRef = useRef(deviceId);
+  useEffect(() => {
+    if (prevDeviceIdRef.current === deviceId) return;
+    prevDeviceIdRef.current = deviceId;
+
+    const gen = ++applyGenRef.current;
+    const url = useUeControlStore.getState().ueApiUrl;
+    if (!url) return;
+
+    const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
+    const committed = useUeControlStore.getState().ueCommittedCamera;
+
+    void applyDeviceSettings(url, desired, committed).then(({ newCommitted }) => {
+      if (applyGenRef.current !== gen) return;
+      useUeControlStore.getState().setUeCommittedCamera(newCommitted);
+    });
+  }, [deviceId]);
 
   // ── Toggle handler ────────────────────────────────────────────────────────
 
@@ -181,8 +201,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
     // Invalidate any in-flight auto-apply or previous reset/re-sync
     const gen = ++applyGenRef.current;
 
-    // Seed baselines at zero — defaults have all camera values at 0
-    resetSliderState(ZERO_CAMERA);
+    resetSliderState();
 
     // Reset device settings in store (UI immediately shows defaults)
     resetSettings(deviceId);
@@ -319,6 +338,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 type="checkbox"
                 className={styles.toggle}
                 checked={settings.showLogo}
+                onMouseDown={noFocusSteal}
                 onChange={(e) => handleToggle('showLogo', e.target.checked, setLogo)}
               />
             </div>
@@ -377,6 +397,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 type="checkbox"
                 className={styles.toggle}
                 checked={settings.allowInterruption}
+                onMouseDown={noFocusSteal}
                 onChange={(e) => handleToggle('allowInterruption', e.target.checked, setInterruption)}
               />
             </div>
@@ -396,7 +417,7 @@ export function UeControlPanel({ deviceId }: UeControlPanelProps) {
                 const gen = ++applyGenRef.current;
                 // Assume UE is at zero (fresh start), then re-apply current settings
                 const desired = useUeControlStore.getState().getDeviceSettings(deviceId);
-                resetSliderState(desired);
+                resetSliderState();
                 useUeControlStore.getState().resetUeCommittedCamera();
                 const url = useUeControlStore.getState().ueApiUrl;
                 if (url) {

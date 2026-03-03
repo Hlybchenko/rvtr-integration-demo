@@ -1,0 +1,32 @@
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  padding: calc(40px * var(--scale)) calc(40px * var(--scale));
+  gap: var(--space-4);
+  max-width: 1100px;
+  animation: fadeInUp 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+.title {
+  font-size: calc(24px * var(--scale));
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: calc(14px * var(--scale));
+  color: var(--text-secondary);
+  margin: 0;
+}

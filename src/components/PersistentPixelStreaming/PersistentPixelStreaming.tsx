@@ -39,7 +39,7 @@ interface PersistentIframeProps {
 
 const SANDBOX =
   import.meta.env.VITE_IFRAME_SANDBOX ||
-  'allow-scripts allow-same-origin allow-forms allow-popups';
+  'allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock';
 
 function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -65,12 +65,31 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
   const shouldShow = isVisible && !!viewport;
 
   // ── Focus guard ────────────────────────────────────────────────────────
-  // Two mechanisms:
-  //   1. Polling (200ms) — reclaims focus unless an interactive element
-  //      (input/textarea/select/button) is focused. Protects typing and
-  //      keeps device switching stable.
-  //   2. pointerup — after releasing a slider, checkbox, or radio button,
-  //      reclaims focus (polling alone can't because it protects these).
+  // Keeps keyboard input locked to the PS iframe's content window.
+  //
+  // Key insight: iframe.focus() alone sets the <iframe> as activeElement
+  // in the parent DOM but does NOT guarantee the iframe's content window
+  // receives keyboard events.  contentWindow.focus() is required to
+  // activate the browsing context for keyboard routing.
+  //
+  //   1. blur — immediate (next-frame) reclaim when iframe loses focus,
+  //      unless a text-entry element or <select> currently needs it.
+  //
+  //   2. change — when a <select> closes or checkbox/radio toggles,
+  //      reclaims focus after the value settles.
+  //
+  //   3. keydown Escape — reclaims when a <select> dismisses via Escape.
+  //
+  //   4. pointerup — reclaims when any pointer interaction ends (slider drag,
+  //      click on non-focusable element, or panel close via outside click).
+  //
+  //   5. focusin — catches ALL focus transitions including the critical case
+  //      where a focused element unmounts (e.g. UeControlPanel closes while
+  //      <select> has focus → focus falls to <body>).  Neither blur (on the
+  //      iframe) nor pointerup catches this because the iframe wasn't focused
+  //      and pointerup fires before the React click handler unmounts the panel.
+  //
+  //   6. Polling (500 ms) — safety net for edge cases where everything else misses.
   const shouldShowRef = useRef(shouldShow);
   shouldShowRef.current = shouldShow;
 
@@ -78,39 +97,103 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const iframe = iframeRef.current;
     if (!iframe || !url || isEmbedBlocked) return;
 
-    const isInteractive = (el: Element | null): boolean =>
-      el instanceof HTMLInputElement ||
-      el instanceof HTMLTextAreaElement ||
-      el instanceof HTMLSelectElement ||
-      el instanceof HTMLButtonElement ||
-      (el instanceof HTMLElement && el.closest('button') !== null);
+    /** True for elements where the user is actively typing. */
+    const isTextEntry = (el: Element | null): boolean =>
+      (el instanceof HTMLInputElement &&
+        /^(text|email|password|url|search|number|tel)$/.test(el.type)) ||
+      el instanceof HTMLTextAreaElement;
 
+    /** True for elements that need transient focus protection. */
+    const keepFocus = (el: Element | null): boolean =>
+      isTextEntry(el) || el instanceof HTMLSelectElement;
+
+    /** Focus both the <iframe> element AND its content window. */
     const focusIframe = () => {
-      try { iframe.focus(); } catch { /* cross-origin */ }
+      try {
+        iframe.focus();
+        iframe.contentWindow?.focus();
+      } catch { /* cross-origin — iframe.focus() alone is the fallback */ }
     };
 
-    // (1) Polling — safety net, skips interactive elements
-    const poll = () => {
+    // (1) blur — reclaim within one frame unless a protected element took focus
+    const onBlur = () => {
       if (!shouldShowRef.current) return;
-      if (document.activeElement === iframe) return;
-      if (isInteractive(document.activeElement)) return;
-      focusIframe();
+      requestAnimationFrame(() => {
+        if (!shouldShowRef.current) return;
+        if (document.activeElement === iframe) return;
+        if (keepFocus(document.activeElement)) return;
+        focusIframe();
+      });
     };
-    const pollId = window.setInterval(poll, 200);
+    iframe.addEventListener('blur', onBlur);
 
-    // (2) Reclaim after releasing sliders / checkboxes / radios
-    const onPointerUp = (e: PointerEvent) => {
+    // (2) change — reclaim after <select> closes or checkbox/radio toggles
+    const onChange = (e: Event) => {
       if (!shouldShowRef.current) return;
       const t = e.target;
-      if (t instanceof HTMLInputElement && /^(range|checkbox|radio)$/.test(t.type)) {
+      if (
+        t instanceof HTMLSelectElement ||
+        (t instanceof HTMLInputElement && /^(checkbox|radio)$/.test(t.type))
+      ) {
         setTimeout(focusIframe, 50);
       }
     };
+    document.addEventListener('change', onChange, true);
+
+    // (3) Escape — reclaim when <select> dropdown dismissed without change
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!shouldShowRef.current) return;
+      if (e.key === 'Escape' && document.activeElement instanceof HTMLSelectElement) {
+        setTimeout(focusIframe, 50);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+
+    // (4) pointerup — reclaim when any pointer interaction ends.
+    // Covers: slider drag release, click on non-focusable elements,
+    // and panel close via outside click (focused element unmounts → body).
+    const onPointerUp = () => {
+      if (!shouldShowRef.current) return;
+      requestAnimationFrame(() => {
+        if (!shouldShowRef.current) return;
+        if (document.activeElement === iframe) return;
+        if (keepFocus(document.activeElement)) return;
+        focusIframe();
+      });
+    };
     document.addEventListener('pointerup', onPointerUp, true);
 
+    // (5) focusin — catches focus transitions the iframe blur handler can't see.
+    // Critical for: focused element unmounts → focus falls to <body>.
+    const onFocusIn = () => {
+      if (!shouldShowRef.current) return;
+      if (document.activeElement === iframe) return;
+      if (keepFocus(document.activeElement)) return;
+      requestAnimationFrame(() => {
+        if (!shouldShowRef.current) return;
+        if (document.activeElement === iframe) return;
+        if (keepFocus(document.activeElement)) return;
+        focusIframe();
+      });
+    };
+    document.addEventListener('focusin', onFocusIn, true);
+
+    // (6) Polling — slower safety net for edge cases
+    const poll = () => {
+      if (!shouldShowRef.current) return;
+      if (document.activeElement === iframe) return;
+      if (keepFocus(document.activeElement)) return;
+      focusIframe();
+    };
+    const pollId = window.setInterval(poll, 500);
+
     return () => {
-      window.clearInterval(pollId);
+      iframe.removeEventListener('blur', onBlur);
+      document.removeEventListener('change', onChange, true);
+      document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('pointerup', onPointerUp, true);
+      document.removeEventListener('focusin', onFocusIn, true);
+      window.clearInterval(pollId);
     };
   }, [url, isEmbedBlocked]);
 
@@ -120,7 +203,10 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
     const iframe = iframeRef.current;
     if (!iframe || isEmbedBlocked) return;
     const id = requestAnimationFrame(() => {
-      try { iframe.focus(); } catch { /* cross-origin */ }
+      try {
+        iframe.focus();
+        iframe.contentWindow?.focus();
+      } catch { /* cross-origin */ }
     });
     return () => cancelAnimationFrame(id);
   }, [shouldShow, isEmbedBlocked]);
@@ -160,6 +246,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
       requestAnimationFrame(() => {
         try {
           iframeRef.current?.focus();
+          iframeRef.current?.contentWindow?.focus();
         } catch {
           // cross-origin
         }
@@ -240,7 +327,7 @@ function PersistentIframe({ url, isVisible, viewport }: PersistentIframeProps) {
           sandbox={resolvedSandbox}
           onLoad={handleLoad}
           onError={handleError}
-          allow="autoplay; microphone; fullscreen"
+          allow="autoplay; microphone; fullscreen; pointer-lock; xr-spatial-tracking; clipboard-write; gamepad; focus-without-user-activation"
         />
       </div>
       {shouldShow && isEmbedBlocked ? (

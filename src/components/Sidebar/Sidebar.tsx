@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { devices } from '@/config/devices';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useSettingsStore, STREAMING_DEVICE_IDS } from '@/stores/settingsStore';
 import { isValidUrl } from '@/utils/isValidUrl';
 import {
   IconSettings,
   IconPhone,
   IconLaptop,
-  IconKiosk,
-  IconKebaKiosk,
-  IconHolobox,
-  IconFullscreen,
+  IconKiosks,
 } from './NavIcons';
 import styles from './Sidebar.module.css';
 
@@ -52,10 +49,6 @@ function applyTheme(theme: ThemeMode): void {
 const DEVICE_ICONS: Record<string, ReactNode> = {
   phone: <IconPhone />,
   laptop: <IconLaptop />,
-  kiosk: <IconKiosk />,
-  holobox: <IconHolobox />,
-  'keba-kiosk': <IconKebaKiosk />,
-  fullscreen: <IconFullscreen />,
 };
 
 interface SidebarProps {
@@ -285,6 +278,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         className={styles.logo}
         role="link"
         tabIndex={0}
+        onMouseDown={preventFocusSteal}
         onClick={() => navigate('/')}
         onMouseMove={handleLogoMouseMove}
         onMouseLeave={handleLogoMouseLeave}
@@ -416,7 +410,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
 
         <span className={styles.navLabel}>Devices</span>
         {devices
-          .filter((d) => d.id !== 'fullscreen')
+          .filter((d) => !(STREAMING_DEVICE_IDS as string[]).includes(d.id))
           .filter((d) => {
             if (d.id === 'phone') return hasPhoneUrl;
             if (d.id === 'laptop') return hasLaptopUrl;
@@ -436,16 +430,16 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
             </NavLink>
           ))}
 
-        <span className={styles.navLabel}>Display</span>
+        <span className={styles.navLabel}>Streaming</span>
         <NavLink
-          to="/fullscreen"
+          to="/kiosks"
           onMouseDown={preventFocusSteal}
           className={({ isActive }) =>
             `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
           }
         >
-          <span className={styles.navIcon}>{DEVICE_ICONS.fullscreen}</span>
-          Fullscreen
+          <span className={styles.navIcon}><IconKiosks /></span>
+          Kiosks
         </NavLink>
 
         <div className={styles.navBottom}>

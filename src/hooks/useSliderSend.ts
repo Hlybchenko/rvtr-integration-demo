@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import {
-  useUeControlStore,
-  type CameraPosition,
-} from '@/stores/ueControlStore';
+import { useUeControlStore } from '@/stores/ueControlStore';
 import { sendUeCommand } from '@/services/ueRemoteApi';
 
 export const SLIDER_DEBOUNCE_MS = 200;
@@ -25,9 +22,22 @@ interface UseSliderSendOptions {
 
 interface UseSliderSendResult {
   handleSlider: (key: SliderKey, value: number) => void;
-  resetSliderState: (camera: CameraPosition) => void;
+  resetSliderState: () => void;
 }
 
+/**
+ * Hook that debounces slider changes and sends delta commands to UE.
+ *
+ * Delta computation:
+ *   delta = deviceSettings[deviceId][key] − ueCommittedCamera[key]
+ *
+ * `ueCommittedCamera` represents UE's actual camera position (updated after
+ * every successful command). This ensures sliders work as absolute positioning
+ * relative to 0: dragging from −15 to −10 sends +5 (zoom IN), not −10.
+ *
+ * `inFlightRef` prevents concurrent sends per key so committed camera
+ * is always up-to-date before computing the next delta.
+ */
 export function useSliderSend({
   deviceId,
   sendCommand = sendUeCommand,
@@ -35,22 +45,8 @@ export function useSliderSend({
   const updateSettings = useUeControlStore((s) => s.updateDeviceSettings);
 
   const sliderTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  /** Last value that was sent (or initial) — used to track the "sent" baseline */
-  const sentValueRef = useRef(new Map<string, number>());
   /** True while an HTTP send is in-flight for a given key — prevents concurrent sends */
   const inFlightRef = useRef(new Set<string>());
-
-  // Seed baselines from current store values on mount / device switch.
-  // Without this, persisted non-zero values cause all deltas to use baseline 0,
-  // making both slider directions send the same-sign offset.
-  useEffect(() => {
-    const settings = useUeControlStore.getState().deviceSettings[deviceId];
-    if (!settings) return;
-    sentValueRef.current.set('zoom', settings.zoom);
-    sentValueRef.current.set('cameraVertical', settings.cameraVertical);
-    sentValueRef.current.set('cameraHorizontal', settings.cameraHorizontal);
-    sentValueRef.current.set('cameraPitch', settings.cameraPitch);
-  }, [deviceId]);
 
   // Clean up all pending timers on unmount.
   useEffect(() => {
@@ -60,20 +56,19 @@ export function useSliderSend({
     };
   }, []);
 
-  const resetSliderState = useCallback((camera: CameraPosition) => {
+  const resetSliderState = useCallback(() => {
+    // Clear pending debounce timers and in-flight flags.
+    // Baseline is now always read from ueCommittedCamera in the store,
+    // so no local state needs resetting beyond cancellation.
     sliderTimersRef.current.forEach((t) => clearTimeout(t));
     sliderTimersRef.current.clear();
     inFlightRef.current.clear();
-    sentValueRef.current.clear();
-    sentValueRef.current.set('zoom', camera.zoom);
-    sentValueRef.current.set('cameraVertical', camera.cameraVertical);
-    sentValueRef.current.set('cameraHorizontal', camera.cameraHorizontal);
-    sentValueRef.current.set('cameraPitch', camera.cameraPitch);
   }, []);
 
   const fireSliderSend = useCallback(
     (key: SliderKey) => {
-      const url = useUeControlStore.getState().ueApiUrl;
+      const state = useUeControlStore.getState();
+      const url = state.ueApiUrl;
       if (!url) return;
       const cmd = SLIDER_COMMANDS[key];
       if (!cmd) return;
@@ -81,13 +76,13 @@ export function useSliderSend({
       // Only one send per key at a time — prevents baseline races
       if (inFlightRef.current.has(key)) return;
 
-      const baseline = sentValueRef.current.get(key) ?? 0;
-      const target = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
+      // Baseline = UE's actual position; target = desired position for this device
+      const baseline = state.ueCommittedCamera[key];
+      const target = state.deviceSettings[deviceId]?.[key] ?? 0;
       const delta = target - baseline;
       if (delta === 0) return;
 
       inFlightRef.current.add(key);
-      sentValueRef.current.set(key, target);
 
       void sendCommand(url, {
         command: cmd.command,
@@ -96,17 +91,19 @@ export function useSliderSend({
         inFlightRef.current.delete(key);
 
         if (ok) {
+          // Advance committed — UE now has this position
           useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
+
           // Catch-up: if slider moved while we were in-flight, send again.
-          // Only on success — on failure baseline reverts, and retrying
-          // would loop infinitely when UE is unreachable.
+          // Only on success — on failure committed stays unchanged, and the
+          // next debounce fire will recompute the full delta automatically.
           const latest = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
           if (latest !== target) {
             fireSliderSend(key);
           }
-        } else {
-          sentValueRef.current.set(key, baseline);
         }
+        // On failure: committed stays at old value.
+        // Next fire will read committed fresh and recompute the correct delta.
       });
     },
     [deviceId, sendCommand],

@@ -243,36 +243,21 @@ describe('useSliderSend', () => {
     expect(sendCommand).toHaveBeenCalledOnce();
   });
 
-  // ── 10. resetSliderState → seeds baselines, clears timers/in-flight ──────
+  // ── 10. resetSliderState → clears timers/in-flight ─────────────────────
 
-  it('resetSliderState seeds baselines and clears pending state', async () => {
+  it('resetSliderState clears pending timers and in-flight flags', async () => {
     const { result } = renderSliderHook();
 
     // Start a drag (creates a pending timer)
     act(() => result.current.handleSlider('zoom', 50));
 
-    // Reset with a camera position
+    // Reset (no args — baseline is now always ueCommittedCamera in store)
     act(() => {
-      result.current.resetSliderState({
-        zoom: 100,
-        cameraVertical: 200,
-        cameraHorizontal: 300,
-        cameraPitch: 10,
-      });
+      result.current.resetSliderState();
     });
 
     // The pending timer should have been cleared — advancing should NOT fire
     await act(async () => { vi.advanceTimersByTime(SLIDER_DEBOUNCE_MS); });
     expect(sendCommand).not.toHaveBeenCalled();
-
-    // New drag should compute delta from the reset baseline (100)
-    act(() => result.current.handleSlider('zoom', 130));
-    await act(async () => { vi.advanceTimersByTime(SLIDER_DEBOUNCE_MS); });
-
-    expect(sendCommand).toHaveBeenCalledOnce();
-    expect(sendCommand).toHaveBeenCalledWith('http://ue:8081', {
-      command: 'zoom',
-      offset: '30', // 130 − 100
-    });
   });
 });
