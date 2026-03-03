@@ -56,14 +56,26 @@ async function writeConfig(cfg) {
 // ---------------------------------------------------------------------------
 
 /**
- * Active process state — only one device process runs at a time.
- * @type {{ deviceId: string, child: import('node:child_process').ChildProcess } | null}
+ * Named processes — multiple concurrent processes keyed by processId.
+ * Legacy (no processId) uses the '__default__' key.
+ * @type {Map<string, { deviceId: string, child: import('node:child_process').ChildProcess }>}
  */
-let activeProcess = null;
+const activeProcesses = new Map();
+const DEFAULT_PROCESS_ID = '__default__';
 
-/** Legacy alias used by some internal references */
+/** Legacy alias — returns the default process child. */
 function getStart2streamProcess() {
-  return activeProcess?.child ?? null;
+  const entry = activeProcesses.get(DEFAULT_PROCESS_ID);
+  return entry?.child ?? null;
+}
+
+/** Compat shim — get/set activeProcess for legacy code paths. */
+function getActiveProcess() {
+  return activeProcesses.get(DEFAULT_PROCESS_ID) ?? null;
+}
+function setActiveProcess(value) {
+  if (value) activeProcesses.set(DEFAULT_PROCESS_ID, value);
+  else activeProcesses.delete(DEFAULT_PROCESS_ID);
 }
 
 /** Full path to taskkill.exe — avoids ENOENT if PATH is incomplete */
@@ -73,20 +85,20 @@ function getTaskkillPath() {
 }
 
 /**
- * Kill the active process if running.
+ * Kill a process by processId.  If no processId given, kills the default.
  * Cross-platform: SIGTERM on POSIX, taskkill on Windows.
  * Returns the deviceId of the killed process, or null.
  */
-async function killActiveProcess() {
-  const proc = activeProcess;
+async function killProcess(processId = DEFAULT_PROCESS_ID) {
+  const proc = activeProcesses.get(processId);
   if (!proc || proc.child.exitCode !== null) {
-    activeProcess = null;
+    activeProcesses.delete(processId);
     return null;
   }
 
   const pid = proc.child.pid;
   const killedDeviceId = proc.deviceId;
-  if (!pid) { activeProcess = null; return null; }
+  if (!pid) { activeProcesses.delete(processId); return null; }
 
   const isWin = os.platform() === 'win32';
   const taskkill = isWin ? getTaskkillPath() : null;
@@ -119,8 +131,13 @@ async function killActiveProcess() {
     }
   });
 
-  activeProcess = null;
+  activeProcesses.delete(processId);
   return killedDeviceId;
+}
+
+/** Legacy alias for backward compat. */
+async function killActiveProcess() {
+  return killProcess(DEFAULT_PROCESS_ID);
 }
 
 /**
@@ -162,7 +179,10 @@ function spawnStart2stream(exePath) {
 
     child.on('exit', (code, signal) => {
       if (code !== 0) console.error(`[start2stream] exited code=${code} signal=${signal}`);
-      if (activeProcess?.child === child) activeProcess = null;
+      // Clean up from the map if this child is still registered
+      for (const [key, entry] of activeProcesses) {
+        if (entry.child === child) { activeProcesses.delete(key); break; }
+      }
     });
 
     // If no error event fires within 500ms, consider the process started.
@@ -890,12 +910,14 @@ const server = createServer(async (req, res) => {
     }
 
     // -----------------------------------------------------------------------
-    // POST /process/start — start process (kills previous if any)
+    // POST /process/start — start a process (named via processId, or default)
     // -----------------------------------------------------------------------
     if (req.method === 'POST' && req.url === '/process/start') {
       const body = await readBody(req);
       const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
+      const processId = typeof body.processId === 'string' ? body.processId.trim() : '';
       const exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
+      const pid_key = processId || DEFAULT_PROCESS_ID;
 
       if (!exePath) {
         sendJson(res, 400, {
@@ -916,13 +938,15 @@ const server = createServer(async (req, res) => {
       }
 
       try {
-        await killActiveProcess();
+        // Kill only the process with the same processId (not others)
+        await killProcess(pid_key);
         const child = await spawnStart2stream(resolved);
-        activeProcess = { deviceId, child };
+        activeProcesses.set(pid_key, { deviceId, child });
 
         sendJson(res, 200, {
           ok: true,
           pid: child.pid,
+          processId: pid_key,
           exePath: resolved,
         });
       } catch (error) {
@@ -936,31 +960,38 @@ const server = createServer(async (req, res) => {
     }
 
     // -----------------------------------------------------------------------
-    // POST /process/stop — stop the currently running process
+    // POST /process/stop — stop a specific or default process
     // -----------------------------------------------------------------------
     if (req.method === 'POST' && req.url === '/process/stop') {
-      const killedDeviceId = await killActiveProcess();
+      const body = await readBody(req);
+      const processId = typeof body.processId === 'string' ? body.processId.trim() : '';
+      const pid_key = processId || DEFAULT_PROCESS_ID;
+
+      const killedDeviceId = await killProcess(pid_key);
 
       sendJson(res, 200, {
         ok: true,
+        processId: pid_key,
         stoppedDeviceId: killedDeviceId,
       });
       return;
     }
 
     // -----------------------------------------------------------------------
-    // POST /process/restart — kill + re-spawn for current or specified device
+    // POST /process/restart — kill + re-spawn for a specific or default process
     // -----------------------------------------------------------------------
     if (req.method === 'POST' && req.url === '/process/restart') {
       const body = await readBody(req);
-      // Can optionally pass deviceId + exePath; otherwise restarts active process
+      const processId = typeof body.processId === 'string' ? body.processId.trim() : '';
+      const pid_key = processId || DEFAULT_PROCESS_ID;
       let deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : '';
       let exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
 
       // Resolve exe path from active process or saved config
       if (!exePath) {
-        if (!deviceId && activeProcess) {
-          deviceId = activeProcess.deviceId;
+        const existing = activeProcesses.get(pid_key);
+        if (!deviceId && existing) {
+          deviceId = existing.deviceId;
         }
         const cfg = await readConfig();
         exePath = (deviceId && cfg?.deviceExePaths?.[deviceId])
@@ -988,12 +1019,13 @@ const server = createServer(async (req, res) => {
       }
 
       try {
-        await killActiveProcess();
+        await killProcess(pid_key);
         const child = await spawnStart2stream(resolved);
-        activeProcess = { deviceId, child };
+        activeProcesses.set(pid_key, { deviceId, child });
 
         sendJson(res, 200, {
           ok: true,
+          processId: pid_key,
           deviceId,
           pid: child.pid,
           exePath: resolved,
@@ -1009,16 +1041,32 @@ const server = createServer(async (req, res) => {
     }
 
     // -----------------------------------------------------------------------
-    // GET /process/status — check active process status
+    // GET /process/status — check all process statuses
     // -----------------------------------------------------------------------
     if (req.method === 'GET' && req.url === '/process/status') {
-      const child = getStart2streamProcess();
-      const running = child !== null && child.exitCode === null;
+      // Legacy single-process fields (backward compat for Settings page)
+      const defaultEntry = activeProcesses.get(DEFAULT_PROCESS_ID);
+      const defaultChild = defaultEntry?.child ?? null;
+      const defaultRunning = defaultChild !== null && defaultChild.exitCode === null;
+
+      // All named processes
+      const processes = {};
+      for (const [key, entry] of activeProcesses) {
+        const alive = entry.child.exitCode === null;
+        if (!alive) { activeProcesses.delete(key); continue; }
+        processes[key] = {
+          running: true,
+          pid: entry.child.pid ?? null,
+          deviceId: entry.deviceId || null,
+        };
+      }
+
       sendJson(res, 200, {
         ok: true,
-        running,
-        pid: running ? child.pid : null,
-        deviceId: running ? activeProcess?.deviceId ?? null : null,
+        running: defaultRunning,
+        pid: defaultRunning ? defaultChild.pid : null,
+        deviceId: defaultRunning ? defaultEntry?.deviceId ?? null : null,
+        processes,
       });
       return;
     }

@@ -421,18 +421,22 @@ export interface ProcessStartResult {
 }
 
 /**
- * POST /process/start — start the start2stream process.
- * Backend kills any active process first, then spawns a new one.
+ * POST /process/start — start a process.
+ * If processId is provided, starts a named process (multiple can run concurrently).
+ * Without processId, uses the legacy default slot (kills previous default process).
  * Serialized via async queue.
  */
-export function startProcess(exePath: string): Promise<ProcessStartResult> {
+export function startProcess(exePath: string, processId?: string): Promise<ProcessStartResult> {
   return enqueueProcessOp(async () => {
+    const body: Record<string, string> = { exePath };
+    if (processId) body.processId = processId;
+
     const response = await fetchWithTimeout(
       `${WRITER_BASE_URL}/process/start`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exePath }),
+        body: JSON.stringify(body),
       },
       15_000,
     );
@@ -463,12 +467,24 @@ export interface ProcessStopResult {
   error?: string;
 }
 
-/** POST /process/stop — stop the running process. Serialized via async queue. */
-export function stopProcess(): Promise<ProcessStopResult> {
+/**
+ * POST /process/stop — stop a process.
+ * If processId is provided, stops that specific named process.
+ * Without processId, stops the legacy default process.
+ * Serialized via async queue.
+ */
+export function stopProcess(processId?: string): Promise<ProcessStopResult> {
   return enqueueProcessOp(async () => {
+    const body: Record<string, string> = {};
+    if (processId) body.processId = processId;
+
     const response = await fetchWithTimeout(
       `${WRITER_BASE_URL}/process/stop`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
       10_000,
     );
 
@@ -529,18 +545,34 @@ export function restartProcess(): Promise<ProcessRestartResult> {
 export interface ProcessStatusResult {
   running: boolean;
   pid: number | null;
+  /** Per-process running states (keyed by processId). */
+  processes: Record<string, { running: boolean; pid: number | null }>;
 }
 
-/** GET /process/status — check if process is running */
+/** GET /process/status — check all process statuses */
 export async function getProcessStatus(): Promise<ProcessStatusResult> {
   const response = await fetchWithTimeout(`${WRITER_BASE_URL}/process/status`);
   const payload = await ensureOk(response, 'Failed to get process status');
   const record = payload && typeof payload === 'object' ? payload : null;
   const r = record as Record<string, unknown> | null;
 
+  const rawProcesses = r?.processes as Record<string, Record<string, unknown>> | undefined;
+  const processes: Record<string, { running: boolean; pid: number | null }> = {};
+  if (rawProcesses && typeof rawProcesses === 'object') {
+    for (const [key, val] of Object.entries(rawProcesses)) {
+      if (val && typeof val === 'object') {
+        processes[key] = {
+          running: val.running === true,
+          pid: typeof val.pid === 'number' ? val.pid : null,
+        };
+      }
+    }
+  }
+
   return {
     running: r?.running === true,
     pid: typeof r?.pid === 'number' ? r.pid : null,
+    processes,
   };
 }
 

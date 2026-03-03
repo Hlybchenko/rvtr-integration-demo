@@ -17,6 +17,11 @@
   100% { transform: translateY(0); }
 }
 
+@keyframes dotBreath {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 /* ── Page layout ── */
 .page {
   display: flex;
@@ -64,10 +69,40 @@
   gap: 6px;
 }
 
+.fieldHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
 .label {
   font-size: var(--font-sm);
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+/* ── Running badge ── */
+.badgeRunning {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  animation: fadeInUp 300ms ease both;
+}
+
+.badgeRunning::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  margin-right: 4px;
+  vertical-align: middle;
+  animation: dotBreath 2.5s ease-in-out infinite;
 }
 
 /* ── Input + buttons row ── */
@@ -132,7 +167,9 @@
 }
 
 .browseButton,
-.startButton {
+.startButton,
+.stopButton,
+.restartButton {
   appearance: none;
   position: relative;
   overflow: hidden;
@@ -156,7 +193,9 @@
 
 /* Glossy top highlight */
 .browseButton::before,
-.startButton::before {
+.startButton::before,
+.stopButton::before,
+.restartButton::before {
   content: '';
   position: absolute;
   top: 0;
@@ -169,7 +208,9 @@
 
 /* Sweep glint */
 .browseButton::after,
-.startButton::after {
+.startButton::after,
+.stopButton::after,
+.restartButton::after {
   content: '';
   position: absolute;
   top: 0;
@@ -270,6 +311,91 @@
   box-shadow: none;
 }
 
+/* ── Stop button ── */
+.stopButton {
+  border: 1px solid var(--danger);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--danger) 10%, var(--glass-bg));
+  color: var(--danger);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.stopButton:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--danger) 20%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 14px color-mix(in srgb, var(--danger) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.stopButton:hover:not(:disabled)::after {
+  animation: buttonShineSweep 600ms ease-out;
+}
+
+.stopButton:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 3px rgba(0, 0, 0, 0.1) inset,
+    0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.stopButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ── Restart button ── */
+.restartButton {
+  border: 1px solid var(--glass-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.05) 100%),
+    var(--glass-bg);
+  color: var(--text-primary);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.1) inset,
+    0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+.restartButton:hover:not(:disabled) {
+  border-color: var(--accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.03) 100%),
+    color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.1) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.06) inset,
+    0 4px 10px color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.restartButton:hover:not(:disabled)::after {
+  animation: buttonShineSweep 600ms ease-out;
+}
+
+.restartButton:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 2px 3px rgba(0, 0, 0, 0.1) inset,
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.restartButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
 /* ── Error text ── */
 .error {
   font-size: var(--font-sm);
@@ -282,12 +408,18 @@
   .page,
   .block,
   .browseButton,
-  .startButton {
+  .startButton,
+  .stopButton,
+  .restartButton,
+  .badgeRunning,
+  .badgeRunning::before {
     animation: none;
   }
 
   .browseButton,
   .startButton,
+  .stopButton,
+  .restartButton,
   .input {
     transition: none;
   }
