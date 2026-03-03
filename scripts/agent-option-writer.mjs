@@ -194,8 +194,8 @@ async function validateExecutable(filePath) {
   // On Windows, check extension
   if (os.platform() === 'win32') {
     const ext = path.extname(filePath).toLowerCase();
-    if (!['.bat', '.cmd', '.ps1', '.exe'].includes(ext)) {
-      errors.push(`Unexpected file extension "${ext}" (expected .bat, .cmd, .ps1, .exe)`);
+    if (!['.bat', '.cmd', '.ps1', '.exe', '.ahk', '.lnk'].includes(ext)) {
+      errors.push(`Unexpected file extension "${ext}" (expected .bat, .cmd, .ps1, .exe, .ahk, .lnk)`);
     }
   } else {
     // On POSIX, check executable permission
