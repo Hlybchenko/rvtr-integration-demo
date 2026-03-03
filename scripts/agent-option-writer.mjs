@@ -115,12 +115,17 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
     }
   });
 
-  // Fallback: kill child processes that may have detached from the shell wrapper
+  // Kill tracked child PIDs that may have detached from the shell wrapper
   if (isWin) {
-    killChildProcesses(pid);
-    // AgenticProxy is a Node.js app — also kill node.exe in its directory
-    if (proc.exePath && processId === 'agentic-proxy') {
-      killNodeProcessesInDir(path.dirname(proc.exePath));
+    const trackedPids = proc.child._childPids || [];
+    if (trackedPids.length) {
+      console.log(`[killProcess] killing tracked child PIDs: ${trackedPids.join(', ')}`);
+      killPids(trackedPids);
+    }
+    // Also snapshot current children in case new ones appeared
+    const currentChildren = snapshotChildPids(pid);
+    if (currentChildren.length) {
+      killPids(currentChildren);
     }
   }
 
@@ -133,40 +138,28 @@ async function killActiveProcess() {
   return killProcess(DEFAULT_PROCESS_ID);
 }
 
-/** Force-kill a Windows process by image name (same as terminal TASKKILL /IM x /F). */
-function taskkillByName(imageName) {
-  if (!imageName || os.platform() !== 'win32') return;
+/** Snapshot all descendant PIDs of a given parent PID (Windows only).
+ *  Returns array of PID strings, excluding our own process. */
+function snapshotChildPids(parentPid) {
+  if (!parentPid || os.platform() !== 'win32') return [];
   try {
-    spawnSync('taskkill', ['/F', '/IM', imageName], { shell: true, stdio: 'ignore' });
-  } catch { /* not running */ }
+    const result = spawnSync('powershell.exe', [
+      '-NoProfile', '-Command',
+      `Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${parentPid} -and $_.ProcessId -ne ${process.pid} } | ForEach-Object { $_.ProcessId }`,
+    ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+    if (!result.stdout) return [];
+    return result.stdout.split(/\r?\n/).map(s => s.trim()).filter(s => /^\d+$/.test(s));
+  } catch { return []; }
 }
 
-/** Kill all child processes of a given PID (recursive tree via PowerShell). */
-function killChildProcesses(parentPid) {
-  if (!parentPid || os.platform() !== 'win32') return;
-  try {
-    spawnSync('powershell.exe', [
-      '-NoProfile', '-Command',
-      `Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${parentPid} -and $_.ProcessId -ne ${process.pid} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
-    ], { stdio: 'ignore', shell: false });
-  } catch { /* ignore */ }
-}
-
-/** Kill node.exe processes whose command line references the given directory.
- *  Skips the current agent-option-writer process (our own PID). */
-function killNodeProcessesInDir(dirPath) {
-  if (os.platform() !== 'win32' || !dirPath) return;
-  const escaped = dirPath.replaceAll("'", "''").replaceAll('\\', '\\\\');
-  try {
-    spawnSync('powershell.exe', [
-      '-NoProfile', '-Command',
-      [
-        `Get-CimInstance Win32_Process -Filter "Name='node.exe'"`,
-        `| Where-Object { $_.ProcessId -ne ${process.pid} -and $_.CommandLine -like '*${escaped}*' }`,
-        `| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
-      ].join(' '),
-    ], { stdio: 'ignore', shell: false });
-  } catch { /* ignore */ }
+/** Force-kill a list of PIDs on Windows. */
+function killPids(pids) {
+  if (!pids.length || os.platform() !== 'win32') return;
+  for (const pid of pids) {
+    try {
+      spawnSync('taskkill', ['/F', '/T', '/PID', pid], { shell: true, stdio: 'ignore' });
+    } catch { /* already dead */ }
+  }
 }
 
 /**
@@ -245,6 +238,13 @@ function spawnStart2stream(exePath) {
             `Process exited during startup (code=${child.exitCode})${details}`,
           ));
         } else {
+          // Snapshot child PIDs now that the process is stable
+          if (child.pid) {
+            child._childPids = snapshotChildPids(child.pid);
+            if (child._childPids.length) {
+              console.log(`[start2stream] tracked child PIDs: ${child._childPids.join(', ')}`);
+            }
+          }
           resolve(child);
         }
       }
@@ -1044,11 +1044,7 @@ const server = createServer(async (req, res) => {
         // Kill only the process with the same processId (not others)
         await killProcess(pid_key);
 
-        // Fallback: kill any orphaned instance by image name
-        if (os.platform() === 'win32') {
-          taskkillByName(path.basename(resolved));
-          if (pid_key === 'agentic-proxy') killNodeProcessesInDir(path.dirname(resolved));
-        }
+        // killProcess already handles tracked child PIDs
 
         const child = await spawnStart2stream(resolved);
         activeProcesses.set(pid_key, { deviceId, child, exePath: resolved });
@@ -1079,18 +1075,8 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const processId = typeof body.processId === 'string' ? body.processId.trim() : '';
       const pid_key = processId || DEFAULT_PROCESS_ID;
-      const exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
 
       const killedDeviceId = await killProcess(pid_key);
-
-      // Fallback: kill by image name
-      // Fallback: kill by exe image name + node.exe for agentic-proxy
-      if (exePath && os.platform() === 'win32') {
-        taskkillByName(path.basename(exePath));
-        if (pid_key === 'agentic-proxy') {
-          killNodeProcessesInDir(path.dirname(path.resolve(exePath)));
-        }
-      }
 
       sendJson(res, 200, {
         ok: true,
@@ -1144,11 +1130,7 @@ const server = createServer(async (req, res) => {
       try {
         await killProcess(pid_key);
 
-        // Fallback: kill any orphaned instance by image name
-        if (os.platform() === 'win32') {
-          taskkillByName(path.basename(resolved));
-          if (pid_key === 'agentic-proxy') killNodeProcessesInDir(path.dirname(resolved));
-        }
+        // killProcess already handles tracked child PIDs
 
         const child = await spawnStart2stream(resolved);
         activeProcesses.set(pid_key, { deviceId, child, exePath: resolved });
