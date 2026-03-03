@@ -220,41 +220,40 @@ export function KiosksPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.topRow}>
-        {/* ── Process: License file path ── */}
-        <section className={styles.block}>
-          <h2 className={styles.blockTitle}>Process</h2>
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="kiosk-license-path">
-              License file path
-            </label>
-            <div className={styles.row}>
-              <input
-                id="kiosk-license-path"
-                className={`${styles.input} ${licenseError ? styles.inputError : ''}`}
-                type="text"
-                placeholder={IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'}
-                value={licenseInput}
-                onChange={(e) => handleLicenseChange(e.target.value)}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                className={styles.browseButton}
-                onClick={() => void handleLicenseBrowse()}
-                disabled={licenseBrowsing}
-              >
-                {licenseBrowsing ? '...' : 'Browse'}
-              </button>
-            </div>
-            {licenseError && <span className={styles.error}>{licenseError}</span>}
-          </div>
-        </section>
+      {/* ── Process: License + Agent Provider + Shortcuts ── */}
+      <section className={styles.block}>
+        <h2 className={styles.blockTitle}>Process</h2>
 
-        {/* ── Agent Provider ── */}
-        <section className={styles.block}>
-          <h2 className={styles.blockTitle}>Agent Provider</h2>
+        {/* License file path */}
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor="kiosk-license-path">
+            License file path
+          </label>
+          <div className={styles.row}>
+            <input
+              id="kiosk-license-path"
+              className={`${styles.input} ${licenseError ? styles.inputError : ''}`}
+              type="text"
+              placeholder={IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'}
+              value={licenseInput}
+              onChange={(e) => handleLicenseChange(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className={styles.browseButton}
+              onClick={() => void handleLicenseBrowse()}
+              disabled={licenseBrowsing}
+            >
+              {licenseBrowsing ? '...' : 'Browse'}
+            </button>
+          </div>
+          {licenseError && <span className={styles.error}>{licenseError}</span>}
+        </div>
+
+        {/* Agent Provider */}
+        <div className={styles.field}>
           <div className={styles.fieldHeader}>
             <span className={styles.label}>Provider</span>
           </div>
@@ -303,12 +302,9 @@ export function KiosksPage() {
           >
             {applying ? 'Applying...' : 'Apply & restart'}
           </button>
-        </section>
-      </div>
+        </div>
 
-      {/* ── Shortcut launchers ── */}
-      <section className={styles.block}>
-        <h2 className={styles.blockTitle}>Shortcuts</h2>
+        <hr className={styles.divider} />
 
         {KIOSK_SHORTCUTS.map((shortcut) => {
           const value = paths[shortcut.id];
