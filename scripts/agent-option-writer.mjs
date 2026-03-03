@@ -122,8 +122,8 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
     try { execFileSync(taskkill, ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
   }
 
-  // Kill node.exe processes spawned from the same directory (e.g. .lnk → .bat → node)
-  if (isWin && proc.exePath) {
+  // AgenticProxy is a Node.js app — kill node.exe processes in its directory
+  if (isWin && proc.exePath && processId === 'agentic-proxy') {
     killNodeProcessesInDir(path.dirname(proc.exePath));
   }
 
@@ -1048,11 +1048,11 @@ const server = createServer(async (req, res) => {
         // Kill only the process with the same processId (not others)
         await killProcess(pid_key);
 
-        // Fallback: kill any orphaned instance by image name + node.exe in same dir
+        // Fallback: kill any orphaned instance by image name
         if (os.platform() === 'win32') {
           const exeName = resolveImageName(resolved);
           try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
-          killNodeProcessesInDir(path.dirname(resolved));
+          if (pid_key === 'agentic-proxy') killNodeProcessesInDir(path.dirname(resolved));
         }
 
         const child = await spawnStart2stream(resolved);
@@ -1088,11 +1088,14 @@ const server = createServer(async (req, res) => {
 
       const killedDeviceId = await killProcess(pid_key);
 
-      // Fallback: kill by image name + node.exe in same dir
+      // Fallback: kill by image name
       if (exePath && os.platform() === 'win32') {
         const exeName = resolveImageName(exePath);
         try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
-        killNodeProcessesInDir(path.dirname(path.resolve(exePath)));
+        // AgenticProxy is a Node.js app — also kill node.exe in its directory
+        if (pid_key === 'agentic-proxy') {
+          killNodeProcessesInDir(path.dirname(path.resolve(exePath)));
+        }
       }
 
       sendJson(res, 200, {
@@ -1147,11 +1150,11 @@ const server = createServer(async (req, res) => {
       try {
         await killProcess(pid_key);
 
-        // Fallback: kill any orphaned instance by image name + node.exe in same dir
+        // Fallback: kill any orphaned instance by image name
         if (os.platform() === 'win32') {
           const exeName = resolveImageName(resolved);
           try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
-          killNodeProcessesInDir(path.dirname(resolved));
+          if (pid_key === 'agentic-proxy') killNodeProcessesInDir(path.dirname(resolved));
         }
 
         const child = await spawnStart2stream(resolved);
