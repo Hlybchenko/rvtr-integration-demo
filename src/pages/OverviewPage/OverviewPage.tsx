@@ -157,6 +157,7 @@ export function OverviewPage() {
         if (!startResult.ok) {
           throw new Error(startResult.error ?? 'Failed to start Kiosk app');
         }
+        if (startResult.pid) console.log(`[${kioskId}] started, PID: ${startResult.pid}`);
         setRunning((prev) => ({ ...prev, [kioskId]: true }));
 
         if (launchTimers.current[kioskId]) clearTimeout(launchTimers.current[kioskId]);
@@ -255,6 +256,7 @@ export function OverviewPage() {
         setErrors((prev) => ({ ...prev, [id]: result.error ?? 'Failed to start' }));
         setLaunching((prev) => ({ ...prev, [id]: false }));
       } else {
+        if (result.pid) console.log(`[${id}] started, PID: ${result.pid}`);
         setRunning((prev) => ({ ...prev, [id]: true }));
         // Keep "Starting..." state for cooldown period
         if (launchTimers.current[id]) clearTimeout(launchTimers.current[id]);
@@ -316,6 +318,7 @@ export function OverviewPage() {
         setLaunching((prev) => ({ ...prev, [id]: false }));
         setRunning((prev) => ({ ...prev, [id]: false }));
       } else {
+        if (result.pid) console.log(`[${id}] restarted, PID: ${result.pid}`);
         setRunning((prev) => ({ ...prev, [id]: true }));
         if (launchTimers.current[id]) clearTimeout(launchTimers.current[id]);
         launchTimers.current[id] = setTimeout(() => {
