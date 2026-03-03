@@ -27,7 +27,7 @@ const IS_WINDOWS =
       'Windows');
 
 const POLL_INTERVAL_MS = 3_000;
-const LAUNCH_COOLDOWN_MS = 5_000;
+const LAUNCH_COOLDOWN_MS = 2_000;
 
 interface DeviceField {
   id: 'phone' | 'laptop';
@@ -80,6 +80,10 @@ export function OverviewPage() {
   const [pendingAgent, setPendingAgent] = useState<VoiceAgent>(voiceAgent);
   const [applying, setApplying] = useState(false);
 
+  // Sync local state with store on external changes (e.g. persist rehydration)
+  useEffect(() => { setLicenseInput(licenseFilePath); }, [licenseFilePath]);
+  useEffect(() => { setPendingAgent(voiceAgent); }, [voiceAgent]);
+
   const hasLicense = licenseInput.trim().length > 0;
   const hasPendingChange = pendingAgent !== voiceAgent;
 
@@ -128,7 +132,10 @@ export function OverviewPage() {
       if (kioskPath.trim()) {
         setLaunching((prev) => ({ ...prev, [kioskId]: true }));
 
-        await stopProcess(kioskId);
+        const stopResult = await stopProcess(kioskId);
+        if (!stopResult.ok) {
+          throw new Error(stopResult.error ?? 'Failed to stop Kiosk app before restart');
+        }
         setRunning((prev) => ({ ...prev, [kioskId]: false }));
 
         const startResult = await startProcess(kioskPath, kioskId);
@@ -292,7 +299,12 @@ export function OverviewPage() {
     setLaunching((prev) => ({ ...prev, [id]: true }));
     clearError(id);
     try {
-      await stopProcess(id);
+      const stopResult = await stopProcess(id);
+      if (!stopResult.ok) {
+        setErrors((prev) => ({ ...prev, [id]: stopResult.error ?? 'Failed to stop' }));
+        setLaunching((prev) => ({ ...prev, [id]: false }));
+        return;
+      }
       setRunning((prev) => ({ ...prev, [id]: false }));
 
       const result = await startProcess(exePath, id);

@@ -6,9 +6,6 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   AGENT_TO_PATH_SEGMENT,
-  PATH_SEGMENT_TO_AGENT,
-  ALLOWED_AGENTS,
-  LEGACY_ALIASES,
   decodeFileBuffer,
   encodeToBuffer,
   extractVoiceAgentFromApiServer,
@@ -43,11 +40,13 @@ async function readConfig() {
 let _configQueue = Promise.resolve();
 
 async function writeConfig(cfg) {
-  _configQueue = _configQueue.then(async () => {
-    const existing = (await readConfig()) || {};
-    const merged = { ...existing, ...cfg };
-    await fs.writeFile(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf8');
-  });
+  _configQueue = _configQueue
+    .catch(() => {})
+    .then(async () => {
+      const existing = (await readConfig()) || {};
+      const merged = { ...existing, ...cfg };
+      await fs.writeFile(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf8');
+    });
   return _configQueue;
 }
 
@@ -62,21 +61,6 @@ async function writeConfig(cfg) {
  */
 const activeProcesses = new Map();
 const DEFAULT_PROCESS_ID = '__default__';
-
-/** Legacy alias — returns the default process child. */
-function getStart2streamProcess() {
-  const entry = activeProcesses.get(DEFAULT_PROCESS_ID);
-  return entry?.child ?? null;
-}
-
-/** Compat shim — get/set activeProcess for legacy code paths. */
-function getActiveProcess() {
-  return activeProcesses.get(DEFAULT_PROCESS_ID) ?? null;
-}
-function setActiveProcess(value) {
-  if (value) activeProcesses.set(DEFAULT_PROCESS_ID, value);
-  else activeProcesses.delete(DEFAULT_PROCESS_ID);
-}
 
 /** Full path to taskkill.exe — avoids ENOENT if PATH is incomplete */
 function getTaskkillPath() {
@@ -141,9 +125,16 @@ async function killActiveProcess() {
 }
 
 /**
+ * How long to watch a newly spawned process before confirming it started.
+ * If it exits within this window, we report a startup failure with stderr.
+ */
+const STARTUP_WATCH_MS = 3_000;
+
+/**
  * Spawn start2stream executable.
- * Returns a Promise that resolves with the child process once it's confirmed
- * started (or rejects if spawn fails immediately).
+ * Watches the process for STARTUP_WATCH_MS — if it exits during that window
+ * the promise rejects with exit code + captured stderr (up to 500 chars).
+ * Only resolves once the process has been alive for the full watch period.
  */
 function spawnStart2stream(exePath) {
   return new Promise((resolve, reject) => {
@@ -157,42 +148,62 @@ function spawnStart2stream(exePath) {
 
     const child = spawn(command, [], {
       cwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'inherit', 'pipe'],
       detached: false,
       windowsHide: false,
       shell: isWin,
     });
 
-    let resolved = false;
+    let settled = false;
+    const stderrChunks = [];
 
     child.stderr?.on('data', (chunk) => {
       process.stderr.write(`[start2stream:err] ${chunk}`);
+      if (!settled) stderrChunks.push(chunk);
     });
 
     child.on('error', (err) => {
       console.error(`[start2stream] error: ${err.message}`);
-      if (!resolved) {
-        resolved = true;
+      if (!settled) {
+        settled = true;
         reject(err);
       }
     });
 
     child.on('exit', (code, signal) => {
       if (code !== 0) console.error(`[start2stream] exited code=${code} signal=${signal}`);
+
+      // If still in startup watch window — report as startup failure
+      if (!settled) {
+        settled = true;
+        const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+        const details = stderr ? `\n${stderr.slice(0, 500)}` : '';
+        reject(new Error(
+          `Process exited during startup (code=${code ?? '?'}, signal=${signal ?? 'none'})${details}`,
+        ));
+      }
+
       // Clean up from the map if this child is still registered
       for (const [key, entry] of activeProcesses) {
         if (entry.child === child) { activeProcesses.delete(key); break; }
       }
     });
 
-    // If no error event fires within 500ms, consider the process started.
-    // The 'error' event fires synchronously for spawn failures (ENOENT etc.)
+    // Confirm process is alive after the watch period
     setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        resolve(child);
+      if (!settled) {
+        settled = true;
+        if (child.exitCode !== null) {
+          const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+          const details = stderr ? `\n${stderr.slice(0, 500)}` : '';
+          reject(new Error(
+            `Process exited during startup (code=${child.exitCode})${details}`,
+          ));
+        } else {
+          resolve(child);
+        }
       }
-    }, 500);
+    }, STARTUP_WATCH_MS);
   });
 }
 
@@ -1135,7 +1146,9 @@ server.listen(PORT, '127.0.0.1', () => {
 });
 
 async function shutdown() {
-  await killActiveProcess();
+  await Promise.all(
+    [...activeProcesses.keys()].map((key) => killProcess(key)),
+  );
   server.close(() => process.exit(0));
   // Force exit if server.close hangs (e.g. browse request waiting for dialog)
   setTimeout(() => process.exit(1), 5_000).unref();

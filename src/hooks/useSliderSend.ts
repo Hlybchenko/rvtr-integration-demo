@@ -87,24 +87,28 @@ export function useSliderSend({
       void sendCommand(url, {
         command: cmd.command,
         [cmd.param]: String(delta),
-      }).then((ok) => {
-        inFlightRef.current.delete(key);
+      })
+        .then((ok) => {
+          inFlightRef.current.delete(key);
 
-        if (ok) {
-          // Advance committed — UE now has this position
-          useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
+          if (ok) {
+            // Advance committed — UE now has this position
+            useUeControlStore.getState().patchUeCommittedCamera({ [key]: target });
 
-          // Catch-up: if slider moved while we were in-flight, send again.
-          // Only on success — on failure committed stays unchanged, and the
-          // next debounce fire will recompute the full delta automatically.
-          const latest = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
-          if (latest !== target) {
-            fireSliderSend(key);
+            // Catch-up: if slider moved while we were in-flight, send again.
+            // Only on success — on failure committed stays unchanged, and the
+            // next debounce fire will recompute the full delta automatically.
+            const latest = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
+            if (latest !== target) {
+              fireSliderSend(key);
+            }
           }
-        }
-        // On failure: committed stays at old value.
-        // Next fire will read committed fresh and recompute the correct delta.
-      });
+          // On failure: committed stays at old value.
+          // Next fire will read committed fresh and recompute the correct delta.
+        })
+        .catch(() => {
+          inFlightRef.current.delete(key);
+        });
     },
     [deviceId, sendCommand],
   );

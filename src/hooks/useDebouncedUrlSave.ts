@@ -21,6 +21,8 @@ export function useDebouncedUrlSave({
   const [input, setInputRaw] = useState(storeValue);
   const [isSaving, setIsSaving] = useState(false);
   const dirtyRef = useRef(false);
+  const saveFnRef = useRef(saveFn);
+  saveFnRef.current = saveFn;
 
   const setInput = (value: string) => {
     dirtyRef.current = true;
@@ -38,7 +40,7 @@ export function useDebouncedUrlSave({
 
     setIsSaving(true);
     const timer = setTimeout(() => {
-      saveFn(trimmed);
+      saveFnRef.current(trimmed);
       dirtyRef.current = false;
       setIsSaving(false);
     }, debounceMs);
@@ -47,7 +49,7 @@ export function useDebouncedUrlSave({
       clearTimeout(timer);
       setIsSaving(false);
     };
-  }, [input, storeValue, saveFn, debounceMs]);
+  }, [input, storeValue, debounceMs]);
 
   return { input, setInput, isSaving };
 }

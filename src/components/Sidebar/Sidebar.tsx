@@ -7,6 +7,7 @@ import {
   IconSettings,
   IconPhone,
   IconLaptop,
+  IconFullscreen,
 } from './NavIcons';
 import styles from './Sidebar.module.css';
 
@@ -48,6 +49,7 @@ function applyTheme(theme: ThemeMode): void {
 const DEVICE_ICONS: Record<string, ReactNode> = {
   phone: <IconPhone />,
   laptop: <IconLaptop />,
+  fullscreen: <IconFullscreen />,
 };
 
 interface SidebarProps {
@@ -409,7 +411,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
 
         <span className={styles.navLabel}>Devices</span>
         {devices
-          .filter((d) => !(STREAMING_DEVICE_IDS as string[]).includes(d.id))
+          .filter((d) => d.id === 'fullscreen' || !(STREAMING_DEVICE_IDS as string[]).includes(d.id))
           .filter((d) => {
             if (d.id === 'phone') return hasPhoneUrl;
             if (d.id === 'laptop') return hasLaptopUrl;
