@@ -63,60 +63,36 @@ const activeProcesses = new Map();
 const DEFAULT_PROCESS_ID = '__default__';
 
 /**
- * Kill a process by processId.  If no processId given, kills the default.
- * Cross-platform: SIGTERM on POSIX, taskkill on Windows.
- * Returns the deviceId of the killed process, or null.
+ * Find processes whose CommandLine references a specific directory (Windows only).
+ * This finds the ACTUAL running process (node.exe, LiveLinkHub.exe, etc.)
+ * regardless of how it was started (.lnk, .ahk, .bat — doesn't matter).
+ * Filters out shell/system processes that just happen to reference the path.
+ * Returns array of PID strings.
  */
-function killProcess(processId = DEFAULT_PROCESS_ID) {
-  const proc = activeProcesses.get(processId);
-  if (!proc || proc.child.exitCode !== null) {
-    activeProcesses.delete(processId);
-    return null;
-  }
-
-  const pid = proc.child.pid;
-  const killedDeviceId = proc.deviceId;
-  if (!pid) { activeProcesses.delete(processId); return null; }
-
-  const isWin = os.platform() === 'win32';
-
-  // Force kill immediately — no graceful shutdown, just terminate
+function findProcessesByCwd(directory) {
+  if (!directory || os.platform() !== 'win32') return [];
   try {
-    if (isWin) {
-      spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { shell: true, stdio: 'ignore' });
-    } else {
-      process.kill(pid, 'SIGKILL');
-    }
-  } catch { /* already dead */ }
-
-  // Safety net: also kill tracked child PIDs
-  if (isWin) {
-    const trackedPids = proc.child._childPids || [];
-    if (trackedPids.length) {
-      console.log(`[killProcess] killing tracked child PIDs: ${trackedPids.join(', ')}`);
-      killPids(trackedPids);
-    }
-    const currentChildren = snapshotChildPids(pid);
-    if (currentChildren.length) {
-      killPids(currentChildren);
-    }
-  }
-
-  activeProcesses.delete(processId);
-  return killedDeviceId;
-}
-
-/** Snapshot all descendant PIDs of a given parent PID (Windows only).
- *  Returns array of PID strings, excluding our own process. */
-function snapshotChildPids(parentPid) {
-  if (!parentPid || os.platform() !== 'win32') return [];
-  try {
+    // Escape backslashes for PowerShell -like pattern
+    const pattern = directory.replace(/\\/g, '\\\\');
     const result = spawnSync('powershell.exe', [
       '-NoProfile', '-Command',
-      `Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${parentPid} -and $_.ProcessId -ne ${process.pid} } | ForEach-Object { $_.ProcessId }`,
-    ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+      [
+        `Get-CimInstance Win32_Process`,
+        `| Where-Object {`,
+        `  $_.CommandLine -like '*${pattern}*'`,
+        `  -and $_.ProcessId -ne ${process.pid}`,
+        `  -and $_.Name -notmatch '^(cmd|powershell|conhost|explorer)\\.exe$'`,
+        `}`,
+        `| ForEach-Object { "$($_.ProcessId)|$($_.Name)" }`,
+      ].join(' '),
+    ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 10000 });
+
     if (!result.stdout) return [];
-    return result.stdout.split(/\r?\n/).map(s => s.trim()).filter(s => /^\d+$/.test(s));
+    const entries = result.stdout.split(/\r?\n/).map(l => l.trim()).filter(l => l.includes('|'));
+    if (entries.length) {
+      console.log(`[findProcessesByCwd] found in "${path.basename(directory)}": ${entries.join(', ')}`);
+    }
+    return entries.map(e => e.split('|')[0]);
   } catch { return []; }
 }
 
@@ -131,31 +107,56 @@ function killPids(pids) {
 }
 
 /**
- * Resolve a Windows .lnk shortcut to its actual target path and working directory.
- * Spawning .lnk files via shell creates processes outside the direct parent-child
- * tree (Windows Shell uses ShellExecute), breaking PID tracking and taskkill /T.
- * By resolving first and spawning the target directly, we get a clean process tree.
- * Returns null for non-.lnk files or if resolution fails.
+ * Kill a process by processId.  If no processId given, kills the default.
+ * Strategy:
+ *   1. taskkill /F /T on the spawn PID (works for .bat with clean tree)
+ *   2. Kill tracked cwd-based PIDs (works for .lnk/.ahk with orphaned processes)
+ *   3. Re-scan cwd for any remaining processes (safety net)
  */
-function resolveLnkShortcut(lnkPath) {
-  if (os.platform() !== 'win32') return null;
-  if (!lnkPath.toLowerCase().endsWith('.lnk')) return null;
-
-  try {
-    const escaped = lnkPath.replace(/'/g, "''");
-    const result = spawnSync('powershell.exe', [
-      '-NoProfile', '-Command',
-      `$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${escaped}'); Write-Output $s.TargetPath; Write-Output $s.WorkingDirectory`,
-    ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 });
-
-    const lines = (result.stdout || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const target = lines[0];
-    if (!target) return null;
-
-    return { target, workingDir: lines[1] || '' };
-  } catch {
+function killProcess(processId = DEFAULT_PROCESS_ID) {
+  const proc = activeProcesses.get(processId);
+  if (!proc || proc.child.exitCode !== null) {
+    activeProcesses.delete(processId);
     return null;
   }
+
+  const pid = proc.child.pid;
+  const killedDeviceId = proc.deviceId;
+  const trackedCwdPids = proc.child._cwdPids || [];
+  const processCwd = proc.cwd || '';
+
+  if (!pid) { activeProcesses.delete(processId); return null; }
+
+  const isWin = os.platform() === 'win32';
+
+  // 1. Force kill the spawn PID tree (works for .bat with clean parent-child chain)
+  try {
+    if (isWin) {
+      spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { shell: true, stdio: 'ignore' });
+    } else {
+      process.kill(pid, 'SIGKILL');
+    }
+  } catch { /* already dead */ }
+
+  if (isWin) {
+    // 2. Kill tracked cwd-based PIDs (captured at startup)
+    if (trackedCwdPids.length) {
+      console.log(`[killProcess] killing tracked cwd PIDs: ${trackedCwdPids.join(', ')}`);
+      killPids(trackedCwdPids);
+    }
+
+    // 3. Re-scan cwd for any remaining/new processes
+    if (processCwd) {
+      const remaining = findProcessesByCwd(processCwd);
+      if (remaining.length) {
+        console.log(`[killProcess] killing remaining cwd processes: ${remaining.join(', ')}`);
+        killPids(remaining);
+      }
+    }
+  }
+
+  activeProcesses.delete(processId);
+  return killedDeviceId;
 }
 
 /**
@@ -169,27 +170,17 @@ const STARTUP_WATCH_MS = 3_000;
  * Watches the process for STARTUP_WATCH_MS — if it exits during that window
  * the promise rejects with exit code + captured stderr (up to 500 chars).
  * Only resolves once the process has been alive for the full watch period.
+ *
+ * For .lnk/.ahk files: spawns via shell (ShellExecute). The actual app process
+ * will be orphaned from our PID tree, but we track it by cwd scan after startup.
  */
 function spawnStart2stream(exePath) {
   return new Promise((resolve, reject) => {
+    const cwd = path.dirname(exePath);
     const isWin = os.platform() === 'win32';
 
-    // Resolve .lnk shortcuts to their real target so the spawned process
-    // stays in our process tree (required for PID tracking and taskkill /T).
-    let actualPath = exePath;
-    let cwd;
-    if (isWin) {
-      const lnk = resolveLnkShortcut(exePath);
-      if (lnk) {
-        actualPath = lnk.target;
-        cwd = lnk.workingDir || path.dirname(lnk.target);
-        console.log(`[start2stream] resolved .lnk → ${actualPath} (cwd: ${cwd})`);
-      }
-    }
-    if (!cwd) cwd = path.dirname(actualPath);
-
     // On Windows, use just the filename so cmd.exe resolves it from cwd.
-    const command = isWin ? path.basename(actualPath) : actualPath;
+    const command = isWin ? path.basename(exePath) : exePath;
 
     const child = spawn(command, [], {
       cwd,
@@ -245,13 +236,10 @@ function spawnStart2stream(exePath) {
             `Process exited during startup (code=${child.exitCode})${details}`,
           ));
         } else {
-          // Snapshot child PIDs now that the process is stable
-          if (child.pid) {
-            child._childPids = snapshotChildPids(child.pid);
-            if (child._childPids.length) {
-              console.log(`[start2stream] tracked child PIDs: ${child._childPids.join(', ')}`);
-            }
-          }
+          // Find real app processes by working directory scan.
+          // This works for .lnk/.ahk where the real process is orphaned.
+          child._cwdPids = findProcessesByCwd(cwd);
+          child._cwd = cwd;
           resolve(child);
         }
       }
@@ -1051,10 +1039,8 @@ const server = createServer(async (req, res) => {
         // Kill only the process with the same processId (not others)
         killProcess(pid_key);
 
-        // killProcess already handles tracked child PIDs
-
         const child = await spawnStart2stream(resolved);
-        activeProcesses.set(pid_key, { deviceId, child, exePath: resolved });
+        activeProcesses.set(pid_key, { deviceId, child, exePath: resolved, cwd: child._cwd || path.dirname(resolved) });
 
         // Bring the UE window to foreground once it appears (Windows, fire-and-forget)
         focusProcessWindow(child.pid);
@@ -1137,10 +1123,8 @@ const server = createServer(async (req, res) => {
       try {
         killProcess(pid_key);
 
-        // killProcess already handles tracked child PIDs
-
         const child = await spawnStart2stream(resolved);
-        activeProcesses.set(pid_key, { deviceId, child, exePath: resolved });
+        activeProcesses.set(pid_key, { deviceId, child, exePath: resolved, cwd: child._cwd || path.dirname(resolved) });
 
         sendJson(res, 200, {
           ok: true,
