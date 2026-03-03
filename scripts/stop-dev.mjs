@@ -86,17 +86,27 @@ function closeUnsafeChrome() {
   const marker = 'ChromeDevSession-rvtr';
 
   if (process.platform === 'win32') {
-    // PowerShell replaces deprecated wmic — works on Windows 10+ and Server 2019+
+    // Graceful close: send WM_CLOSE via CloseMainWindow(), wait, then force-kill stragglers.
+    // This prevents the "Restore pages? Chrome didn't shut down correctly" dialog.
     run('powershell.exe', [
       '-NoProfile',
       '-Command',
-      `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${marker}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+      [
+        `$procs = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${marker}*' }`,
+        'foreach ($p in $procs) { $h = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue; if ($h) { [void]$h.CloseMainWindow() } }',
+        'if ($procs) { Start-Sleep -Seconds 3 }',
+        'foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }',
+      ].join('; '),
     ], { shell: false });
     return;
   }
 
-  // macOS / Linux — kill all Chrome processes launched with the dev user-data-dir
-  run('pkill', ['-f', marker], { shell: false });
+  // macOS / Linux — SIGTERM first (graceful), wait, then SIGKILL stragglers
+  run('pkill', ['-TERM', '-f', marker], { shell: false });
+
+  spawnSync('sleep', ['2'], { stdio: 'ignore' });
+
+  run('pkill', ['-KILL', '-f', marker], { shell: false });
 }
 
 function main() {

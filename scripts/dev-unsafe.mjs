@@ -161,6 +161,7 @@ function openChromeUnsafe(chromeExecutable, appUrl) {
     `--user-data-dir=${userDataDir}`,
     '--disable-web-security',
     '--disable-features=BlockInsecurePrivateNetworkRequests',
+    '--disable-session-crashed-bubble',
     `--unsafely-treat-insecure-origin-as-secure=${appUrl}`,
     '--new-window',
     appUrl,

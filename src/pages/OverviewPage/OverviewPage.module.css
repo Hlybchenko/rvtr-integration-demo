@@ -963,6 +963,122 @@
   opacity: 0.9;
 }
 
+/* ── Divider ── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--glass-border);
+  margin: 4px 0;
+}
+
+/* ── Inline start button (accent) ── */
+.startButton {
+  appearance: none;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+  color: var(--accent);
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.15);
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    opacity 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms ease;
+}
+
+.startButton:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.startButton:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+}
+
+.startButton:disabled {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ── Inline stop button (danger) ── */
+.stopButton {
+  appearance: none;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--danger);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--danger) 10%, var(--glass-bg));
+  color: var(--danger);
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.15);
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    opacity 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms ease;
+}
+
+.stopButton:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--danger) 20%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 14px color-mix(in srgb, var(--danger) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.stopButton:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+}
+
+.stopButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
 /* ── Backend error banner ── */
 .backendErrorBanner {
   padding: 10px 14px;
