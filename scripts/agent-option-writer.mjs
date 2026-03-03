@@ -96,6 +96,21 @@ function findProcessesByCwd(directory) {
   } catch { return []; }
 }
 
+/**
+ * Kill whatever is listening on a given TCP port (Windows only).
+ * Uses PowerShell Get-NetTCPConnection for reliability.
+ */
+function stopPortListener(port) {
+  if (os.platform() !== 'win32') return;
+  try {
+    spawnSync('powershell.exe', [
+      '-NoProfile', '-Command',
+      `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue ` +
+      `| ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
+    ], { stdio: 'ignore', shell: false, timeout: 10000 });
+  } catch { /* best effort */ }
+}
+
 /** Force-kill a list of PIDs on Windows. */
 function killPids(pids) {
   if (!pids.length || os.platform() !== 'win32') return;
@@ -153,6 +168,9 @@ function killProcess(processId = DEFAULT_PROCESS_ID) {
         killPids(remaining);
       }
     }
+
+    // 4. Kill anything still holding known ports (safety net for orphans)
+    stopPortListener(8080);
   }
 
   activeProcesses.delete(processId);
@@ -1095,6 +1113,9 @@ const server = createServer(async (req, res) => {
       try {
         // Kill only the process with the same processId (not others)
         killProcess(pid_key);
+
+        // Clean up orphan processes on known ports before starting
+        if (os.platform() === 'win32') stopPortListener(8080);
 
         const child = await spawnStart2stream(resolved);
         activeProcesses.set(pid_key, { deviceId, child, exePath: resolved, cwd: child._cwd || path.dirname(resolved) });
