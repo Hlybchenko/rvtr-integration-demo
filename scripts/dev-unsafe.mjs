@@ -185,13 +185,14 @@ function openChromeUnsafe(chromeExecutable, appUrl) {
     appUrl,
   ];
 
-  const chromeProcess = spawn(chromeExecutable, chromeArgs, {
+  const proc = spawn(chromeExecutable, chromeArgs, {
     detached: true,
     stdio: 'ignore',
     shell: false,
   });
 
-  chromeProcess.unref();
+  proc.unref();
+  return proc;
 }
 
 async function main() {
@@ -231,18 +232,29 @@ async function main() {
     shell: process.platform === 'win32',
   });
 
-  const terminateVite = () => {
+  let chromeProcess = null;
+
+  const terminateAll = () => {
+    if (chromeProcess && !chromeProcess.killed) {
+      try { chromeProcess.kill('SIGTERM'); } catch {}
+    }
     if (!writerProcess.killed) writerProcess.kill('SIGTERM');
     if (!viteProcess.killed) viteProcess.kill('SIGTERM');
   };
 
-  process.on('SIGINT', terminateVite);
-  process.on('SIGTERM', terminateVite);
-  process.on('exit', terminateVite);
+  process.on('SIGINT', terminateAll);
+  process.on('SIGTERM', terminateAll);
+  process.on('exit', terminateAll);
 
   for (let attempt = 0; attempt < WAIT_READY_ATTEMPTS; attempt += 1) {
     if (await isPortOpen(port)) {
-      openChromeUnsafe(chromeExecutable, appUrl);
+      chromeProcess = openChromeUnsafe(chromeExecutable, appUrl);
+
+      chromeProcess.on('exit', () => {
+        console.log('\nBrowser closed — shutting down dev server…');
+        terminateAll();
+      });
+
       break;
     }
 
@@ -255,7 +267,7 @@ async function main() {
 
   if (!(await isPortOpen(port))) {
     console.error(`Dev server did not start at ${appUrl} in time.`);
-    terminateVite();
+    terminateAll();
     process.exit(1);
   }
 

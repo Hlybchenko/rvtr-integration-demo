@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 40 36" fill="none">
+  <defs>
+    <linearGradient id="arrowMetal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9a2820" />
+      <stop offset="30%" stop-color="#EB4D3D" />
+      <stop offset="48%" stop-color="#ff8a7a" />
+      <stop offset="70%" stop-color="#EB4D3D" />
+      <stop offset="100%" stop-color="#9a2820" />
+    </linearGradient>
+    <linearGradient id="prismMetal" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#1a1d28" />
+      <stop offset="25%" stop-color="#2a2f3d" />
+      <stop offset="50%" stop-color="#363c4e" />
+      <stop offset="75%" stop-color="#252a38" />
+      <stop offset="100%" stop-color="#14171f" />
+    </linearGradient>
+    <linearGradient id="prismEdge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6a7290" />
+      <stop offset="50%" stop-color="#8890a8" />
+      <stop offset="100%" stop-color="#5a6280" />
+    </linearGradient>
+  </defs>
+
+  <!-- Central prism -->
+  <path d="M11.5 6.3 H28.5 L20 23.5 Z" fill="url(#prismMetal)" />
+  <path d="M11.5 6.3 H28.5 L20 23.5 Z" stroke="url(#prismEdge)" stroke-width="1.1" stroke-linejoin="round" fill="none" />
+  <path d="M28.5 6.3 L20 12.5 L11.5 6.3 M20 12.5 L20 23.5" stroke="url(#prismEdge)" stroke-width="0.6" fill="none" />
+
+  <!-- Top-left arrow -->
+  <path d="M10.5 1.2 H2.8 L7 8.5" stroke="url(#arrowMetal)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+  <!-- Top-right arrow -->
+  <path d="M29.5 1.2 H37.2 L33 8.5" stroke="url(#arrowMetal)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+  <!-- Bottom arrow -->
+  <path d="M15.5 26 L20 34 L24.5 26" stroke="url(#arrowMetal)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+  <!-- Energy dots -->
+  <circle cx="4.8" cy="5" r="0.4" fill="#EB4D3D" />
+  <circle cx="35.2" cy="5" r="0.4" fill="#EB4D3D" />
+  <circle cx="17.8" cy="30" r="0.4" fill="#EB4D3D" />
+</svg>
