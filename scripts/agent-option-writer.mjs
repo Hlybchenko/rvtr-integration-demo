@@ -103,12 +103,79 @@ function findProcessesByCwd(directory) {
 function stopPortListener(port) {
   if (os.platform() !== 'win32') return;
   try {
-    spawnSync('powershell.exe', [
+    const pid = getPortListenerPid(port);
+    if (pid) {
+      console.log(`[stopPortListener] killing PID ${pid} on port ${port}`);
+      spawnSync('taskkill', ['/F', '/T', '/PID', pid], { shell: true, stdio: 'ignore' });
+    }
+  } catch { /* best effort */ }
+}
+
+/**
+ * Get the PID listening on a specific TCP port (Windows only).
+ * Returns PID string or null.
+ */
+function getPortListenerPid(port) {
+  if (os.platform() !== 'win32') return null;
+  try {
+    const result = spawnSync('powershell.exe', [
       '-NoProfile', '-Command',
       `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue ` +
-      `| ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
-    ], { stdio: 'ignore', shell: false, timeout: 10000 });
-  } catch { /* best effort */ }
+      `| Select-Object -First 1 -ExpandProperty OwningProcess`,
+    ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 });
+    const pid = (result.stdout || '').trim();
+    return /^\d+$/.test(pid) ? pid : null;
+  } catch { return null; }
+}
+
+/**
+ * Snapshot all listening TCP ports → PIDs (Windows only).
+ * Returns Map<portString, pidString>.
+ */
+function snapshotListeners() {
+  if (os.platform() !== 'win32') return new Map();
+  try {
+    const result = spawnSync('powershell.exe', [
+      '-NoProfile', '-Command',
+      `Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue ` +
+      `| ForEach-Object { "$($_.LocalPort)|$($_.OwningProcess)" }`,
+    ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 10000 });
+    const map = new Map();
+    for (const line of (result.stdout || '').split(/\r?\n/)) {
+      const parts = line.trim().split('|');
+      if (parts.length === 2 && /^\d+$/.test(parts[0]) && /^\d+$/.test(parts[1])) {
+        map.set(parts[0], parts[1]);
+      }
+    }
+    return map;
+  } catch { return new Map(); }
+}
+
+/**
+ * Check if a tracked process entry is still alive.
+ * For indirect spawns (.lnk/.ahk): checks tracked ports, then tracked PIDs.
+ * For direct spawns (.bat/.exe): checks child exitCode.
+ */
+function isProcessAlive(entry) {
+  const isWin = os.platform() === 'win32';
+
+  // Indirect spawn — tracked via ports/PIDs, wrapper exitCode is irrelevant
+  if (entry.trackedPorts && entry.trackedPorts.length) {
+    return entry.trackedPorts.some(port => getPortListenerPid(port) !== null);
+  }
+  if (entry.trackedPids && entry.trackedPids.length && isWin) {
+    try {
+      const pidList = entry.trackedPids.join(',');
+      const result = spawnSync('powershell.exe', [
+        '-NoProfile', '-Command',
+        `Get-Process -Id ${pidList} -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count`,
+      ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 });
+      return parseInt(result.stdout?.trim() || '0', 10) > 0;
+    } catch { return false; }
+  }
+
+  // Direct spawn — simple exitCode check
+  return entry.child.exitCode === null;
 }
 
 /** Force-kill a list of PIDs on Windows. */
@@ -125,42 +192,59 @@ function killPids(pids) {
  * Kill a process by processId.  If no processId given, kills the default.
  * Strategy:
  *   1. taskkill /F /T on the spawn PID (works for .bat with clean tree)
- *   2. Kill tracked cwd-based PIDs (works for .lnk/.ahk with orphaned processes)
- *   3. Re-scan cwd for any remaining processes (safety net)
+ *   2. Kill tracked PIDs from startup (cwd scan or listener snapshot)
+ *   3. Kill by tracked ports (new listeners detected at startup)
+ *   4. Re-scan cwd for any remaining processes (safety net)
+ *   5. Kill port 8080 listener as last resort
  */
 function killProcess(processId = DEFAULT_PROCESS_ID) {
   const proc = activeProcesses.get(processId);
-  if (!proc || proc.child.exitCode !== null) {
-    activeProcesses.delete(processId);
-    return null;
-  }
+  if (!proc) return null;
 
   const pid = proc.child.pid;
   const killedDeviceId = proc.deviceId;
-  const trackedCwdPids = proc.child._cwdPids || [];
+  const trackedPids = proc.trackedPids || [];
+  const trackedPorts = proc.trackedPorts || [];
   const processCwd = proc.cwd || '';
 
-  if (!pid) { activeProcesses.delete(processId); return null; }
+  // For DIRECT spawns (.bat/.exe) — if the child already exited, nothing to kill.
+  // For INDIRECT spawns (.lnk/.ahk) — the wrapper ALWAYS exits immediately,
+  // but the real app is tracked via trackedPids/trackedPorts. Don't bail out.
+  const hasTrackedTargets = trackedPids.length > 0 || trackedPorts.length > 0;
+  if (proc.child.exitCode !== null && !hasTrackedTargets) {
+    activeProcesses.delete(processId);
+    console.log(`[killProcess] ${processId}: child already dead, no tracked targets`);
+    return null;
+  }
+
+  console.log(`[killProcess] ${processId}: pid=${pid}, trackedPids=[${trackedPids}], trackedPorts=[${trackedPorts}], cwd=${processCwd}`);
 
   const isWin = os.platform() === 'win32';
 
   // 1. Force kill the spawn PID tree (works for .bat with clean parent-child chain)
-  try {
-    if (isWin) {
-      spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { shell: true, stdio: 'ignore' });
-    } else {
-      process.kill(pid, 'SIGKILL');
-    }
-  } catch { /* already dead */ }
+  if (pid) {
+    try {
+      if (isWin) {
+        spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { shell: true, stdio: 'ignore' });
+      } else {
+        process.kill(pid, 'SIGKILL');
+      }
+    } catch { /* already dead */ }
+  }
 
   if (isWin) {
-    // 2. Kill tracked cwd-based PIDs (captured at startup)
-    if (trackedCwdPids.length) {
-      console.log(`[killProcess] killing tracked cwd PIDs: ${trackedCwdPids.join(', ')}`);
-      killPids(trackedCwdPids);
+    // 2. Kill tracked PIDs (from cwd scan or listener snapshot at startup)
+    if (trackedPids.length) {
+      console.log(`[killProcess] killing tracked PIDs: ${trackedPids.join(', ')}`);
+      killPids(trackedPids);
     }
 
-    // 3. Re-scan cwd for any remaining/new processes
+    // 3. Kill by tracked ports (new listeners detected at startup)
+    for (const port of trackedPorts) {
+      stopPortListener(port);
+    }
+
+    // 4. Re-scan cwd for any remaining/new processes
     if (processCwd) {
       const remaining = findProcessesByCwd(processCwd);
       if (remaining.length) {
@@ -169,7 +253,7 @@ function killProcess(processId = DEFAULT_PROCESS_ID) {
       }
     }
 
-    // 4. Kill anything still holding known ports (safety net for orphans)
+    // 5. Kill port 8080 listener as last resort (common orphan port)
     stopPortListener(8080);
   }
 
@@ -230,6 +314,9 @@ function spawnStart2stream(exePath) {
     const ext = path.extname(exePath).toLowerCase();
     const isIndirect = isWin && (ext === '.lnk' || ext === '.ahk');
     const trackingDir = getTrackingCwd(exePath);
+
+    // Snapshot TCP listeners BEFORE spawn (for indirect: fallback detection)
+    const listenersBefore = isIndirect ? snapshotListeners() : null;
 
     // On Windows, use just the filename so cmd.exe resolves it from cwd.
     const command = isWin ? path.basename(exePath) : exePath;
@@ -296,8 +383,28 @@ function spawnStart2stream(exePath) {
           // .lnk/.ahk: find real processes by cwd scan
           child._cwdPids = findProcessesByCwd(trackingDir);
           child._cwd = trackingDir;
+
+          // Fallback: if cwd scan found nothing, detect NEW TCP listeners.
+          // npm/node CommandLine often lacks the directory path, so cwd scan misses them.
+          // Comparing listeners before/after spawn reliably detects the actual process.
+          child._trackedPorts = [];
+          if (!child._cwdPids.length && listenersBefore) {
+            const listenersAfter = snapshotListeners();
+            const newPids = new Set();
+            for (const [port, pid] of listenersAfter) {
+              if (!listenersBefore.has(port) && pid !== String(process.pid)) {
+                newPids.add(pid);
+                child._trackedPorts.push(port);
+                console.log(`[start2stream] new listener on port ${port}, PID ${pid}`);
+              }
+            }
+            if (newPids.size) {
+              child._cwdPids = [...newPids];
+            }
+          }
+
           if (child._cwdPids.length) {
-            console.log(`[start2stream] found ${child._cwdPids.length} process(es) in ${path.basename(trackingDir)}`);
+            console.log(`[start2stream] tracking ${child._cwdPids.length} process(es) for ${path.basename(trackingDir)}`);
             resolve(child);
           } else {
             reject(new Error(`No processes found in ${path.basename(trackingDir)} after ${STARTUP_WATCH_MS}ms`));
@@ -1118,14 +1225,25 @@ const server = createServer(async (req, res) => {
         if (os.platform() === 'win32') stopPortListener(8080);
 
         const child = await spawnStart2stream(resolved);
-        activeProcesses.set(pid_key, { deviceId, child, exePath: resolved, cwd: child._cwd || path.dirname(resolved) });
+        activeProcesses.set(pid_key, {
+          deviceId, child, exePath: resolved,
+          cwd: child._cwd || path.dirname(resolved),
+          trackedPids: child._cwdPids || [],
+          trackedPorts: child._trackedPorts || [],
+        });
 
         // Bring the UE window to foreground once it appears (Windows, fire-and-forget)
         focusProcessWindow(child.pid);
 
+        // For indirect spawns (.lnk/.ahk), child.pid is the wrapper (already dead).
+        // Return the first tracked real PID instead.
+        const realPid = (child._cwdPids && child._cwdPids.length)
+          ? Number(child._cwdPids[0])
+          : child.pid;
+
         sendJson(res, 200, {
           ok: true,
-          pid: child.pid,
+          pid: realPid,
           processId: pid_key,
           exePath: resolved,
         });
@@ -1145,9 +1263,23 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/process/stop') {
       const body = await readBody(req);
       const processId = typeof body.processId === 'string' ? body.processId.trim() : '';
+      const exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
       const pid_key = processId || DEFAULT_PROCESS_ID;
 
-      const killedDeviceId = killProcess(pid_key);
+      let killedDeviceId = killProcess(pid_key);
+
+      // Fallback: if process wasn't tracked (e.g. server restarted) but exePath given,
+      // try cwd scan + port kill as safety net
+      if (killedDeviceId === null && exePath && os.platform() === 'win32') {
+        console.log(`[process/stop] no tracked process for "${pid_key}", fallback via exePath`);
+        const trackDir = getTrackingCwd(exePath);
+        const pids = findProcessesByCwd(trackDir);
+        if (pids.length) {
+          console.log(`[process/stop] fallback: killing cwd processes: ${pids.join(', ')}`);
+          killPids(pids);
+        }
+        stopPortListener(8080);
+      }
 
       sendJson(res, 200, {
         ok: true,
@@ -1200,15 +1332,25 @@ const server = createServer(async (req, res) => {
 
       try {
         killProcess(pid_key);
+        if (os.platform() === 'win32') stopPortListener(8080);
 
         const child = await spawnStart2stream(resolved);
-        activeProcesses.set(pid_key, { deviceId, child, exePath: resolved, cwd: child._cwd || path.dirname(resolved) });
+        activeProcesses.set(pid_key, {
+          deviceId, child, exePath: resolved,
+          cwd: child._cwd || path.dirname(resolved),
+          trackedPids: child._cwdPids || [],
+          trackedPorts: child._trackedPorts || [],
+        });
+
+        const realPid = (child._cwdPids && child._cwdPids.length)
+          ? Number(child._cwdPids[0])
+          : child.pid;
 
         sendJson(res, 200, {
           ok: true,
           processId: pid_key,
           deviceId,
-          pid: child.pid,
+          pid: realPid,
           exePath: resolved,
         });
       } catch (error) {
@@ -1225,28 +1367,32 @@ const server = createServer(async (req, res) => {
     // GET /process/status — check all process statuses
     // -----------------------------------------------------------------------
     if (req.method === 'GET' && req.url === '/process/status') {
-      // Legacy single-process fields (backward compat for Settings page)
-      const defaultEntry = activeProcesses.get(DEFAULT_PROCESS_ID);
-      const defaultChild = defaultEntry?.child ?? null;
-      const defaultRunning = defaultChild !== null && defaultChild.exitCode === null;
-
       // All named processes
       const processes = {};
       for (const [key, entry] of activeProcesses) {
-        const alive = entry.child.exitCode === null;
+        const alive = isProcessAlive(entry);
         if (!alive) { activeProcesses.delete(key); continue; }
+
+        // For indirect spawns, return the real tracked PID, not the dead wrapper PID
+        const realPid = (entry.trackedPids && entry.trackedPids.length)
+          ? Number(entry.trackedPids[0])
+          : (entry.child.pid ?? null);
+
         processes[key] = {
           running: true,
-          pid: entry.child.pid ?? null,
+          pid: realPid,
           deviceId: entry.deviceId || null,
         };
       }
 
+      // Legacy single-process fields (backward compat for Settings page)
+      const defaultProc = processes[DEFAULT_PROCESS_ID];
+
       sendJson(res, 200, {
         ok: true,
-        running: defaultRunning,
-        pid: defaultRunning ? defaultChild.pid : null,
-        deviceId: defaultRunning ? defaultEntry?.deviceId ?? null : null,
+        running: !!defaultProc,
+        pid: defaultProc?.pid ?? null,
+        deviceId: defaultProc?.deviceId ?? null,
         processes,
       });
       return;
