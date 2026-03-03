@@ -12,6 +12,7 @@ import {
 import {
   browseForExe,
   browseForFile,
+  forceRewriteVoiceAgentFile,
   startProcess,
   stopProcess,
   getProcessStatus,
@@ -26,6 +27,7 @@ const IS_WINDOWS =
       'Windows');
 
 const POLL_INTERVAL_MS = 3_000;
+const LAUNCH_COOLDOWN_MS = 5_000;
 
 interface DeviceField {
   id: 'phone' | 'laptop';
@@ -106,11 +108,46 @@ export function OverviewPage() {
     }
   }, [setLicenseFilePath]);
 
+  const [applyError, setApplyError] = useState<string | null>(null);
+
   const handleApply = useCallback(async () => {
     setApplying(true);
-    // TODO: implement kiosk-specific apply logic
-    setVoiceAgent(pendingAgent);
-    setApplying(false);
+    setApplyError(null);
+    try {
+      // 1. Write provider to license file
+      const result = await forceRewriteVoiceAgentFile(pendingAgent);
+      if (!result.matched) {
+        throw new Error('File verification failed — provider was not written');
+      }
+      setVoiceAgent(pendingAgent);
+
+      // 2. Restart kiosk-app: stop then start
+      const kioskId: ShortcutId = 'kiosk-app';
+      const kioskPath = useKiosksStore.getState().paths[kioskId];
+
+      if (kioskPath.trim()) {
+        setLaunching((prev) => ({ ...prev, [kioskId]: true }));
+
+        await stopProcess(kioskId);
+        setRunning((prev) => ({ ...prev, [kioskId]: false }));
+
+        const startResult = await startProcess(kioskPath, kioskId);
+        if (!startResult.ok) {
+          throw new Error(startResult.error ?? 'Failed to start Kiosk app');
+        }
+        setRunning((prev) => ({ ...prev, [kioskId]: true }));
+
+        if (launchTimers.current[kioskId]) clearTimeout(launchTimers.current[kioskId]);
+        launchTimers.current[kioskId] = setTimeout(() => {
+          setLaunching((prev) => ({ ...prev, [kioskId]: false }));
+        }, LAUNCH_COOLDOWN_MS);
+      }
+    } catch (err) {
+      setApplyError(err instanceof Error ? err.message : String(err));
+      setLaunching((prev) => ({ ...prev, 'kiosk-app': false }));
+    } finally {
+      setApplying(false);
+    }
   }, [pendingAgent, setVoiceAgent]);
 
   // ── Shortcut launcher ──────────────────────────────────────────────────
@@ -187,8 +224,6 @@ export function OverviewPage() {
       setBrowsing(null);
     }
   }, [setPath, clearError]);
-
-  const LAUNCH_COOLDOWN_MS = 5_000;
 
   const handleStart = useCallback(async (id: ShortcutId) => {
     const exePath = useKiosksStore.getState().paths[id];
@@ -442,6 +477,7 @@ export function OverviewPage() {
           >
             {applying ? 'Applying...' : 'Apply & restart'}
           </button>
+          {applyError && <span className={styles.filePathValidationError}>{applyError}</span>}
         </div>
       </section>
 
