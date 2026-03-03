@@ -68,18 +68,24 @@ function stopPortListener(port) {
 }
 
 function stopKnownProcesses() {
+  const myPid = process.pid;
+  const parentPid = process.ppid;
+
   if (process.platform === 'win32') {
-    // PowerShell replaces deprecated wmic — works on Windows 10+ and Server 2019+
+    // Kill dev-unsafe / agent-option-writer processes, but exclude our own
+    // process tree (current PID and parent PID) so we don't kill ourselves
+    // when called from dev-unsafe.mjs.
     run('powershell.exe', [
       '-NoProfile',
       '-Command',
-      "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+      `Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*') -and $_.ProcessId -ne ${myPid} -and $_.ProcessId -ne ${parentPid} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
     ], { shell: false });
     return;
   }
 
-  run('pkill', ['-f', 'dev-unsafe.mjs'], { shell: false });
-  run('pkill', ['-f', 'agent-option-writer.mjs'], { shell: false });
+  // On Unix, exclude own process tree via grep -v
+  run('bash', ['-c', `pgrep -f 'dev-unsafe.mjs' | grep -v -e '^${myPid}$' -e '^${parentPid}$' | xargs -r kill -TERM 2>/dev/null`], { shell: false });
+  run('bash', ['-c', `pgrep -f 'agent-option-writer.mjs' | grep -v -e '^${myPid}$' -e '^${parentPid}$' | xargs -r kill -TERM 2>/dev/null`], { shell: false });
 }
 
 function closeUnsafeChrome() {
