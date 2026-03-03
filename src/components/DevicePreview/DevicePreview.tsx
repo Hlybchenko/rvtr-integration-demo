@@ -133,8 +133,8 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
     // Report screen slot viewport geometry to streamingStore (rAF-debounced).
     // Uses a 1px threshold to avoid unnecessary store updates on sub-pixel changes.
     // `device.id` is included so the effect re-runs on device switch — the
-    // screenSlotRef may point to a different DOM element (e.g. fullscreen ↔
-    // non-fullscreen) and the ResizeObserver must observe the new element.
+    // screenSlotRef may point to a different DOM element on device switch,
+    // and the ResizeObserver must observe the new element.
     useEffect(() => {
       if (!isStreaming) return;
 
@@ -324,22 +324,6 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
 
     // Widget iframe is view-only — no focus management needed.
     // Focus lock lives solely in PersistentPixelStreaming for the PS iframe.
-
-    // Fullscreen devices: no frame image, screen slot fills the entire container
-    if (device.fullscreen) {
-      return (
-        <div className={`${styles.container} ${styles.fullscreenContainer}`} ref={containerRef}>
-          <div
-            ref={screenSlotRef}
-            className={styles.fullscreenScreen}
-          >
-            {isStreaming ? (
-              <div className={styles.streamingSlot} />
-            ) : null}
-          </div>
-        </div>
-      );
-    }
 
     return (
       <div className={styles.container} ref={containerRef}>

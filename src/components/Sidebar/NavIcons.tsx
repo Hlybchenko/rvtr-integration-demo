@@ -135,24 +135,4 @@ export function IconHolobox() {
   );
 }
 
-export function IconFullscreen() {
-  return (
-    <svg {...S}>
-      {/* Corner brackets — expanded arrows */}
-      <path d="M1.5 6.5V2h4.5" strokeWidth={1.8} />
-      <path d="M16.5 6.5V2H12" strokeWidth={1.8} />
-      <path d="M1.5 11.5V16h4.5" strokeWidth={1.8} />
-      <path d="M16.5 11.5V16H12" strokeWidth={1.8} />
-      {/* Inner screen area */}
-      <rect x="4.5" y="4.5" width="9" height="9" rx="0.8" strokeWidth={0.7} opacity={0.2} />
-      {/* Play triangle (content) */}
-      <path d="M7.5 7v4l3.5-2Z" fill="currentColor" stroke="none" opacity={0.3} />
-      {/* Diagonal expand arrows */}
-      <line x1="3" y1="3" x2="5" y2="5" strokeWidth={0.6} opacity={0.25} />
-      <line x1="15" y1="3" x2="13" y2="5" strokeWidth={0.6} opacity={0.25} />
-      <line x1="3" y1="15" x2="5" y2="13" strokeWidth={0.6} opacity={0.25} />
-      <line x1="15" y1="15" x2="13" y2="13" strokeWidth={0.6} opacity={0.25} />
-    </svg>
-  );
-}
 

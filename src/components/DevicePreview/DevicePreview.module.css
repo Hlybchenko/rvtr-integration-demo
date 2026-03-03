@@ -261,18 +261,6 @@
   }
 }
 
-/* ── Fullscreen device ── */
-.fullscreenContainer {
-  padding: 0;
-}
-
-.fullscreenScreen {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: #1a1e2a;
-}
-
 /* ── Mobile adjustments ── */
 @media (max-width: 767px) {
   .container {

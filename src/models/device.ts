@@ -44,6 +44,4 @@ export interface DeviceTemplate {
    * Values below 1 make it smaller, above 1 make it larger.
    */
   previewScale?: number;
-  /** When true, skip the frame image and fill the entire viewport with the screen slot. */
-  fullscreen?: boolean;
 }

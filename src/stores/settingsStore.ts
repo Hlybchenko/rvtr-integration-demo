@@ -4,10 +4,10 @@ import { isValidUrl } from '@/utils/isValidUrl';
 
 const ENV_WIDGET_URL = import.meta.env.VITE_DEFAULT_WIDGET_URL || '';
 
-export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox' | 'keba-kiosk' | 'fullscreen';
+export type DeviceId = 'phone' | 'laptop' | 'kiosk' | 'holobox' | 'keba-kiosk';
 export type VoiceAgent = 'elevenlabs' | 'gemini-live';
 
-export const STREAMING_DEVICE_IDS: DeviceId[] = ['kiosk', 'keba-kiosk', 'holobox', 'fullscreen'];
+export const STREAMING_DEVICE_IDS: DeviceId[] = ['kiosk', 'keba-kiosk', 'holobox'];
 
 /** Returns true if the device uses Pixel Streaming (kiosk, keba-kiosk, holobox). */
 export function isStreamingDevice(id: string): boolean {
