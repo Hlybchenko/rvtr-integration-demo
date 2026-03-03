@@ -253,8 +253,6 @@ function killProcess(processId = DEFAULT_PROCESS_ID) {
       }
     }
 
-    // 5. Kill port 8080 listener as last resort (common orphan port)
-    stopPortListener(8080);
   }
 
   activeProcesses.delete(processId);
@@ -1221,9 +1219,6 @@ const server = createServer(async (req, res) => {
         // Kill only the process with the same processId (not others)
         killProcess(pid_key);
 
-        // Clean up orphan processes on known ports before starting
-        if (os.platform() === 'win32') stopPortListener(8080);
-
         const child = await spawnStart2stream(resolved);
         activeProcesses.set(pid_key, {
           deviceId, child, exePath: resolved,
@@ -1278,7 +1273,6 @@ const server = createServer(async (req, res) => {
           console.log(`[process/stop] fallback: killing cwd processes: ${pids.join(', ')}`);
           killPids(pids);
         }
-        stopPortListener(8080);
       }
 
       sendJson(res, 200, {
@@ -1332,7 +1326,6 @@ const server = createServer(async (req, res) => {
 
       try {
         killProcess(pid_key);
-        if (os.platform() === 'win32') stopPortListener(8080);
 
         const child = await spawnStart2stream(resolved);
         activeProcesses.set(pid_key, {
