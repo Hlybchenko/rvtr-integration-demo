@@ -13,7 +13,19 @@ function runStopDev() {
   }
 }
 
+function gitPullDemo() {
+  console.log('Pulling latest changes from demo…');
+  const pull = spawnSync('git', ['pull', 'origin', 'demo'], {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+  if (pull.status !== 0) {
+    console.error('git pull failed — starting with local version.');
+  }
+}
+
 function main() {
+  gitPullDemo();
   runStopDev();
 
   const writerProcess = spawn('node', ['./scripts/agent-option-writer.mjs'], {

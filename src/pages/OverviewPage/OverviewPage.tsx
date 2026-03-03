@@ -43,6 +43,15 @@ const WIDGET_DEVICES: DeviceField[] = [
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
+  // ── Pixel Streaming ─────────────────────────────────────────────────────
+  const pixelStreamingUrl = useSettingsStore((s) => s.pixelStreamingUrl);
+  const setPixelStreamingUrl = useSettingsStore((s) => s.setPixelStreamingUrl);
+
+  const psSave = useDebouncedUrlSave({
+    storeValue: pixelStreamingUrl,
+    saveFn: setPixelStreamingUrl,
+  });
+
   // ── Widget ──────────────────────────────────────────────────────────────
   const phoneUrl = useSettingsStore((s) => s.phoneUrl);
   const laptopUrl = useSettingsStore((s) => s.laptopUrl);
@@ -517,6 +526,48 @@ export function OverviewPage() {
           {applyError && <span className={styles.filePathValidationError}>{applyError}</span>}
         </div>
       </section>
+
+      {/* ── Pixel Streaming ── */}
+      {(() => {
+        const psValue = psSave.input;
+        const psHas = psValue.trim().length > 0;
+        const psValid = !psHas || isValidUrl(psValue);
+        return (
+          <section
+            className={`${styles.settingsBlock} ${
+              psHas && !psValid
+                ? styles.settingsBlockError
+                : psHas && psValid
+                  ? styles.settingsBlockValid
+                  : ''
+            }`}
+          >
+            <h2 className={styles.settingsBlockTitle}>Pixel Streaming</h2>
+            <div className={styles.field}>
+              <div className={styles.fieldHeader}>
+                <label className={styles.label} htmlFor="pixel-streaming-url">
+                  URL
+                </label>
+                {psHas && (
+                  <span className={`${styles.badge} ${psValid ? styles.badgeValid : styles.badgeInvalid}`}>
+                    {psValid ? '✓ Valid' : '✗ Invalid URL'}
+                  </span>
+                )}
+              </div>
+              <input
+                id="pixel-streaming-url"
+                className={`${styles.input} ${psHas && !psValid ? styles.inputError : ''} ${psSave.isSaving ? styles.inputSaving : ''}`}
+                type="url"
+                placeholder="https://signalling.example.com"
+                value={psValue}
+                onChange={(e) => psSave.setInput(e.target.value)}
+                spellCheck={false}
+                autoComplete="url"
+              />
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ── Widget: Phone + Laptop ── */}
       <section

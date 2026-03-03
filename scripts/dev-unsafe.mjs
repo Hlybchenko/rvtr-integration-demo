@@ -259,10 +259,21 @@ async function main() {
   for (let attempt = 0; attempt < WAIT_READY_ATTEMPTS; attempt += 1) {
     if (await isPortOpen(port)) {
       chromeProcess = openChromeUnsafe(chromeExecutable, appUrl);
+      const chromeSpawnedAt = Date.now();
 
       chromeProcess.on('exit', () => {
+        // Chrome may delegate to an existing instance and exit the spawned
+        // process immediately. Only treat as "user closed browser" if the
+        // process ran for at least 3 seconds.
+        if (Date.now() - chromeSpawnedAt < 3_000) {
+          console.log('Chrome delegated to existing instance — dev server stays running.');
+          return;
+        }
+
         console.log('\nBrowser closed — shutting down dev server…');
         terminateAll();
+        // Safety timeout: if Vite doesn't close within 5s, force exit
+        setTimeout(() => process.exit(0), 5_000).unref();
       });
 
       break;

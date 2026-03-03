@@ -506,6 +506,8 @@ if ($result) {
         'osascript',
         [
           '-e',
+          'tell application "System Events" to set frontmost of process "osascript" to true',
+          '-e',
           'set chosenFile to choose file with prompt "Select license file" of type {"lic","json","txt"}\nreturn POSIX path of chosenFile',
         ],
         { timeout: 60_000 },
@@ -559,6 +561,8 @@ if ($result) {
       execFile(
         'osascript',
         [
+          '-e',
+          'tell application "System Events" to set frontmost of process "osascript" to true',
           '-e',
           'set chosenFile to choose file with prompt "Select start2stream batch file"\nreturn POSIX path of chosenFile',
         ],

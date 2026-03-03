@@ -71,6 +71,12 @@ beforeEach(() => {
 const {
   getWriterConfig,
   setWriterFilePath,
+  readVoiceAgentFromFile,
+  writeVoiceAgentToFile,
+  startProcess,
+  stopProcess,
+  getProcessStatus,
+  checkPixelStreamingStatus,
 } = await import('./voiceAgentWriter');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -202,5 +208,174 @@ describe('fetchWithTimeout', () => {
     const error = await promise;
     expect(error).toBeInstanceOf(DOMException);
     expect((error as DOMException).name).toBe('AbortError');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// readVoiceAgentFromFile
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('readVoiceAgentFromFile', () => {
+  it('parses voiceAgent, filePath, and configured from response', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        voiceAgent: 'elevenlabs',
+        filePath: '/opt/license.lic',
+        configured: true,
+      }),
+    );
+
+    const result = await readVoiceAgentFromFile();
+    expect(result.voiceAgent).toBe('elevenlabs');
+    expect(result.filePath).toBe('/opt/license.lic');
+    expect(result.configured).toBe(true);
+  });
+
+  it('normalizes legacy google-native-audio to gemini-live', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        voiceAgent: 'google-native-audio',
+        configured: true,
+      }),
+    );
+
+    const result = await readVoiceAgentFromFile();
+    expect(result.voiceAgent).toBe('gemini-live');
+  });
+
+  it('returns null voiceAgent and configured=false on empty response', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(null));
+
+    const result = await readVoiceAgentFromFile();
+    expect(result.voiceAgent).toBeNull();
+    expect(result.configured).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// writeVoiceAgentToFile
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('writeVoiceAgentToFile', () => {
+  it('sends correct POST body', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
+
+    await writeVoiceAgentToFile('elevenlabs');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      `${WRITER_BASE_URL}/voice-agent`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ voiceAgent: 'elevenlabs' }),
+      }),
+    );
+  });
+
+  it('throws on non-ok response with error message', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ error: 'Write failed' }, { status: 500 }),
+    );
+
+    await expect(writeVoiceAgentToFile('gemini-live')).rejects.toThrow('Write failed');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// startProcess / stopProcess
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('startProcess', () => {
+  it('returns ok with pid on success', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ pid: 12345 }),
+    );
+
+    const result = await startProcess('/path/to/exe');
+    expect(result.ok).toBe(true);
+    expect(result.pid).toBe(12345);
+  });
+
+  it('returns ok=false with error on failure', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ error: 'Exe not found' }, { status: 400 }),
+    );
+
+    const result = await startProcess('/bad/path');
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Exe not found');
+  });
+});
+
+describe('stopProcess', () => {
+  it('sends processId in body when provided', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({}));
+
+    await stopProcess('kiosk');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      `${WRITER_BASE_URL}/process/stop`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ processId: 'kiosk' }),
+      }),
+    );
+  });
+
+  it('returns ok=false with error on HTTP error', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ error: 'No running process' }, { status: 404 }),
+    );
+
+    const result = await stopProcess();
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('No running process');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// getProcessStatus
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('getProcessStatus', () => {
+  it('parses nested processes record correctly', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        running: true,
+        pid: 999,
+        processes: {
+          kiosk: { running: true, pid: 1001 },
+          holobox: { running: false, pid: null },
+        },
+      }),
+    );
+
+    const result = await getProcessStatus();
+    expect(result.running).toBe(true);
+    expect(result.pid).toBe(999);
+    expect(result.processes.kiosk).toEqual({ running: true, pid: 1001 });
+    expect(result.processes.holobox).toEqual({ running: false, pid: null });
+  });
+
+  it('handles missing processes field gracefully', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ running: false, pid: null }),
+    );
+
+    const result = await getProcessStatus();
+    expect(result.running).toBe(false);
+    expect(result.pid).toBeNull();
+    expect(result.processes).toEqual({});
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// checkPixelStreamingStatus
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('checkPixelStreamingStatus', () => {
+  it('returns reachable=false for empty URL', async () => {
+    const result = await checkPixelStreamingStatus('');
+    expect(result.reachable).toBe(false);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
