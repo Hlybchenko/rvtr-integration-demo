@@ -274,6 +274,8 @@ async function main() {
   await new Promise((resolve) => {
     viteProcess.on('close', resolve);
   });
+
+  process.exit(0);
 }
 
 main().catch((error) => {
