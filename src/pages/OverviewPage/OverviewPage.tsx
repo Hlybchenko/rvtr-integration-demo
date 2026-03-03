@@ -14,6 +14,7 @@ import {
   browseForExe,
   browseForFile,
   forceRewriteVoiceAgentFile,
+  setWriterFilePath,
   startProcess,
   stopProcess,
   getProcessStatus,
@@ -101,6 +102,11 @@ export function OverviewPage() {
       if (result.licenseFilePath) {
         setLicenseInput(result.licenseFilePath);
         setLicenseFilePath(result.licenseFilePath);
+        // Sync to backend config so /voice-agent endpoints work
+        const sync = await setWriterFilePath(result.licenseFilePath);
+        if (!sync.ok) {
+          setLicenseError(sync.error ?? 'Failed to save path on server');
+        }
       } else {
         setLicenseError(result.errors?.join('; ') || 'Browse failed');
       }
@@ -117,6 +123,16 @@ export function OverviewPage() {
     setApplying(true);
     setApplyError(null);
     try {
+      // 0. Ensure license file path is synced to backend config
+      const currentLicense = useKiosksStore.getState().licenseFilePath.trim();
+      if (!currentLicense) {
+        throw new Error('License file path is not configured');
+      }
+      const syncResult = await setWriterFilePath(currentLicense);
+      if (!syncResult.ok) {
+        throw new Error(syncResult.error ?? 'Failed to sync license path to server');
+      }
+
       // 1. Write provider to license file
       const result = await forceRewriteVoiceAgentFile(pendingAgent);
       if (!result.matched) {

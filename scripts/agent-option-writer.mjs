@@ -62,18 +62,12 @@ async function writeConfig(cfg) {
 const activeProcesses = new Map();
 const DEFAULT_PROCESS_ID = '__default__';
 
-/** Full path to taskkill.exe — avoids ENOENT if PATH is incomplete */
-function getTaskkillPath() {
-  const systemRoot = process.env.SystemRoot || process.env.windir || 'C:\\Windows';
-  return path.join(systemRoot, 'System32', 'taskkill.exe');
-}
-
 /**
  * Kill a process by processId.  If no processId given, kills the default.
  * Cross-platform: SIGTERM on POSIX, taskkill on Windows.
  * Returns the deviceId of the killed process, or null.
  */
-async function killProcess(processId = DEFAULT_PROCESS_ID) {
+function killProcess(processId = DEFAULT_PROCESS_ID) {
   const proc = activeProcesses.get(processId);
   if (!proc || proc.child.exitCode !== null) {
     activeProcesses.delete(processId);
@@ -85,44 +79,23 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
   if (!pid) { activeProcesses.delete(processId); return null; }
 
   const isWin = os.platform() === 'win32';
-  const taskkill = isWin ? getTaskkillPath() : null;
 
-  await new Promise((resolve) => {
-    let done = false;
-    const finish = () => { if (!done) { done = true; clearTimeout(forceTimer); resolve(); } };
-
-    const forceTimer = setTimeout(() => {
-      try {
-        if (isWin) {
-          execFile(taskkill, ['/F', '/T', '/PID', String(pid)], finish);
-          return;
-        }
-        process.kill(pid, 'SIGKILL');
-      } catch { /* already dead */ }
-      finish();
-    }, 3000);
-
-    proc.child.once('exit', finish);
-
-    try {
-      if (isWin) {
-        execFile(taskkill, ['/T', '/PID', String(pid)], () => {});
-      } else {
-        process.kill(pid, 'SIGTERM');
-      }
-    } catch {
-      finish();
+  // Force kill immediately — no graceful shutdown, just terminate
+  try {
+    if (isWin) {
+      spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { shell: true, stdio: 'ignore' });
+    } else {
+      process.kill(pid, 'SIGKILL');
     }
-  });
+  } catch { /* already dead */ }
 
-  // Kill tracked child PIDs that may have detached from the shell wrapper
+  // Safety net: also kill tracked child PIDs
   if (isWin) {
     const trackedPids = proc.child._childPids || [];
     if (trackedPids.length) {
       console.log(`[killProcess] killing tracked child PIDs: ${trackedPids.join(', ')}`);
       killPids(trackedPids);
     }
-    // Also snapshot current children in case new ones appeared
     const currentChildren = snapshotChildPids(pid);
     if (currentChildren.length) {
       killPids(currentChildren);
@@ -131,11 +104,6 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
 
   activeProcesses.delete(processId);
   return killedDeviceId;
-}
-
-/** Legacy alias for backward compat. */
-async function killActiveProcess() {
-  return killProcess(DEFAULT_PROCESS_ID);
 }
 
 /** Snapshot all descendant PIDs of a given parent PID (Windows only).
@@ -163,6 +131,34 @@ function killPids(pids) {
 }
 
 /**
+ * Resolve a Windows .lnk shortcut to its actual target path and working directory.
+ * Spawning .lnk files via shell creates processes outside the direct parent-child
+ * tree (Windows Shell uses ShellExecute), breaking PID tracking and taskkill /T.
+ * By resolving first and spawning the target directly, we get a clean process tree.
+ * Returns null for non-.lnk files or if resolution fails.
+ */
+function resolveLnkShortcut(lnkPath) {
+  if (os.platform() !== 'win32') return null;
+  if (!lnkPath.toLowerCase().endsWith('.lnk')) return null;
+
+  try {
+    const escaped = lnkPath.replace(/'/g, "''");
+    const result = spawnSync('powershell.exe', [
+      '-NoProfile', '-Command',
+      `$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${escaped}'); Write-Output $s.TargetPath; Write-Output $s.WorkingDirectory`,
+    ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 });
+
+    const lines = (result.stdout || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const target = lines[0];
+    if (!target) return null;
+
+    return { target, workingDir: lines[1] || '' };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * How long to watch a newly spawned process before confirming it started.
  * If it exits within this window, we report a startup failure with stderr.
  */
@@ -176,13 +172,24 @@ const STARTUP_WATCH_MS = 3_000;
  */
 function spawnStart2stream(exePath) {
   return new Promise((resolve, reject) => {
-    const cwd = path.dirname(exePath);
     const isWin = os.platform() === 'win32';
 
+    // Resolve .lnk shortcuts to their real target so the spawned process
+    // stays in our process tree (required for PID tracking and taskkill /T).
+    let actualPath = exePath;
+    let cwd;
+    if (isWin) {
+      const lnk = resolveLnkShortcut(exePath);
+      if (lnk) {
+        actualPath = lnk.target;
+        cwd = lnk.workingDir || path.dirname(lnk.target);
+        console.log(`[start2stream] resolved .lnk → ${actualPath} (cwd: ${cwd})`);
+      }
+    }
+    if (!cwd) cwd = path.dirname(actualPath);
+
     // On Windows, use just the filename so cmd.exe resolves it from cwd.
-    // This ensures the exe starts with its own directory as the true CWD
-    // (important for DLL loading, config files, relative paths inside the exe).
-    const command = isWin ? path.basename(exePath) : exePath;
+    const command = isWin ? path.basename(actualPath) : actualPath;
 
     const child = spawn(command, [], {
       cwd,
@@ -1042,7 +1049,7 @@ const server = createServer(async (req, res) => {
 
       try {
         // Kill only the process with the same processId (not others)
-        await killProcess(pid_key);
+        killProcess(pid_key);
 
         // killProcess already handles tracked child PIDs
 
@@ -1076,7 +1083,7 @@ const server = createServer(async (req, res) => {
       const processId = typeof body.processId === 'string' ? body.processId.trim() : '';
       const pid_key = processId || DEFAULT_PROCESS_ID;
 
-      const killedDeviceId = await killProcess(pid_key);
+      const killedDeviceId = killProcess(pid_key);
 
       sendJson(res, 200, {
         ok: true,
@@ -1128,7 +1135,7 @@ const server = createServer(async (req, res) => {
       }
 
       try {
-        await killProcess(pid_key);
+        killProcess(pid_key);
 
         // killProcess already handles tracked child PIDs
 
@@ -1200,10 +1207,10 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`[agent-option-writer] config: ${CONFIG_PATH}`);
 });
 
-async function shutdown() {
-  await Promise.all(
-    [...activeProcesses.keys()].map((key) => killProcess(key)),
-  );
+function shutdown() {
+  for (const key of [...activeProcesses.keys()]) {
+    killProcess(key);
+  }
   server.close(() => process.exit(0));
   // Force exit if server.close hangs (e.g. browse request waiting for dialog)
   setTimeout(() => process.exit(1), 5_000).unref();
