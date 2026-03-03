@@ -196,16 +196,6 @@ function openChromeUnsafe(chromeExecutable, appUrl) {
 }
 
 async function main() {
-  // Pull latest changes before starting
-  console.log('Pulling latest changes from demo…');
-  const pull = spawnSync('git', ['pull', 'origin', 'demo'], {
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  });
-  if (pull.status !== 0) {
-    console.error('git pull failed — starting with local version.');
-  }
-
   const port = FIXED_PORT;
 
   stopPortListener(port);
