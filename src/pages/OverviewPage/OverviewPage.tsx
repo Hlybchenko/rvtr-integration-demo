@@ -266,9 +266,88 @@ export function OverviewPage() {
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className={styles.settings}>
-      {/* ── Process: License + Provider + Shortcuts ── */}
+      {/* ── Process: Shortcuts + License + Provider ── */}
       <section className={styles.settingsBlock}>
         <h2 className={styles.settingsBlockTitle}>Process</h2>
+
+        {KIOSK_SHORTCUTS.map((shortcut) => {
+          const value = paths[shortcut.id];
+          const error = errors[shortcut.id];
+          const isRunning = running[shortcut.id] === true;
+          const isBrowsing = browsing === shortcut.id;
+          const isStarting = starting === shortcut.id;
+          const isStopping = stopping === shortcut.id;
+          const hasPath = value.trim().length > 0;
+
+          return (
+            <div key={shortcut.id} className={styles.field}>
+              <div className={styles.fieldHeader}>
+                <label className={styles.label} htmlFor={`kiosk-${shortcut.id}`}>
+                  {shortcut.label}
+                </label>
+                {isRunning && (
+                  <span className={`${styles.badge} ${styles.badgeRunning}`}>Running</span>
+                )}
+              </div>
+              <div className={styles.filePathRow}>
+                <input
+                  id={`kiosk-${shortcut.id}`}
+                  className={`${styles.input} ${error ? styles.inputError : ''}`}
+                  type="text"
+                  placeholder={IS_WINDOWS ? 'C:\\Users\\Desktop\\shortcut.lnk' : '/path/to/shortcut'}
+                  value={value}
+                  onChange={(e) => {
+                    setPath(shortcut.id, e.target.value);
+                    clearError(shortcut.id);
+                  }}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className={styles.filePathAction}
+                  onClick={() => void handleBrowse(shortcut.id)}
+                  disabled={isBrowsing}
+                >
+                  {isBrowsing ? '...' : 'Browse'}
+                </button>
+                {isRunning ? (
+                  <>
+                    <button
+                      type="button"
+                      className={styles.filePathAction}
+                      onClick={() => void handleRestart(shortcut.id)}
+                      disabled={isStarting}
+                      title="Restart"
+                    >
+                      {isStarting ? '...' : 'Restart'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.stopButton}
+                      onClick={() => void handleStop(shortcut.id)}
+                      disabled={isStopping}
+                    >
+                      {isStopping ? '...' : 'Stop'}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.startButton}
+                    onClick={() => void handleStart(shortcut.id)}
+                    disabled={!hasPath || isStarting}
+                  >
+                    {isStarting ? '...' : 'Start'}
+                  </button>
+                )}
+              </div>
+              {error && <span className={styles.filePathValidationError}>{error}</span>}
+            </div>
+          );
+        })}
+
+        <hr className={styles.divider} />
 
         <div className={styles.field}>
           <label className={styles.label} htmlFor="kiosk-license-path">
@@ -347,85 +426,6 @@ export function OverviewPage() {
             {applying ? 'Applying...' : 'Apply & restart'}
           </button>
         </div>
-
-        <hr className={styles.divider} />
-
-        {KIOSK_SHORTCUTS.map((shortcut) => {
-          const value = paths[shortcut.id];
-          const error = errors[shortcut.id];
-          const isRunning = running[shortcut.id] === true;
-          const isBrowsing = browsing === shortcut.id;
-          const isStarting = starting === shortcut.id;
-          const isStopping = stopping === shortcut.id;
-          const hasPath = value.trim().length > 0;
-
-          return (
-            <div key={shortcut.id} className={styles.field}>
-              <div className={styles.fieldHeader}>
-                <label className={styles.label} htmlFor={`kiosk-${shortcut.id}`}>
-                  {shortcut.label}
-                </label>
-                {isRunning && (
-                  <span className={`${styles.badge} ${styles.badgeRunning}`}>Running</span>
-                )}
-              </div>
-              <div className={styles.filePathRow}>
-                <input
-                  id={`kiosk-${shortcut.id}`}
-                  className={`${styles.input} ${error ? styles.inputError : ''}`}
-                  type="text"
-                  placeholder={IS_WINDOWS ? 'C:\\Users\\Desktop\\shortcut.lnk' : '/path/to/shortcut'}
-                  value={value}
-                  onChange={(e) => {
-                    setPath(shortcut.id, e.target.value);
-                    clearError(shortcut.id);
-                  }}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                <button
-                  type="button"
-                  className={styles.filePathAction}
-                  onClick={() => void handleBrowse(shortcut.id)}
-                  disabled={isBrowsing}
-                >
-                  {isBrowsing ? '...' : 'Browse'}
-                </button>
-                {isRunning ? (
-                  <>
-                    <button
-                      type="button"
-                      className={styles.filePathAction}
-                      onClick={() => void handleRestart(shortcut.id)}
-                      disabled={isStarting}
-                      title="Restart"
-                    >
-                      {isStarting ? '...' : 'Restart'}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.stopButton}
-                      onClick={() => void handleStop(shortcut.id)}
-                      disabled={isStopping}
-                    >
-                      {isStopping ? '...' : 'Stop'}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.startButton}
-                    onClick={() => void handleStart(shortcut.id)}
-                    disabled={!hasPath || isStarting}
-                  >
-                    {isStarting ? '...' : 'Start'}
-                  </button>
-                )}
-              </div>
-              {error && <span className={styles.filePathValidationError}>{error}</span>}
-            </div>
-          );
-        })}
       </section>
 
       {/* ── Widget: Phone + Laptop ── */}
