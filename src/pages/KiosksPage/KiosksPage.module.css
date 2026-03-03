@@ -9,24 +9,293 @@
   }
 }
 
+@keyframes blockFloat {
+  0%   { transform: translateY(0); }
+  25%  { transform: translateY(-1px); }
+  50%  { transform: translateY(0.5px); }
+  75%  { transform: translateY(-0.6px); }
+  100% { transform: translateY(0); }
+}
+
+/* ── Page layout ── */
 .page {
   display: flex;
   flex-direction: column;
   padding: calc(40px * var(--scale)) calc(40px * var(--scale));
-  gap: var(--space-4);
-  max-width: 1100px;
+  gap: var(--space-6);
+  max-width: 620px;
   animation: fadeInUp 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
 }
 
-.title {
-  font-size: calc(24px * var(--scale));
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
+/* ── Glass card ── */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: var(--space-4);
+  background: var(--glass-highlight), var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glass-shadow);
+  animation:
+    fadeInUp 500ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
+    blockFloat 18s ease-in-out 0s infinite;
+  transition:
+    border-color var(--transition-normal),
+    background var(--transition-normal);
 }
 
-.subtitle {
-  font-size: calc(14px * var(--scale));
-  color: var(--text-secondary);
+.block:hover {
+  border-color: color-mix(in srgb, var(--glass-border) 80%, var(--accent));
+}
+
+.blockTitle {
   margin: 0;
+  font-size: var(--font-lg, 18px);
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+/* ── Field ── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* ── Input + buttons row ── */
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  font-size: var(--font-md);
+  font-family: inherit;
+  color: var(--text-primary);
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.06) 0%, transparent 30%, rgba(255, 255, 255, 0.015) 100%),
+    var(--card-nested-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.15) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 1px 2px rgba(0, 0, 0, 0.1);
+  transition:
+    border-color 250ms ease,
+    box-shadow 300ms ease,
+    background 250ms ease;
+  box-sizing: border-box;
+}
+
+.input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+.input:hover {
+  border-color: var(--border-hover);
+  background: var(--panel-hover);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, var(--card-nested-bg));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 0 8px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.inputError {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 3%, var(--card-nested-bg));
+}
+
+/* ── Shared button base ── */
+@keyframes buttonShineSweep {
+  0%   { transform: translateX(-200%); opacity: 0; }
+  20%  { opacity: 0.7; }
+  100% { transform: translateX(400%); opacity: 0; }
+}
+
+.browseButton,
+.startButton {
+  appearance: none;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    opacity 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms ease;
+}
+
+/* Glossy top highlight */
+.browseButton::before,
+.startButton::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  pointer-events: none;
+}
+
+/* Sweep glint */
+.browseButton::after,
+.startButton::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  will-change: transform;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.12) 48%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.12) 52%, transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* ── Browse button ── */
+.browseButton {
+  border: 1px solid var(--glass-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.05) 100%),
+    var(--glass-bg);
+  color: var(--text-primary);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.1) inset,
+    0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+.browseButton:hover:not(:disabled) {
+  border-color: var(--accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.03) 100%),
+    color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.1) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.06) inset,
+    0 4px 10px color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.browseButton:hover:not(:disabled)::after {
+  animation: buttonShineSweep 600ms ease-out;
+}
+
+.browseButton:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 2px 3px rgba(0, 0, 0, 0.1) inset,
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.browseButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ── Start button ── */
+.startButton {
+  border: 1px solid var(--accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+  color: var(--accent);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.startButton:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.startButton:hover:not(:disabled)::after {
+  animation: buttonShineSweep 600ms ease-out;
+}
+
+.startButton:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 3px rgba(0, 0, 0, 0.1) inset,
+    0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.startButton:disabled {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ── Error text ── */
+.error {
+  font-size: var(--font-sm);
+  color: var(--danger);
+  line-height: 1.4;
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .page,
+  .block,
+  .browseButton,
+  .startButton {
+    animation: none;
+  }
+
+  .browseButton,
+  .startButton,
+  .input {
+    transition: none;
+  }
+}
+
+/* ── Mobile ── */
+@media (max-width: 767px) {
+  .page {
+    padding: 56px 16px 24px;
+  }
 }
