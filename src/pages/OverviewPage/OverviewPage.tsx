@@ -168,8 +168,9 @@ export function OverviewPage() {
 
   // Cleanup launch timers on unmount
   useEffect(() => {
+    const timers = launchTimers.current;
     return () => {
-      Object.values(launchTimers.current).forEach((t) => { if (t) clearTimeout(t); });
+      Object.values(timers).forEach((t) => { if (t) clearTimeout(t); });
     };
   }, []);
 
