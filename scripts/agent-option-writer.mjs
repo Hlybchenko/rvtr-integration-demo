@@ -82,7 +82,7 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
 
   const pid = proc.child.pid;
   const killedDeviceId = proc.deviceId;
-  const exeName = proc.exePath ? path.basename(proc.exePath) : null;
+  const exeName = proc.exePath ? resolveImageName(proc.exePath) : null;
   if (!pid) { activeProcesses.delete(processId); return null; }
 
   const isWin = os.platform() === 'win32';
@@ -129,6 +129,26 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
 /** Legacy alias for backward compat. */
 async function killActiveProcess() {
   return killProcess(DEFAULT_PROCESS_ID);
+}
+
+/** Resolve the actual executable image name from a file path.
+ *  If the path is a .lnk shortcut, reads its TargetPath via PowerShell. */
+function resolveImageName(filePath) {
+  if (!filePath) return '';
+  const ext = path.extname(filePath).toLowerCase();
+
+  if (ext === '.lnk' && os.platform() === 'win32') {
+    try {
+      const result = execFileSync('powershell.exe', [
+        '-NoProfile', '-Command',
+        `(New-Object -ComObject WScript.Shell).CreateShortcut('${filePath.replaceAll("'", "''")}').TargetPath | Split-Path -Leaf`,
+      ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+      const resolved = result.trim();
+      if (resolved) return resolved;
+    } catch { /* fall through */ }
+  }
+
+  return path.basename(filePath);
 }
 
 /**
@@ -1008,7 +1028,7 @@ const server = createServer(async (req, res) => {
 
         // Fallback: kill any orphaned instance by image name (e.g. after server restart)
         if (os.platform() === 'win32') {
-          const exeName = path.basename(resolved);
+          const exeName = resolveImageName(resolved);
           try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
         }
 
@@ -1045,10 +1065,9 @@ const server = createServer(async (req, res) => {
 
       const killedDeviceId = await killProcess(pid_key);
 
-      // Fallback: if killProcess found nothing in the Map (server restarted,
-      // process orphaned), kill by image name using the exePath from the client.
-      if (!killedDeviceId && exePath && os.platform() === 'win32') {
-        const exeName = path.basename(exePath);
+      // Fallback: kill by image name (handles orphaned processes and .lnk shortcuts)
+      if (exePath && os.platform() === 'win32') {
+        const exeName = resolveImageName(exePath);
         try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
       }
 
@@ -1104,9 +1123,9 @@ const server = createServer(async (req, res) => {
       try {
         await killProcess(pid_key);
 
-        // Fallback: kill any orphaned instance by image name (e.g. after server restart)
+        // Fallback: kill any orphaned instance by image name (handles .lnk shortcuts)
         if (os.platform() === 'win32') {
-          const exeName = path.basename(resolved);
+          const exeName = resolveImageName(resolved);
           try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
         }
 
