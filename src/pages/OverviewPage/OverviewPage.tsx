@@ -190,7 +190,7 @@ export function OverviewPage() {
         }
         setRunning(next);
       } catch {
-        if (!cancelled) setRunning({});
+        // Keep last known state on network error — don't wipe running status
       }
     };
 
@@ -289,21 +289,30 @@ export function OverviewPage() {
     if (!exePath) return;
 
     setStarting(id);
+    setLaunching((prev) => ({ ...prev, [id]: true }));
     clearError(id);
     try {
       await stopProcess(id);
+      setRunning((prev) => ({ ...prev, [id]: false }));
+
       const result = await startProcess(exePath, id);
       if (!result.ok) {
         setErrors((prev) => ({ ...prev, [id]: result.error ?? 'Failed to restart' }));
+        setLaunching((prev) => ({ ...prev, [id]: false }));
         setRunning((prev) => ({ ...prev, [id]: false }));
       } else {
         setRunning((prev) => ({ ...prev, [id]: true }));
+        if (launchTimers.current[id]) clearTimeout(launchTimers.current[id]);
+        launchTimers.current[id] = setTimeout(() => {
+          setLaunching((prev) => ({ ...prev, [id]: false }));
+        }, LAUNCH_COOLDOWN_MS);
       }
     } catch (err) {
       setErrors((prev) => ({
         ...prev,
         [id]: err instanceof Error ? err.message : String(err),
       }));
+      setLaunching((prev) => ({ ...prev, [id]: false }));
     } finally {
       setStarting(null);
     }
@@ -360,6 +369,7 @@ export function OverviewPage() {
                     setPath(shortcut.id, e.target.value);
                     clearError(shortcut.id);
                   }}
+                  disabled={isRunning || isLaunching}
                   spellCheck={false}
                   autoComplete="off"
                 />
@@ -367,7 +377,7 @@ export function OverviewPage() {
                   type="button"
                   className={styles.filePathAction}
                   onClick={() => void handleBrowse(shortcut.id)}
-                  disabled={isBrowsing || isBusy}
+                  disabled={isBrowsing || isBusy || isRunning}
                 >
                   {isBrowsing ? '...' : 'Browse'}
                 </button>
@@ -477,7 +487,12 @@ export function OverviewPage() {
               type="button"
               className={styles.applyButton}
               onClick={() => void handleApply()}
-              disabled={!hasLicense || applying || !hasPendingChange}
+              disabled={
+                !hasLicense ||
+                applying ||
+                !hasPendingChange ||
+                !paths['kiosk-app'].trim()
+              }
             >
               {applying ? 'Applying...' : 'Apply & restart'}
             </button>
