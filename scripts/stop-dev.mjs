@@ -68,26 +68,18 @@ function stopPortListener(port) {
 }
 
 function stopKnownProcesses() {
-  // When called from dev-unsafe.mjs, STOP_DEV_CALLER_PID is set so we
-  // don't kill the very process that invoked us.
-  const excludePids = new Set([String(process.pid), String(process.ppid)]);
-  if (process.env.STOP_DEV_CALLER_PID) {
-    excludePids.add(process.env.STOP_DEV_CALLER_PID);
-  }
-
   if (process.platform === 'win32') {
-    const exclude = [...excludePids].map((p) => `$_.ProcessId -ne ${p}`).join(' -and ');
+    // PowerShell replaces deprecated wmic — works on Windows 10+ and Server 2019+
     run('powershell.exe', [
       '-NoProfile',
       '-Command',
-      `Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*') -and ${exclude} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+      "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
     ], { shell: false });
     return;
   }
 
-  const grepExclude = [...excludePids].map((p) => `-e '^${p}$'`).join(' ');
-  run('bash', ['-c', `pgrep -f 'dev-unsafe.mjs' | grep -v ${grepExclude} | xargs -r kill -TERM 2>/dev/null`], { shell: false });
-  run('bash', ['-c', `pgrep -f 'agent-option-writer.mjs' | grep -v ${grepExclude} | xargs -r kill -TERM 2>/dev/null`], { shell: false });
+  run('pkill', ['-f', 'dev-unsafe.mjs'], { shell: false });
+  run('pkill', ['-f', 'agent-option-writer.mjs'], { shell: false });
 }
 
 function closeUnsafeChrome() {

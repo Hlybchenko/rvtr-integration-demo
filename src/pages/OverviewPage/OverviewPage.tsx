@@ -26,7 +26,6 @@ const IS_WINDOWS =
     (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ===
       'Windows');
 
-const POLL_INTERVAL_MS = 3_000;
 const LAUNCH_COOLDOWN_MS = 2_000;
 
 interface DeviceField {
@@ -183,11 +182,10 @@ export function OverviewPage() {
     });
   }, []);
 
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Fetch process status once on mount
   useEffect(() => {
     let cancelled = false;
-
-    const poll = async () => {
+    void (async () => {
       try {
         const status = await getProcessStatus();
         if (cancelled) return;
@@ -197,23 +195,10 @@ export function OverviewPage() {
         }
         setRunning(next);
       } catch {
-        // Keep last known state on network error — don't wipe running status
+        // ignore
       }
-    };
-
-    const loop = async () => {
-      await poll();
-      if (!cancelled) {
-        timerRef.current = setTimeout(() => void loop(), POLL_INTERVAL_MS);
-      }
-    };
-
-    void loop();
-
-    return () => {
-      cancelled = true;
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const handleBrowse = useCallback(async (id: ShortcutId) => {

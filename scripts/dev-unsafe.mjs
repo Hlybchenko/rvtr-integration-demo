@@ -2,7 +2,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const FIXED_PORT = 5173;
 const WRITER_PORT = 3210;
@@ -76,7 +75,7 @@ function getListeningPidsOnUnix(port) {
 
 function killPidCrossPlatform(pid) {
   if (process.platform === 'win32') {
-    spawnSync('taskkill', ['/PID', pid, '/T', '/F'], {
+    spawnSync('taskkill', ['/PID', pid, '/F'], {
       stdio: 'ignore',
       shell: true,
     });
@@ -86,19 +85,12 @@ function killPidCrossPlatform(pid) {
   spawnSync('kill', ['-TERM', pid], { stdio: 'ignore' });
 }
 
-/** Force-kill any process listening on a port. Uses PowerShell on Windows for reliability. */
 function stopPortListener(port) {
-  if (process.platform === 'win32') {
-    // PowerShell Get-NetTCPConnection is more reliable than parsing netstat
-    spawnSync('powershell.exe', [
-      '-NoProfile',
-      '-Command',
-      `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
-    ], { stdio: 'inherit', shell: false });
-    return;
-  }
+  const pids =
+    process.platform === 'win32'
+      ? getListeningPidsOnWindows(port)
+      : getListeningPidsOnUnix(port);
 
-  const pids = getListeningPidsOnUnix(port);
   for (const pid of pids) {
     killPidCrossPlatform(pid);
   }
@@ -175,36 +167,6 @@ function clearChromeExitFlag(userDataDir) {
   }
 }
 
-/** Create / update a desktop shortcut (.lnk) on Windows so the icon stays current. */
-function ensureDesktopShortcut() {
-  if (process.platform !== 'win32') return;
-
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const icoPath = path.join(repoRoot, 'public', 'logomark.ico');
-
-  if (!existsSync(icoPath)) return;
-
-  const desktop = path.join(process.env.USERPROFILE ?? '.', 'Desktop');
-  const lnkPath = path.join(desktop, 'RVTR Demo.lnk');
-
-  // PowerShell script to create a .lnk via WScript.Shell COM
-  const ps = [
-    `$ws = New-Object -ComObject WScript.Shell`,
-    `$s = $ws.CreateShortcut('${lnkPath.replaceAll("'", "''")}')`,
-    `$s.TargetPath = 'cmd.exe'`,
-    `$s.Arguments = '/k cd /d "${repoRoot}" && yarn dev:unsafe'`,
-    `$s.WorkingDirectory = '${repoRoot}'`,
-    `$s.IconLocation = '${icoPath}, 0'`,
-    `$s.Description = 'RVTR Integration Demo (unsafe Chrome)'`,
-    `$s.Save()`,
-  ].join('; ');
-
-  spawnSync('powershell.exe', ['-NoProfile', '-Command', ps], {
-    stdio: 'ignore',
-    shell: false,
-  });
-}
-
 function openChromeUnsafe(chromeExecutable, appUrl) {
   const userDataDir =
     process.platform === 'win32'
@@ -234,14 +196,6 @@ function openChromeUnsafe(chromeExecutable, appUrl) {
 }
 
 async function main() {
-  // Clean up any previous dev session (Chrome, ports, orphan processes).
-  // Pass our PID so stop-dev can exclude us from its kill list.
-  spawnSync('node', ['./scripts/stop-dev.mjs'], {
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-    env: { ...process.env, STOP_DEV_CALLER_PID: String(process.pid) },
-  });
-
   // Pull latest changes before starting
   console.log('Pulling latest changes from demo…');
   const pull = spawnSync('git', ['pull', 'origin', 'demo'], {
@@ -252,41 +206,20 @@ async function main() {
     console.error('git pull failed — starting with local version.');
   }
 
-  // Create / refresh desktop shortcut with current icon after git pull
-  ensureDesktopShortcut();
-
   const port = FIXED_PORT;
 
-  // Wait for OS to release ports after stop-dev cleanup.
-  // On Windows, ports may linger in TIME_WAIT after taskkill.
-  const PORT_RELEASE_ATTEMPTS = 10;
-  const PORT_RELEASE_DELAY_MS = 500;
+  stopPortListener(port);
+  stopPortListener(WRITER_PORT);
+  await sleep(300);
 
-  for (let i = 0; i < PORT_RELEASE_ATTEMPTS; i += 1) {
-    const portBusy = await isPortOpen(port);
-    const writerBusy = await isPortOpen(WRITER_PORT);
+  if (await isPortOpen(port)) {
+    console.error(`Port ${port} is busy and could not be stopped automatically.`);
+    process.exit(1);
+  }
 
-    if (!portBusy && !writerBusy) break;
-
-    if (i > 0) {
-      console.log(`Waiting for port release… attempt ${i + 1}/${PORT_RELEASE_ATTEMPTS}`);
-    }
-
-    if (i === PORT_RELEASE_ATTEMPTS - 1) {
-      if (portBusy) {
-        console.error(`Port ${port} is busy and could not be stopped automatically.`);
-        process.exit(1);
-      }
-      if (writerBusy) {
-        console.error(`Port ${WRITER_PORT} (agent-option-writer) is busy and could not be stopped automatically.`);
-        process.exit(1);
-      }
-    }
-
-    // Re-attempt kill before next wait
-    if (portBusy) stopPortListener(port);
-    if (writerBusy) stopPortListener(WRITER_PORT);
-    await sleep(PORT_RELEASE_DELAY_MS);
+  if (await isPortOpen(WRITER_PORT)) {
+    console.error(`Port ${WRITER_PORT} (agent-option-writer) is busy and could not be stopped automatically.`);
+    process.exit(1);
   }
 
   const appUrl = `http://localhost:${port}`;
@@ -326,7 +259,6 @@ async function main() {
   for (let attempt = 0; attempt < WAIT_READY_ATTEMPTS; attempt += 1) {
     if (await isPortOpen(port)) {
       chromeProcess = openChromeUnsafe(chromeExecutable, appUrl);
-
       break;
     }
 
