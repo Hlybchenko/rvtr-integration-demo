@@ -145,6 +145,7 @@ export function OverviewPage() {
     } catch (err) {
       setApplyError(err instanceof Error ? err.message : String(err));
       setLaunching((prev) => ({ ...prev, 'kiosk-app': false }));
+      setRunning((prev) => ({ ...prev, 'kiosk-app': false }));
     } finally {
       setApplying(false);
     }
@@ -158,6 +159,13 @@ export function OverviewPage() {
   const [running, setRunning] = useState<Partial<Record<ShortcutId, boolean>>>({});
   const [launching, setLaunching] = useState<Partial<Record<ShortcutId, boolean>>>({});
   const launchTimers = useRef<Partial<Record<ShortcutId, ReturnType<typeof setTimeout>>>>({});
+
+  // Cleanup launch timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(launchTimers.current).forEach((t) => { if (t) clearTimeout(t); });
+    };
+  }, []);
 
   const clearError = useCallback((id: ShortcutId) => {
     setErrors((prev) => {

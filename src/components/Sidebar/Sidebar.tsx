@@ -7,7 +7,6 @@ import {
   IconSettings,
   IconPhone,
   IconLaptop,
-  IconKiosks,
 } from './NavIcons';
 import styles from './Sidebar.module.css';
 
@@ -429,18 +428,6 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
               {device.name}
             </NavLink>
           ))}
-
-        <span className={styles.navLabel}>Streaming</span>
-        <NavLink
-          to="/kiosks"
-          onMouseDown={preventFocusSteal}
-          className={({ isActive }) =>
-            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
-          }
-        >
-          <span className={styles.navIcon}><IconKiosks /></span>
-          Kiosks
-        </NavLink>
 
         <div className={styles.navBottom}>
           {onTogglePin && (
