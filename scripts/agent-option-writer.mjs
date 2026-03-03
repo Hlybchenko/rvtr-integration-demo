@@ -471,8 +471,8 @@ function openNativeExePicker() {
 Add-Type -AssemblyName PresentationFramework
 
 $dialog = New-Object Microsoft.Win32.OpenFileDialog
-$dialog.Filter = "Batch files (*.bat)|*.bat|All files (*.*)|*.*"
-$dialog.Title = "Select start2stream batch file"
+$dialog.Filter = "All files (*.*)|*.*|Batch files (*.bat)|*.bat|Executables (*.exe)|*.exe|AutoHotkey (*.ahk)|*.ahk|Shortcuts (*.lnk)|*.lnk"
+$dialog.Title = "Select executable or shortcut"
 $result = $dialog.ShowDialog()
 if ($result) {
     Write-Output $dialog.FileName
