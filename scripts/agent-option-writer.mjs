@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { promises as fs } from 'node:fs';
-import { execFile, execFileSync, spawn } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -82,7 +82,6 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
 
   const pid = proc.child.pid;
   const killedDeviceId = proc.deviceId;
-  const exeName = proc.exePath ? resolveImageName(proc.exePath) : null;
   if (!pid) { activeProcesses.delete(processId); return null; }
 
   const isWin = os.platform() === 'win32';
@@ -116,15 +115,13 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
     }
   });
 
-  // Fallback: on Windows, the exe may have detached from the shell wrapper.
-  // Kill by image name to ensure the actual process is stopped.
-  if (isWin && exeName) {
-    try { execFileSync(taskkill, ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
-  }
-
-  // AgenticProxy is a Node.js app — kill node.exe processes in its directory
-  if (isWin && proc.exePath && processId === 'agentic-proxy') {
-    killNodeProcessesInDir(path.dirname(proc.exePath));
+  // Fallback: kill child processes that may have detached from the shell wrapper
+  if (isWin) {
+    killChildProcesses(pid);
+    // AgenticProxy is a Node.js app — also kill node.exe in its directory
+    if (proc.exePath && processId === 'agentic-proxy') {
+      killNodeProcessesInDir(path.dirname(proc.exePath));
+    }
   }
 
   activeProcesses.delete(processId);
@@ -136,24 +133,23 @@ async function killActiveProcess() {
   return killProcess(DEFAULT_PROCESS_ID);
 }
 
-/** Resolve the actual executable image name from a file path.
- *  If the path is a .lnk shortcut, reads its TargetPath via PowerShell. */
-function resolveImageName(filePath) {
-  if (!filePath) return '';
-  const ext = path.extname(filePath).toLowerCase();
+/** Force-kill a Windows process by image name (same as terminal TASKKILL /IM x /F). */
+function taskkillByName(imageName) {
+  if (!imageName || os.platform() !== 'win32') return;
+  try {
+    spawnSync('taskkill', ['/F', '/IM', imageName], { shell: true, stdio: 'ignore' });
+  } catch { /* not running */ }
+}
 
-  if (ext === '.lnk' && os.platform() === 'win32') {
-    try {
-      const result = execFileSync('powershell.exe', [
-        '-NoProfile', '-Command',
-        `(New-Object -ComObject WScript.Shell).CreateShortcut('${filePath.replaceAll("'", "''")}').TargetPath | Split-Path -Leaf`,
-      ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
-      const resolved = result.trim();
-      if (resolved) return resolved;
-    } catch { /* fall through */ }
-  }
-
-  return path.basename(filePath);
+/** Kill all child processes of a given PID (recursive tree via PowerShell). */
+function killChildProcesses(parentPid) {
+  if (!parentPid || os.platform() !== 'win32') return;
+  try {
+    spawnSync('powershell.exe', [
+      '-NoProfile', '-Command',
+      `Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${parentPid} -and $_.ProcessId -ne ${process.pid} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+    ], { stdio: 'ignore', shell: false });
+  } catch { /* ignore */ }
 }
 
 /** Kill node.exe processes whose command line references the given directory.
@@ -162,14 +158,14 @@ function killNodeProcessesInDir(dirPath) {
   if (os.platform() !== 'win32' || !dirPath) return;
   const escaped = dirPath.replaceAll("'", "''").replaceAll('\\', '\\\\');
   try {
-    execFileSync('powershell.exe', [
+    spawnSync('powershell.exe', [
       '-NoProfile', '-Command',
       [
         `Get-CimInstance Win32_Process -Filter "Name='node.exe'"`,
         `| Where-Object { $_.ProcessId -ne ${process.pid} -and $_.CommandLine -like '*${escaped}*' }`,
         `| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
       ].join(' '),
-    ], { stdio: 'ignore' });
+    ], { stdio: 'ignore', shell: false });
   } catch { /* ignore */ }
 }
 
@@ -1050,8 +1046,7 @@ const server = createServer(async (req, res) => {
 
         // Fallback: kill any orphaned instance by image name
         if (os.platform() === 'win32') {
-          const exeName = resolveImageName(resolved);
-          try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+          taskkillByName(path.basename(resolved));
           if (pid_key === 'agentic-proxy') killNodeProcessesInDir(path.dirname(resolved));
         }
 
@@ -1089,10 +1084,9 @@ const server = createServer(async (req, res) => {
       const killedDeviceId = await killProcess(pid_key);
 
       // Fallback: kill by image name
+      // Fallback: kill by exe image name + node.exe for agentic-proxy
       if (exePath && os.platform() === 'win32') {
-        const exeName = resolveImageName(exePath);
-        try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
-        // AgenticProxy is a Node.js app — also kill node.exe in its directory
+        taskkillByName(path.basename(exePath));
         if (pid_key === 'agentic-proxy') {
           killNodeProcessesInDir(path.dirname(path.resolve(exePath)));
         }
@@ -1152,8 +1146,7 @@ const server = createServer(async (req, res) => {
 
         // Fallback: kill any orphaned instance by image name
         if (os.platform() === 'win32') {
-          const exeName = resolveImageName(resolved);
-          try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+          taskkillByName(path.basename(resolved));
           if (pid_key === 'agentic-proxy') killNodeProcessesInDir(path.dirname(resolved));
         }
 
