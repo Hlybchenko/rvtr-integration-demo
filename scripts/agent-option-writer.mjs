@@ -197,6 +197,49 @@ function spawnStart2stream(exePath) {
 }
 
 /**
+ * (Windows-only, fire-and-forget)
+ * Poll for a process window by PID and bring it to foreground.
+ * Retries every 1s for up to 15s to wait for the UE window to appear.
+ */
+function focusProcessWindow(pid) {
+  if (os.platform() !== 'win32' || !pid) return;
+
+  const psExe = getWindowsPowerShellPath();
+  const script = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class FocusHelper {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+for ($i = 0; $i -lt 15; $i++) {
+  Start-Sleep -Seconds 1
+  try {
+    $proc = Get-Process -Id ${pid} -ErrorAction Stop
+    if ($proc.MainWindowHandle -ne 0) {
+      [FocusHelper]::ShowWindow($proc.MainWindowHandle, 9)
+      [FocusHelper]::SetForegroundWindow($proc.MainWindowHandle)
+      exit 0
+    }
+  } catch { exit 1 }
+}
+`;
+
+  const tmpFile = path.join(os.tmpdir(), `rvtr-focus-${Date.now()}.ps1`);
+  fs.writeFile(tmpFile, script, 'utf8').then(() => {
+    const child = execFile(
+      psExe,
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', tmpFile],
+      { timeout: 20_000 },
+      () => { fs.unlink(tmpFile).catch(() => {}); },
+    );
+    child.unref();
+  }).catch(() => {});
+}
+
+/**
  * Validate that a path points to an existing executable file.
  */
 async function validateExecutable(filePath) {
@@ -942,6 +985,9 @@ const server = createServer(async (req, res) => {
         await killProcess(pid_key);
         const child = await spawnStart2stream(resolved);
         activeProcesses.set(pid_key, { deviceId, child });
+
+        // Bring the UE window to foreground once it appears (Windows, fire-and-forget)
+        focusProcessWindow(child.pid);
 
         sendJson(res, 200, {
           ok: true,
