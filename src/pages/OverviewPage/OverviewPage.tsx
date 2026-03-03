@@ -119,6 +119,8 @@ export function OverviewPage() {
   const [stopping, setStopping] = useState<ShortcutId | null>(null);
   const [errors, setErrors] = useState<Partial<Record<ShortcutId, string>>>({});
   const [running, setRunning] = useState<Partial<Record<ShortcutId, boolean>>>({});
+  const [launching, setLaunching] = useState<Partial<Record<ShortcutId, boolean>>>({});
+  const launchTimers = useRef<Partial<Record<ShortcutId, ReturnType<typeof setTimeout>>>>({});
 
   const clearError = useCallback((id: ShortcutId) => {
     setErrors((prev) => {
@@ -186,24 +188,34 @@ export function OverviewPage() {
     }
   }, [setPath, clearError]);
 
+  const LAUNCH_COOLDOWN_MS = 5_000;
+
   const handleStart = useCallback(async (id: ShortcutId) => {
     const exePath = useKiosksStore.getState().paths[id];
     if (!exePath) return;
 
     setStarting(id);
+    setLaunching((prev) => ({ ...prev, [id]: true }));
     clearError(id);
     try {
       const result = await startProcess(exePath, id);
       if (!result.ok) {
         setErrors((prev) => ({ ...prev, [id]: result.error ?? 'Failed to start' }));
+        setLaunching((prev) => ({ ...prev, [id]: false }));
       } else {
         setRunning((prev) => ({ ...prev, [id]: true }));
+        // Keep "Starting..." state for cooldown period
+        if (launchTimers.current[id]) clearTimeout(launchTimers.current[id]);
+        launchTimers.current[id] = setTimeout(() => {
+          setLaunching((prev) => ({ ...prev, [id]: false }));
+        }, LAUNCH_COOLDOWN_MS);
       }
     } catch (err) {
       setErrors((prev) => ({
         ...prev,
         [id]: err instanceof Error ? err.message : String(err),
       }));
+      setLaunching((prev) => ({ ...prev, [id]: false }));
     } finally {
       setStarting(null);
     }
@@ -274,10 +286,12 @@ export function OverviewPage() {
           const value = paths[shortcut.id];
           const error = errors[shortcut.id];
           const isRunning = running[shortcut.id] === true;
+          const isLaunching = launching[shortcut.id] === true;
           const isBrowsing = browsing === shortcut.id;
           const isStarting = starting === shortcut.id;
           const isStopping = stopping === shortcut.id;
           const hasPath = value.trim().length > 0;
+          const isBusy = isStarting || isLaunching;
 
           return (
             <div key={shortcut.id} className={styles.field}>
@@ -285,7 +299,10 @@ export function OverviewPage() {
                 <label className={styles.label} htmlFor={`kiosk-${shortcut.id}`}>
                   {shortcut.label}
                 </label>
-                {isRunning && (
+                {isLaunching && (
+                  <span className={`${styles.badge} ${styles.badgeValid}`}>Starting...</span>
+                )}
+                {isRunning && !isLaunching && (
                   <span className={`${styles.badge} ${styles.badgeRunning}`}>Running</span>
                 )}
               </div>
@@ -307,11 +324,11 @@ export function OverviewPage() {
                   type="button"
                   className={styles.filePathAction}
                   onClick={() => void handleBrowse(shortcut.id)}
-                  disabled={isBrowsing}
+                  disabled={isBrowsing || isBusy}
                 >
                   {isBrowsing ? '...' : 'Browse'}
                 </button>
-                {isRunning ? (
+                {isRunning && !isLaunching ? (
                   <>
                     <button
                       type="button"
@@ -336,9 +353,9 @@ export function OverviewPage() {
                     type="button"
                     className={styles.startButton}
                     onClick={() => void handleStart(shortcut.id)}
-                    disabled={!hasPath || isStarting}
+                    disabled={!hasPath || isBusy}
                   >
-                    {isStarting ? '...' : 'Start'}
+                    {isBusy ? 'Starting...' : 'Start'}
                   </button>
                 )}
               </div>
