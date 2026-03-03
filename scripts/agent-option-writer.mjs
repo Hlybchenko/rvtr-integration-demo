@@ -160,6 +160,35 @@ function killProcess(processId = DEFAULT_PROCESS_ID) {
 }
 
 /**
+ * Get the effective working directory for process tracking.
+ * For .lnk files: reads the shortcut's WorkingDirectory (where the actual app runs).
+ * For everything else: the directory containing the file.
+ * This is separate from spawn cwd — we need the real app directory
+ * to find processes by CommandLine scan.
+ */
+function getTrackingCwd(exePath) {
+  const dir = path.dirname(exePath);
+  if (os.platform() !== 'win32') return dir;
+
+  if (exePath.toLowerCase().endsWith('.lnk')) {
+    try {
+      const escaped = exePath.replace(/'/g, "''");
+      const result = spawnSync('powershell.exe', [
+        '-NoProfile', '-Command',
+        `(New-Object -ComObject WScript.Shell).CreateShortcut('${escaped}').WorkingDirectory`,
+      ], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: 5000 });
+      const workDir = (result.stdout || '').trim();
+      if (workDir) {
+        console.log(`[getTrackingCwd] .lnk WorkingDirectory: ${workDir}`);
+        return workDir;
+      }
+    } catch {}
+  }
+
+  return dir;
+}
+
+/**
  * How long to watch a newly spawned process before confirming it started.
  * If it exits within this window, we report a startup failure with stderr.
  */
@@ -167,17 +196,22 @@ const STARTUP_WATCH_MS = 3_000;
 
 /**
  * Spawn start2stream executable.
- * Watches the process for STARTUP_WATCH_MS — if it exits during that window
- * the promise rejects with exit code + captured stderr (up to 500 chars).
- * Only resolves once the process has been alive for the full watch period.
  *
- * For .lnk/.ahk files: spawns via shell (ShellExecute). The actual app process
- * will be orphaned from our PID tree, but we track it by cwd scan after startup.
+ * Two modes depending on file type:
+ *
+ * .bat/.exe (direct): spawn creates a clean process tree.
+ *   Watch for STARTUP_WATCH_MS — if spawn PID exits, report failure.
+ *
+ * .lnk/.ahk (ShellExecute): spawn wrapper exits immediately (expected).
+ *   Wait STARTUP_WATCH_MS, then scan cwd for the real app process.
  */
 function spawnStart2stream(exePath) {
   return new Promise((resolve, reject) => {
     const cwd = path.dirname(exePath);
     const isWin = os.platform() === 'win32';
+    const ext = path.extname(exePath).toLowerCase();
+    const isIndirect = isWin && (ext === '.lnk' || ext === '.ahk');
+    const trackingDir = getTrackingCwd(exePath);
 
     // On Windows, use just the filename so cmd.exe resolves it from cwd.
     const command = isWin ? path.basename(exePath) : exePath;
@@ -207,10 +241,18 @@ function spawnStart2stream(exePath) {
     });
 
     child.on('exit', (code, signal) => {
-      if (code !== 0) console.error(`[start2stream] exited code=${code} signal=${signal}`);
+      if (code !== 0 && !isIndirect) {
+        console.error(`[start2stream] exited code=${code} signal=${signal}`);
+      }
 
-      // If still in startup watch window — report as startup failure
       if (!settled) {
+        if (isIndirect) {
+          // For .lnk/.ahk the wrapper exiting is expected — real app runs independently.
+          // Don't settle here — let the setTimeout handler do the cwd scan.
+          console.log(`[start2stream] wrapper exited (expected for ${ext}), waiting for real process...`);
+          return;
+        }
+
         settled = true;
         const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
         const details = stderr ? `\n${stderr.slice(0, 500)}` : '';
@@ -219,16 +261,33 @@ function spawnStart2stream(exePath) {
         ));
       }
 
-      // Clean up from the map if this child is still registered
-      for (const [key, entry] of activeProcesses) {
-        if (entry.child === child) { activeProcesses.delete(key); break; }
+      // Clean up from the map — but NOT for indirect spawns (real process is tracked by cwd)
+      if (!isIndirect) {
+        for (const [key, entry] of activeProcesses) {
+          if (entry.child === child) { activeProcesses.delete(key); break; }
+        }
       }
     });
 
-    // Confirm process is alive after the watch period
+    // After startup watch: find real app processes
     setTimeout(() => {
       if (!settled) {
         settled = true;
+
+        if (isIndirect) {
+          // .lnk/.ahk: find real processes by cwd scan
+          child._cwdPids = findProcessesByCwd(trackingDir);
+          child._cwd = trackingDir;
+          if (child._cwdPids.length) {
+            console.log(`[start2stream] found ${child._cwdPids.length} process(es) in ${path.basename(trackingDir)}`);
+            resolve(child);
+          } else {
+            reject(new Error(`No processes found in ${path.basename(trackingDir)} after ${STARTUP_WATCH_MS}ms`));
+          }
+          return;
+        }
+
+        // .bat/.exe: check if spawn process is still alive
         if (child.exitCode !== null) {
           const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
           const details = stderr ? `\n${stderr.slice(0, 500)}` : '';
@@ -236,10 +295,8 @@ function spawnStart2stream(exePath) {
             `Process exited during startup (code=${child.exitCode})${details}`,
           ));
         } else {
-          // Find real app processes by working directory scan.
-          // This works for .lnk/.ahk where the real process is orphaned.
-          child._cwdPids = findProcessesByCwd(cwd);
-          child._cwd = cwd;
+          child._cwdPids = findProcessesByCwd(trackingDir);
+          child._cwd = trackingDir;
           resolve(child);
         }
       }
