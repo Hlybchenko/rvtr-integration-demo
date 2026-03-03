@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { promises as fs } from 'node:fs';
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -82,6 +82,7 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
 
   const pid = proc.child.pid;
   const killedDeviceId = proc.deviceId;
+  const exeName = proc.exePath ? path.basename(proc.exePath) : null;
   if (!pid) { activeProcesses.delete(processId); return null; }
 
   const isWin = os.platform() === 'win32';
@@ -114,6 +115,12 @@ async function killProcess(processId = DEFAULT_PROCESS_ID) {
       finish();
     }
   });
+
+  // Fallback: on Windows, the exe may have detached from the shell wrapper.
+  // Kill by image name to ensure the actual process is stopped.
+  if (isWin && exeName) {
+    execFileSync(taskkill, ['/F', '/IM', exeName], { stdio: 'ignore' });
+  }
 
   activeProcesses.delete(processId);
   return killedDeviceId;
@@ -999,7 +1006,7 @@ const server = createServer(async (req, res) => {
         // Kill only the process with the same processId (not others)
         await killProcess(pid_key);
         const child = await spawnStart2stream(resolved);
-        activeProcesses.set(pid_key, { deviceId, child });
+        activeProcesses.set(pid_key, { deviceId, child, exePath: resolved });
 
         // Bring the UE window to foreground once it appears (Windows, fire-and-forget)
         focusProcessWindow(child.pid);
@@ -1082,7 +1089,7 @@ const server = createServer(async (req, res) => {
       try {
         await killProcess(pid_key);
         const child = await spawnStart2stream(resolved);
-        activeProcesses.set(pid_key, { deviceId, child });
+        activeProcesses.set(pid_key, { deviceId, child, exePath: resolved });
 
         sendJson(res, 200, {
           ok: true,
