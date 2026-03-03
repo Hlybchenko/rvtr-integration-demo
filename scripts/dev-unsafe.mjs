@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const FIXED_PORT = 5173;
 const WRITER_PORT = 3210;
@@ -172,6 +173,34 @@ function clearChromeExitFlag(userDataDir) {
   }
 }
 
+/** Create / update desktop shortcut on Windows with the repo icon. */
+function ensureDesktopShortcut() {
+  if (process.platform !== 'win32') return;
+
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const icoPath = path.join(repoRoot, 'public', 'logomark.ico');
+  if (!existsSync(icoPath)) return;
+
+  const desktop = path.join(process.env.USERPROFILE ?? '.', 'Desktop');
+  const lnkPath = path.join(desktop, 'СТАРТ.lnk');
+
+  const ps = [
+    `$ws = New-Object -ComObject WScript.Shell`,
+    `$s = $ws.CreateShortcut('${lnkPath.replaceAll("'", "''")}')`,
+    `$s.TargetPath = 'cmd.exe'`,
+    `$s.Arguments = '/k cd /d "${repoRoot}" && git pull && yarn stop:dev && yarn dev:unsafe'`,
+    `$s.WorkingDirectory = '${repoRoot}'`,
+    `$s.IconLocation = '${icoPath}, 0'`,
+    `$s.Description = 'RVTR Integration Demo'`,
+    `$s.Save()`,
+  ].join('; ');
+
+  spawnSync('powershell.exe', ['-NoProfile', '-Command', ps], {
+    stdio: 'ignore',
+    shell: false,
+  });
+}
+
 function openChromeUnsafe(chromeExecutable, appUrl) {
   const userDataDir =
     process.platform === 'win32'
@@ -281,6 +310,9 @@ async function main() {
     terminateAll();
     process.exit(1);
   }
+
+  // Create/update desktop shortcut (non-blocking, after everything is running)
+  ensureDesktopShortcut();
 
   await new Promise((resolve) => {
     viteProcess.on('close', resolve);
