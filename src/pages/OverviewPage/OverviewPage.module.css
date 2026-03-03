@@ -319,10 +319,16 @@
   animation: inputSavingPulse 1.5s ease-in-out infinite;
 }
 
+/* ── Provider row: radio + apply button ── */
+.providerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 /* ── Radio group ── */
 .radioGroup {
   display: flex;
-  flex-direction: column;
   gap: 10px;
   padding: 10px 12px;
   background: var(--glass-bg);
@@ -462,7 +468,7 @@
   appearance: none;
   position: relative;
   overflow: hidden;
-  align-self: center;
+  flex-shrink: 0;
   min-height: 32px;
   display: inline-flex;
   align-items: center;

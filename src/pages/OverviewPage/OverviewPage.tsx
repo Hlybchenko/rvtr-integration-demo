@@ -440,51 +440,53 @@ export function OverviewPage() {
           <div className={styles.fieldHeader}>
             <span className={styles.label}>Provider</span>
           </div>
-          <div
-            className={`${styles.radioGroup} ${!hasLicense ? styles.radioGroupDisabled : ''}`}
-            role="radiogroup"
-            aria-label="Voice agent"
-          >
-            <label className={styles.radioOption}>
-              <input
-                type="radio"
-                name="kiosk-voice-agent"
-                value="elevenlabs"
-                className={styles.radioInput}
-                checked={pendingAgent === 'elevenlabs'}
-                onChange={() => setPendingAgent('elevenlabs')}
-                disabled={!hasLicense || applying}
-              />
-              <span className={styles.radioMark} />
-              <span>ElevenLabs</span>
-            </label>
-            <label className={styles.radioOption}>
-              <input
-                type="radio"
-                name="kiosk-voice-agent"
-                value="gemini-live"
-                className={styles.radioInput}
-                checked={pendingAgent === 'gemini-live'}
-                onChange={() => setPendingAgent('gemini-live')}
-                disabled={!hasLicense || applying}
-              />
-              <span className={styles.radioMark} />
-              <span>Gemini Live</span>
-            </label>
+          <div className={styles.providerRow}>
+            <div
+              className={`${styles.radioGroup} ${!hasLicense ? styles.radioGroupDisabled : ''}`}
+              role="radiogroup"
+              aria-label="Voice agent"
+            >
+              <label className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="kiosk-voice-agent"
+                  value="elevenlabs"
+                  className={styles.radioInput}
+                  checked={pendingAgent === 'elevenlabs'}
+                  onChange={() => setPendingAgent('elevenlabs')}
+                  disabled={!hasLicense || applying}
+                />
+                <span className={styles.radioMark} />
+                <span>ElevenLabs</span>
+              </label>
+              <label className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="kiosk-voice-agent"
+                  value="gemini-live"
+                  className={styles.radioInput}
+                  checked={pendingAgent === 'gemini-live'}
+                  onChange={() => setPendingAgent('gemini-live')}
+                  disabled={!hasLicense || applying}
+                />
+                <span className={styles.radioMark} />
+                <span>Gemini Live</span>
+              </label>
+            </div>
+            <button
+              type="button"
+              className={styles.applyButton}
+              onClick={() => void handleApply()}
+              disabled={!hasLicense || applying || !hasPendingChange}
+            >
+              {applying ? 'Applying...' : 'Apply & restart'}
+            </button>
           </div>
           {!hasLicense && (
             <p className={styles.disabledHint}>
               Configure a license file path above to enable agent selection
             </p>
           )}
-          <button
-            type="button"
-            className={styles.applyButton}
-            onClick={() => void handleApply()}
-            disabled={!hasLicense || applying || !hasPendingChange}
-          >
-            {applying ? 'Applying...' : 'Apply & restart'}
-          </button>
           {applyError && <span className={styles.filePathValidationError}>{applyError}</span>}
         </div>
       </section>
