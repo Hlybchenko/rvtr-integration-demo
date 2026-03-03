@@ -4,7 +4,7 @@ import { devices } from '@/config/devices';
 import { useSettingsStore, STREAMING_DEVICE_IDS } from '@/stores/settingsStore';
 import { isValidUrl } from '@/utils/isValidUrl';
 import {
-  IconSettings,
+  IconKiosk,
   IconPhone,
   IconLaptop,
 } from './NavIcons';
@@ -395,18 +395,6 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         {/* Floating active indicator */}
         <div ref={indicatorRef} className={styles.navIndicator} aria-hidden="true" />
 
-        <NavLink
-          to="/"
-          end
-          onMouseDown={preventFocusSteal}
-          className={({ isActive }) =>
-            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
-          }
-        >
-          <span className={styles.navIcon}><IconSettings /></span>
-          Settings
-        </NavLink>
-
         <span className={styles.navLabel}>Devices</span>
         {devices
           .filter((d) => !(STREAMING_DEVICE_IDS as string[]).includes(d.id))
@@ -428,6 +416,18 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
               {device.name}
             </NavLink>
           ))}
+
+        <NavLink
+          to="/"
+          end
+          onMouseDown={preventFocusSteal}
+          className={({ isActive }) =>
+            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+          }
+        >
+          <span className={styles.navIcon}><IconKiosk /></span>
+          Kiosk
+        </NavLink>
 
         <div className={styles.navBottom}>
           {onTogglePin && (
