@@ -186,14 +186,10 @@ function spawnStart2stream(exePath) {
         console.log(`[start2stream] resolved .lnk → ${actualPath} (cwd: ${cwd})`);
       }
     }
-    const lnkResolved = actualPath !== exePath;
     if (!cwd) cwd = path.dirname(actualPath);
 
-    // For .lnk-resolved targets the exe may live in a different directory than cwd,
-    // so we must use the full path. For direct files, basename keeps cwd as true CWD.
-    const command = isWin
-      ? (lnkResolved ? `"${actualPath}"` : path.basename(actualPath))
-      : actualPath;
+    // On Windows, use just the filename so cmd.exe resolves it from cwd.
+    const command = isWin ? path.basename(actualPath) : actualPath;
 
     const child = spawn(command, [], {
       cwd,
