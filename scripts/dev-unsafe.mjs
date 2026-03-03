@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 const FIXED_PORT = 5173;
@@ -151,11 +151,29 @@ function findChromeExecutable() {
   return null;
 }
 
+/** Clear Chrome's "crashed" flag so it won't show "Restore pages?" on next launch. */
+function clearChromeExitFlag(userDataDir) {
+  const prefsPath = path.join(userDataDir, 'Default', 'Preferences');
+  try {
+    if (!existsSync(prefsPath)) return;
+    const prefs = JSON.parse(readFileSync(prefsPath, 'utf8'));
+    if (prefs.profile) {
+      prefs.profile.exit_type = 'Normal';
+      prefs.profile.exited_cleanly = true;
+    }
+    writeFileSync(prefsPath, JSON.stringify(prefs), 'utf8');
+  } catch {
+    // Non-critical — ignore if prefs don't exist yet
+  }
+}
+
 function openChromeUnsafe(chromeExecutable, appUrl) {
   const userDataDir =
     process.platform === 'win32'
       ? path.join(process.env.USERPROFILE ?? '.', 'ChromeDevSession-rvtr')
       : path.join(process.env.HOME ?? '.', 'ChromeDevSession-rvtr');
+
+  clearChromeExitFlag(userDataDir);
 
   const chromeArgs = [
     `--user-data-dir=${userDataDir}`,
