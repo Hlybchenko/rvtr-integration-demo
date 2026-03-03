@@ -4,8 +4,10 @@ import {
   KIOSK_SHORTCUTS,
   type ShortcutId,
 } from '@/stores/kiosksStore';
+import type { VoiceAgent } from '@/stores/settingsStore';
 import {
   browseForExe,
+  browseForFile,
   startProcess,
   stopProcess,
   getProcessStatus,
@@ -23,7 +25,58 @@ const POLL_INTERVAL_MS = 3_000;
 export function KiosksPage() {
   const paths = useKiosksStore((s) => s.paths);
   const setPath = useKiosksStore((s) => s.setPath);
+  const licenseFilePath = useKiosksStore((s) => s.licenseFilePath);
+  const setLicenseFilePath = useKiosksStore((s) => s.setLicenseFilePath);
+  const voiceAgent = useKiosksStore((s) => s.voiceAgent);
+  const setVoiceAgent = useKiosksStore((s) => s.setVoiceAgent);
 
+  // License file local state
+  const [licenseInput, setLicenseInput] = useState(licenseFilePath);
+  const [licenseBrowsing, setLicenseBrowsing] = useState(false);
+  const [licenseError, setLicenseError] = useState<string | null>(null);
+
+  // Agent provider local state
+  const [pendingAgent, setPendingAgent] = useState<VoiceAgent>(voiceAgent);
+  const [applying, setApplying] = useState(false);
+
+  const hasLicense = licenseInput.trim().length > 0;
+  const hasPendingChange = pendingAgent !== voiceAgent;
+
+  // Sync license input to store on change
+  const handleLicenseChange = useCallback((value: string) => {
+    setLicenseInput(value);
+    setLicenseError(null);
+    setLicenseFilePath(value);
+  }, [setLicenseFilePath]);
+
+  const handleLicenseBrowse = useCallback(async () => {
+    setLicenseBrowsing(true);
+    setLicenseError(null);
+    try {
+      const result = await browseForFile();
+      if (result.cancelled) return;
+      if (result.licenseFilePath) {
+        setLicenseInput(result.licenseFilePath);
+        setLicenseFilePath(result.licenseFilePath);
+      } else {
+        setLicenseError(result.errors?.join('; ') || 'Browse failed');
+      }
+    } catch (err) {
+      setLicenseError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLicenseBrowsing(false);
+    }
+  }, [setLicenseFilePath]);
+
+  const handleApply = useCallback(async () => {
+    setApplying(true);
+    // TODO: implement kiosk-specific apply logic
+    // For now just save the selection
+    setVoiceAgent(pendingAgent);
+    setApplying(false);
+  }, [pendingAgent, setVoiceAgent]);
+
+  // ── Shortcut launcher state ──────────────────────────────────────────────
   const [browsing, setBrowsing] = useState<ShortcutId | null>(null);
   const [starting, setStarting] = useState<ShortcutId | null>(null);
   const [stopping, setStopping] = useState<ShortcutId | null>(null);
@@ -54,7 +107,6 @@ export function KiosksPage() {
         }
         setRunning(next);
       } catch {
-        // Backend unreachable — clear all
         if (!cancelled) setRunning({});
       }
     };
@@ -148,7 +200,6 @@ export function KiosksPage() {
     setStarting(id);
     clearError(id);
     try {
-      // Stop then start with same processId
       await stopProcess(id);
       const result = await startProcess(exePath, id);
       if (!result.ok) {
@@ -169,8 +220,95 @@ export function KiosksPage() {
 
   return (
     <div className={styles.page}>
+      <div className={styles.topRow}>
+        {/* ── Process: License file path ── */}
+        <section className={styles.block}>
+          <h2 className={styles.blockTitle}>Process</h2>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="kiosk-license-path">
+              License file path
+            </label>
+            <div className={styles.row}>
+              <input
+                id="kiosk-license-path"
+                className={`${styles.input} ${licenseError ? styles.inputError : ''}`}
+                type="text"
+                placeholder={IS_WINDOWS ? 'C:\\Path\\To\\license.lic' : '/path/to/license.lic'}
+                value={licenseInput}
+                onChange={(e) => handleLicenseChange(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                className={styles.browseButton}
+                onClick={() => void handleLicenseBrowse()}
+                disabled={licenseBrowsing}
+              >
+                {licenseBrowsing ? '...' : 'Browse'}
+              </button>
+            </div>
+            {licenseError && <span className={styles.error}>{licenseError}</span>}
+          </div>
+        </section>
+
+        {/* ── Agent Provider ── */}
+        <section className={styles.block}>
+          <h2 className={styles.blockTitle}>Agent Provider</h2>
+          <div className={styles.fieldHeader}>
+            <span className={styles.label}>Provider</span>
+          </div>
+          <div
+            className={`${styles.radioGroup} ${!hasLicense ? styles.radioGroupDisabled : ''}`}
+            role="radiogroup"
+            aria-label="Voice agent"
+          >
+            <label className={styles.radioOption}>
+              <input
+                type="radio"
+                name="kiosk-voice-agent"
+                value="elevenlabs"
+                className={styles.radioInput}
+                checked={pendingAgent === 'elevenlabs'}
+                onChange={() => setPendingAgent('elevenlabs')}
+                disabled={!hasLicense || applying}
+              />
+              <span className={styles.radioMark} />
+              <span>ElevenLabs</span>
+            </label>
+            <label className={styles.radioOption}>
+              <input
+                type="radio"
+                name="kiosk-voice-agent"
+                value="gemini-live"
+                className={styles.radioInput}
+                checked={pendingAgent === 'gemini-live'}
+                onChange={() => setPendingAgent('gemini-live')}
+                disabled={!hasLicense || applying}
+              />
+              <span className={styles.radioMark} />
+              <span>Gemini Live</span>
+            </label>
+          </div>
+          {!hasLicense && (
+            <p className={styles.disabledHint}>
+              Configure a license file path above to enable agent selection
+            </p>
+          )}
+          <button
+            type="button"
+            className={styles.applyButton}
+            onClick={() => void handleApply()}
+            disabled={!hasLicense || applying || !hasPendingChange}
+          >
+            {applying ? 'Applying...' : 'Apply & restart'}
+          </button>
+        </section>
+      </div>
+
+      {/* ── Shortcut launchers ── */}
       <section className={styles.block}>
-        <h2 className={styles.blockTitle}>Process</h2>
+        <h2 className={styles.blockTitle}>Shortcuts</h2>
 
         {KIOSK_SHORTCUTS.map((shortcut) => {
           const value = paths[shortcut.id];

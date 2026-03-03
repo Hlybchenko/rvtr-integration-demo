@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { VoiceAgent } from '@/stores/settingsStore';
 
 export type ShortcutId = 'agentic-proxy' | 'livelink-hub' | 'kiosk-app';
 
@@ -15,8 +16,17 @@ export const KIOSK_SHORTCUTS: ShortcutDef[] = [
 ];
 
 interface KiosksState {
+  /** Shortcut executable paths */
   paths: Record<ShortcutId, string>;
   setPath: (id: ShortcutId, path: string) => void;
+
+  /** License file path for kiosks config */
+  licenseFilePath: string;
+  setLicenseFilePath: (path: string) => void;
+
+  /** Voice agent selection for kiosks */
+  voiceAgent: VoiceAgent;
+  setVoiceAgent: (agent: VoiceAgent) => void;
 }
 
 export const useKiosksStore = create<KiosksState>()(
@@ -29,7 +39,13 @@ export const useKiosksStore = create<KiosksState>()(
       },
       setPath: (id, path) =>
         set((s) => ({ paths: { ...s.paths, [id]: path } })),
+
+      licenseFilePath: '',
+      setLicenseFilePath: (path) => set({ licenseFilePath: path }),
+
+      voiceAgent: 'elevenlabs',
+      setVoiceAgent: (agent) => set({ voiceAgent: agent }),
     }),
-    { name: 'rvtr-kiosks', version: 1 },
+    { name: 'rvtr-kiosks', version: 2 },
   ),
 );

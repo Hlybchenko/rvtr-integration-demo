@@ -27,9 +27,23 @@
   display: flex;
   flex-direction: column;
   padding: calc(40px * var(--scale)) calc(40px * var(--scale));
-  gap: var(--space-6);
-  max-width: 620px;
+  gap: var(--space-5);
+  max-width: 900px;
   animation: fadeInUp 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+}
+
+/* ── Top row: Process + Agent Provider side by side ── */
+.topRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+@media (max-width: 760px) {
+  .topRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Glass card ── */
@@ -391,6 +405,181 @@
 }
 
 .restartButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ── Radio group ── */
+.radioGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+.radioOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  cursor: pointer;
+}
+
+.radioInput {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.radioMark {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--text-secondary);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: border-color 300ms ease, box-shadow 300ms ease;
+}
+
+.radioInput:checked + .radioMark {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.radioInput:focus-visible + .radioMark {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+@keyframes radioDotPop {
+  0%   { transform: scale(0) rotate(-60deg); opacity: 0; }
+  20%  { transform: scale(1.6) rotate(15deg); opacity: 1; }
+  38%  { transform: scale(0.7) rotate(-8deg); }
+  52%  { transform: scale(1.25) rotate(4deg); }
+  68%  { transform: scale(0.9) rotate(-1.5deg); }
+  82%  { transform: scale(1.06) rotate(0.5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.radioMark::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 200ms ease, opacity 200ms ease;
+}
+
+.radioInput:checked + .radioMark::after {
+  transform: scale(1);
+  opacity: 1;
+  animation: radioDotPop 550ms cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+
+.radioGroupDisabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.disabledHint {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  opacity: 0.7;
+  font-style: italic;
+  padding: 2px 0;
+  text-align: center;
+  margin: 0;
+  animation: fadeInUp 300ms ease both;
+}
+
+/* ── Apply button ── */
+.applyButton {
+  appearance: none;
+  position: relative;
+  overflow: hidden;
+  align-self: center;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+  color: var(--accent);
+  border-radius: var(--radius-md);
+  padding: 4px 28px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.15);
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    color 200ms ease,
+    opacity 200ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms ease;
+}
+
+.applyButton::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  pointer-events: none;
+}
+
+.applyButton::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  will-change: transform;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.15) 48%, rgba(255, 255, 255, 0.25) 50%, rgba(255, 255, 255, 0.15) 52%, transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.applyButton:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.applyButton:hover:not(:disabled)::after {
+  animation: buttonShineSweep 600ms ease-out;
+}
+
+.applyButton:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+}
+
+.applyButton:disabled {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
   opacity: 0.5;
   cursor: default;
   box-shadow: none;
