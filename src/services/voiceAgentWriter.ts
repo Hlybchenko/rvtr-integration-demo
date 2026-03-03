@@ -473,10 +473,11 @@ export interface ProcessStopResult {
  * Without processId, stops the legacy default process.
  * Serialized via async queue.
  */
-export function stopProcess(processId?: string): Promise<ProcessStopResult> {
+export function stopProcess(processId?: string, exePath?: string): Promise<ProcessStopResult> {
   return enqueueProcessOp(async () => {
     const body: Record<string, string> = {};
     if (processId) body.processId = processId;
+    if (exePath) body.exePath = exePath;
 
     const response = await fetchWithTimeout(
       `${WRITER_BASE_URL}/process/stop`,

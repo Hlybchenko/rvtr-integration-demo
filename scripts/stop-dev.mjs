@@ -68,13 +68,31 @@ function stopPortListener(port) {
 }
 
 function stopKnownProcesses() {
+  // STOP_DEV_CALLER_PID — set by dev-unsafe.mjs to protect itself from being killed
+  const excludePid = process.env.STOP_DEV_CALLER_PID || '';
+
   if (process.platform === 'win32') {
-    // PowerShell replaces deprecated wmic — works on Windows 10+ and Server 2019+
+    const exclude = excludePid
+      ? ` -and $_.ProcessId -ne ${excludePid}`
+      : '';
     run('powershell.exe', [
       '-NoProfile',
       '-Command',
-      "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+      `Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*')${exclude} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
     ], { shell: false });
+    return;
+  }
+
+  if (excludePid) {
+    // pkill doesn't support PID exclusion — use pgrep + kill instead
+    for (const pattern of ['dev-unsafe.mjs', 'agent-option-writer.mjs']) {
+      const result = run('pgrep', ['-f', pattern], { shell: false });
+      if (result.status !== 0 || !result.stdout) continue;
+      const pids = parseNumericLines(result.stdout).filter((p) => p !== excludePid);
+      for (const pid of pids) {
+        run('kill', ['-TERM', pid], { shell: false });
+      }
+    }
     return;
   }
 

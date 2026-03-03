@@ -1041,8 +1041,16 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const processId = typeof body.processId === 'string' ? body.processId.trim() : '';
       const pid_key = processId || DEFAULT_PROCESS_ID;
+      const exePath = typeof body.exePath === 'string' ? body.exePath.trim() : '';
 
       const killedDeviceId = await killProcess(pid_key);
+
+      // Fallback: if killProcess found nothing in the Map (server restarted,
+      // process orphaned), kill by image name using the exePath from the client.
+      if (!killedDeviceId && exePath && os.platform() === 'win32') {
+        const exeName = path.basename(exePath);
+        try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+      }
 
       sendJson(res, 200, {
         ok: true,

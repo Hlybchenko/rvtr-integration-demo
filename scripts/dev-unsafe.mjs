@@ -230,6 +230,14 @@ function openChromeUnsafe(chromeExecutable, appUrl) {
 }
 
 async function main() {
+  // Clean up previous dev session (Chrome, ports, orphan processes).
+  // STOP_DEV_CALLER_PID tells stop-dev.mjs to skip killing this process.
+  spawnSync('yarn', ['stop:dev'], {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+    env: { ...process.env, STOP_DEV_CALLER_PID: String(process.pid) },
+  });
+
   const port = FIXED_PORT;
 
   stopPortListener(port);

@@ -131,7 +131,7 @@ export function OverviewPage() {
       if (kioskPath.trim()) {
         setLaunching((prev) => ({ ...prev, [kioskId]: true }));
 
-        const stopResult = await stopProcess(kioskId);
+        const stopResult = await stopProcess(kioskId, kioskPath);
         if (!stopResult.ok) {
           throw new Error(stopResult.error ?? 'Failed to stop Kiosk app before restart');
         }
@@ -260,7 +260,8 @@ export function OverviewPage() {
     setStopping(id);
     clearError(id);
     try {
-      const result = await stopProcess(id);
+      const exePath = useKiosksStore.getState().paths[id];
+      const result = await stopProcess(id, exePath || undefined);
       if (!result.ok) {
         setErrors((prev) => ({ ...prev, [id]: result.error ?? 'Failed to stop' }));
       } else {
@@ -284,7 +285,7 @@ export function OverviewPage() {
     setLaunching((prev) => ({ ...prev, [id]: true }));
     clearError(id);
     try {
-      const stopResult = await stopProcess(id);
+      const stopResult = await stopProcess(id, exePath);
       if (!stopResult.ok) {
         setErrors((prev) => ({ ...prev, [id]: stopResult.error ?? 'Failed to stop' }));
         setLaunching((prev) => ({ ...prev, [id]: false }));
