@@ -68,24 +68,26 @@ function stopPortListener(port) {
 }
 
 function stopKnownProcesses() {
-  const myPid = process.pid;
-  const parentPid = process.ppid;
+  // When called from dev-unsafe.mjs, STOP_DEV_CALLER_PID is set so we
+  // don't kill the very process that invoked us.
+  const excludePids = new Set([String(process.pid), String(process.ppid)]);
+  if (process.env.STOP_DEV_CALLER_PID) {
+    excludePids.add(process.env.STOP_DEV_CALLER_PID);
+  }
 
   if (process.platform === 'win32') {
-    // Kill dev-unsafe / agent-option-writer processes, but exclude our own
-    // process tree (current PID and parent PID) so we don't kill ourselves
-    // when called from dev-unsafe.mjs.
+    const exclude = [...excludePids].map((p) => `$_.ProcessId -ne ${p}`).join(' -and ');
     run('powershell.exe', [
       '-NoProfile',
       '-Command',
-      `Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*') -and $_.ProcessId -ne ${myPid} -and $_.ProcessId -ne ${parentPid} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+      `Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*dev-unsafe.mjs*' -or $_.CommandLine -like '*agent-option-writer.mjs*') -and ${exclude} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
     ], { shell: false });
     return;
   }
 
-  // On Unix, exclude own process tree via grep -v
-  run('bash', ['-c', `pgrep -f 'dev-unsafe.mjs' | grep -v -e '^${myPid}$' -e '^${parentPid}$' | xargs -r kill -TERM 2>/dev/null`], { shell: false });
-  run('bash', ['-c', `pgrep -f 'agent-option-writer.mjs' | grep -v -e '^${myPid}$' -e '^${parentPid}$' | xargs -r kill -TERM 2>/dev/null`], { shell: false });
+  const grepExclude = [...excludePids].map((p) => `-e '^${p}$'`).join(' ');
+  run('bash', ['-c', `pgrep -f 'dev-unsafe.mjs' | grep -v ${grepExclude} | xargs -r kill -TERM 2>/dev/null`], { shell: false });
+  run('bash', ['-c', `pgrep -f 'agent-option-writer.mjs' | grep -v ${grepExclude} | xargs -r kill -TERM 2>/dev/null`], { shell: false });
 }
 
 function closeUnsafeChrome() {
