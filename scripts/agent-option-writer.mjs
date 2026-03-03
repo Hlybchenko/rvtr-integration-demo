@@ -1005,6 +1005,13 @@ const server = createServer(async (req, res) => {
       try {
         // Kill only the process with the same processId (not others)
         await killProcess(pid_key);
+
+        // Fallback: kill any orphaned instance by image name (e.g. after server restart)
+        if (os.platform() === 'win32') {
+          const exeName = path.basename(resolved);
+          try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+        }
+
         const child = await spawnStart2stream(resolved);
         activeProcesses.set(pid_key, { deviceId, child, exePath: resolved });
 
@@ -1088,6 +1095,13 @@ const server = createServer(async (req, res) => {
 
       try {
         await killProcess(pid_key);
+
+        // Fallback: kill any orphaned instance by image name (e.g. after server restart)
+        if (os.platform() === 'win32') {
+          const exeName = path.basename(resolved);
+          try { execFileSync(getTaskkillPath(), ['/F', '/IM', exeName], { stdio: 'ignore' }); } catch { /* not running */ }
+        }
+
         const child = await spawnStart2stream(resolved);
         activeProcesses.set(pid_key, { deviceId, child, exePath: resolved });
 
