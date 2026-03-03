@@ -86,12 +86,19 @@ function killPidCrossPlatform(pid) {
   spawnSync('kill', ['-TERM', pid], { stdio: 'ignore' });
 }
 
+/** Force-kill any process listening on a port. Uses PowerShell on Windows for reliability. */
 function stopPortListener(port) {
-  const pids =
-    process.platform === 'win32'
-      ? getListeningPidsOnWindows(port)
-      : getListeningPidsOnUnix(port);
+  if (process.platform === 'win32') {
+    // PowerShell Get-NetTCPConnection is more reliable than parsing netstat
+    spawnSync('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
+    ], { stdio: 'inherit', shell: false });
+    return;
+  }
 
+  const pids = getListeningPidsOnUnix(port);
   for (const pid of pids) {
     killPidCrossPlatform(pid);
   }
@@ -260,6 +267,10 @@ async function main() {
     const writerBusy = await isPortOpen(WRITER_PORT);
 
     if (!portBusy && !writerBusy) break;
+
+    if (i > 0) {
+      console.log(`Waiting for port release… attempt ${i + 1}/${PORT_RELEASE_ATTEMPTS}`);
+    }
 
     if (i === PORT_RELEASE_ATTEMPTS - 1) {
       if (portBusy) {
