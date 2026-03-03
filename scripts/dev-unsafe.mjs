@@ -86,11 +86,16 @@ function killPidCrossPlatform(pid) {
 }
 
 function stopPortListener(port) {
-  const pids =
-    process.platform === 'win32'
-      ? getListeningPidsOnWindows(port)
-      : getListeningPidsOnUnix(port);
+  if (process.platform === 'win32') {
+    // PowerShell is more reliable than netstat parsing on Windows
+    spawnSync('powershell.exe', [
+      '-NoProfile', '-Command',
+      `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
+    ], { stdio: 'ignore', shell: false });
+    return;
+  }
 
+  const pids = getListeningPidsOnUnix(port);
   for (const pid of pids) {
     killPidCrossPlatform(pid);
   }
@@ -200,11 +205,23 @@ async function main() {
 
   stopPortListener(port);
   stopPortListener(WRITER_PORT);
-  await sleep(300);
+  await sleep(2000);
+
+  if (await isPortOpen(port)) {
+    // Second attempt
+    stopPortListener(port);
+    await sleep(2000);
+  }
 
   if (await isPortOpen(port)) {
     console.error(`Port ${port} is busy and could not be stopped automatically.`);
+    console.error('Run "yarn stop:dev" manually and try again.');
     process.exit(1);
+  }
+
+  if (await isPortOpen(WRITER_PORT)) {
+    stopPortListener(WRITER_PORT);
+    await sleep(2000);
   }
 
   if (await isPortOpen(WRITER_PORT)) {
