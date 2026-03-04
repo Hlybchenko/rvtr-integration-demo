@@ -20,6 +20,8 @@ import {
   stopProcess,
   getProcessStatus,
 } from '@/services/voiceAgentWriter';
+import { setFaceCapture } from '@/services/ueRemoteApi';
+import { useUeControlStore } from '@/stores/ueControlStore';
 import styles from './OverviewPage.module.css';
 
 const IS_WINDOWS =
@@ -600,6 +602,21 @@ export function OverviewPage() {
       warmDetectScreenRect(device.frameSrc);
     });
   }, []);
+
+  // Send FaceCapture command to UE when assistant mode changes (dedup by ref)
+  const lastSentFaceCapture = useRef<boolean | null>(null);
+  useEffect(() => {
+    const enabled = assistantMode === 'human';
+    if (lastSentFaceCapture.current === enabled) return;
+    lastSentFaceCapture.current = enabled;
+
+    const url = useUeControlStore.getState().ueApiUrl;
+    if (url) {
+      setFaceCapture(url, enabled).then((ok) => {
+        if (!ok) console.warn('[FaceCapture] UE did not respond — command may not have been applied');
+      });
+    }
+  }, [assistantMode]);
 
   // ── Render ────────────────────────────────────────────────────────────
   return (

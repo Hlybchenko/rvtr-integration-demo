@@ -106,6 +106,10 @@ export function setOutputAudioFormat(baseUrl: string, isPcm: boolean): Promise<b
   return sendUeCommand(baseUrl, { command: 'OutputAudioFormat', IsPcm: String(isPcm) });
 }
 
+export function setFaceCapture(baseUrl: string, enabled: boolean): Promise<boolean> {
+  return sendUeCommand(baseUrl, { command: 'FaceCapture', isFaceCapture: String(enabled) });
+}
+
 /** @group Action commands (fire-and-forget, no stored state) */
 export function lightUp(baseUrl: string): Promise<boolean> {
   return sendUeCommand(baseUrl, { command: 'LightUp' });
