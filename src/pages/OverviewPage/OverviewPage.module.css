@@ -106,23 +106,19 @@
   composes: saving from '@/shared/ui/input.module.css';
 }
 
-/* ── Worm crawl keyframes ── */
-@keyframes wormBobA {
-  0%   { transform: translateY(0) scaleY(1); }
-  15%  { transform: translateY(-1.5px) scaleY(0.91); }
-  35%  { transform: translateY(1.2px) scaleY(1.06); }
-  55%  { transform: translateY(-0.6px) scaleY(0.97); }
-  75%  { transform: translateY(0.3px) scaleY(1.015); }
-  100% { transform: translateY(0) scaleY(1); }
+/* ── Worm jelly settle keyframes ── */
+@keyframes wormSettleL {
+  0%   { transform: scaleX(0.97) scaleY(1.02); }
+  35%  { transform: scaleX(1.03) scaleY(0.98); }
+  60%  { transform: scaleX(0.99) scaleY(1.005); }
+  100% { transform: scale(1); }
 }
 
-@keyframes wormBobB {
-  0%   { transform: translateY(0) scaleY(1); }
-  15%  { transform: translateY(-1.5px) scaleY(0.91); }
-  35%  { transform: translateY(1.2px) scaleY(1.06); }
-  55%  { transform: translateY(-0.6px) scaleY(0.97); }
-  75%  { transform: translateY(0.3px) scaleY(1.015); }
-  100% { transform: translateY(0) scaleY(1); }
+@keyframes wormSettleR {
+  0%   { transform: scaleX(0.97) scaleY(1.02); }
+  35%  { transform: scaleX(1.03) scaleY(0.98); }
+  60%  { transform: scaleX(0.99) scaleY(1.005); }
+  100% { transform: scale(1); }
 }
 
 /* ── Mode switch (AI / Human toggle) ── */
@@ -169,10 +165,10 @@
 
   /* Crawl left ← (front = left edge leads, back = right edge catches up) */
   transition:
-    left 340ms var(--ease-material),
-    right 340ms 110ms var(--ease-material);
+    left 400ms var(--ease-smooth-pop),
+    right 400ms 70ms var(--ease-smooth-pop);
 
-  animation: wormBobA 520ms var(--ease-overshoot);
+  animation: wormSettleL 500ms var(--ease-smooth);
 }
 
 /* Crawl right → */
@@ -182,10 +178,10 @@
 
   /* Front = right edge leads, back = left edge catches up */
   transition:
-    left 340ms 110ms var(--ease-material),
-    right 340ms var(--ease-material);
+    left 400ms 70ms var(--ease-smooth-pop),
+    right 400ms var(--ease-smooth-pop);
 
-  animation: wormBobB 520ms var(--ease-overshoot);
+  animation: wormSettleR 500ms var(--ease-smooth);
 }
 
 

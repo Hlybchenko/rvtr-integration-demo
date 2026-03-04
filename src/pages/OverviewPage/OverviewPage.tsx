@@ -141,7 +141,7 @@ export function OverviewPage() {
       const worm = wormRef.current;
       if (!d || !worm) return;
       const dx = e.clientX - d.startX;
-      if (Math.abs(dx) > 3) wasDragging.current = true;
+      if (Math.abs(dx) > 6) wasDragging.current = true;
 
       // Clamp: full halfW toward switch side, only 1/3 worm width backward (outside container)
       const min = d.mode === 'ai' ? -d.maxDrag : -d.halfW;
@@ -183,7 +183,7 @@ export function OverviewPage() {
         if (fromT && fromT !== '0px 0') {
           worm.animate(
             { translate: [fromT, '0 0'], scale: [fromS || '1 1', '1 1'] },
-            { duration: 450, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' },
+            { duration: 450, easing: 'cubic-bezier(0.22, 0.9, 0.25, 1)' },
           );
         }
         // Suppress jellyPop on the newly-active tab during drag-switch
