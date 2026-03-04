@@ -843,6 +843,11 @@
 
 /* NOTE: light theme input overrides handled in shared input.module.css */
 
+:root[data-theme='light'] .modeSwitchOptionActive {
+  color: var(--text-primary);
+  text-shadow: none;
+}
+
 /* ── Mobile adjustments ── */
 @media (max-width: 767px) {
   .settings {
