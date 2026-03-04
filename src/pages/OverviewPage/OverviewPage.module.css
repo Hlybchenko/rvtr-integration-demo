@@ -45,7 +45,7 @@
 
 .settingsBlockTitle {
   margin: 0;
-  font-size: var(--font-lg, 18px);
+  font-size: var(--font-lg);
   font-weight: 700;
   color: var(--text-primary);
   text-align: center;
@@ -55,13 +55,13 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: calc(6px * var(--scale));
 }
 
 .fieldHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
   min-height: 22px;
 }
@@ -71,7 +71,7 @@
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(6px * var(--scale));
   color: var(--text-secondary);
   margin-right: auto;
 }
@@ -333,7 +333,7 @@
 .providerRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* ── Radio group ── */
@@ -752,7 +752,7 @@
 /* ── File path row ── */
 .filePathRow {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: stretch;
 }
 

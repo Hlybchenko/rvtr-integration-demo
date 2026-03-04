@@ -474,7 +474,7 @@
 
 .buttonRow {
   display: flex;
-  gap: 6px;
+  gap: calc(6px * var(--scale));
 }
 
 /* ═══════════════════ Reset / Re-sync buttons ═══════════════════ */
