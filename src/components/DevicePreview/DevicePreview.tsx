@@ -403,7 +403,11 @@ export const DevicePreview = forwardRef<HTMLIFrameElement, DevicePreviewProps>(
           <div className={`${styles.deviceBootOverlay} ${overlayActive ? styles.deviceBootOverlayActive : ''}`}>
             <div className={styles.loaderMinimal}>
               <div className={styles.loaderLogo}>
-                {/* Central prism — static, pulses */}
+                {/* Pulse rings — expanding from prism center */}
+                <div className={styles.loaderRing} />
+                <div className={styles.loaderRing} style={{ animationDelay: '0.9s' }} />
+                <div className={styles.loaderRing} style={{ animationDelay: '1.8s' }} />
+                {/* Central prism — rocks + glows */}
                 <svg className={styles.loaderPrism} width="44" height="40" viewBox="0 0 40 36" fill="none">
                   <defs>
                     <linearGradient id="ldPrism" x1="0.2" y1="0" x2="0.8" y2="1">

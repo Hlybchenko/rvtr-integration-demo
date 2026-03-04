@@ -1,0 +1,176 @@
+/* ══════════════════════════════════════════════════════════════
+   Shared radio group — composed by component CSS modules
+   ══════════════════════════════════════════════════════════════ */
+
+@keyframes radioDotPop {
+  0%   { transform: scale(0) rotate(-60deg); opacity: 0; }
+  20%  { transform: scale(1.6) rotate(15deg); opacity: 1; }
+  38%  { transform: scale(0.7) rotate(-8deg); }
+  52%  { transform: scale(1.25) rotate(4deg); }
+  68%  { transform: scale(0.9) rotate(-1.5deg); }
+  82%  { transform: scale(1.06) rotate(0.5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes radioRipple {
+  0%   { transform: scale(0.5); opacity: 0.75; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* Jelly squash on the whole option row when selected */
+@keyframes radioOptionJellyIn {
+  0%   { transform: scale(1, 1); }
+  12%  { transform: scale(0.97, 1.03); }
+  28%  { transform: scale(1.02, 0.98); }
+  42%  { transform: scale(0.995, 1.005); }
+  60%  { transform: scale(1.003, 0.997); }
+  100% { transform: scale(1, 1); }
+}
+
+/* Subtle deflate when option loses selection */
+@keyframes radioOptionSettle {
+  0%   { transform: scale(1, 1); }
+  20%  { transform: scale(0.985, 1.01); }
+  50%  { transform: scale(1.004, 0.996); }
+  100% { transform: scale(1, 1); }
+}
+
+/* Mark ring elastic bounce */
+@keyframes radioMarkBounce {
+  0%   { transform: scale(1); }
+  20%  { transform: scale(0.82); }
+  40%  { transform: scale(1.18); }
+  58%  { transform: scale(0.94); }
+  74%  { transform: scale(1.05); }
+  88%  { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+
+.group {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition:
+    background 280ms var(--ease-smooth),
+    box-shadow 280ms var(--ease-smooth);
+}
+
+.option:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Checked option — subtle tint, no jelly on the whole row */
+.option:has(.input:checked) {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mark {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--text-secondary);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition:
+    border-color 300ms var(--ease-smooth),
+    box-shadow 300ms var(--ease-smooth),
+    transform 300ms var(--ease-smooth);
+}
+
+.input:checked + .mark {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 20%, transparent);
+  animation: radioMarkBounce 500ms var(--ease-smooth-pop);
+}
+
+.input:focus-visible + .mark {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* Inner dot */
+.mark::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 200ms ease, opacity 200ms ease;
+}
+
+.input:checked + .mark::after {
+  transform: scale(1);
+  opacity: 1;
+  animation: radioDotPop 550ms var(--ease-smooth-pop);
+}
+
+/* Ripple ring burst */
+.mark::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  transform: scale(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.input:checked + .mark::before {
+  animation: radioRipple 650ms ease-out both;
+}
+
+.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ── Light theme ── */
+
+:global(:root[data-theme='light']) .option:hover {
+  background: rgba(20, 27, 45, 0.025);
+}
+
+:global(:root[data-theme='light']) .option:has(.input:checked) {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .option,
+  .mark,
+  .mark::after,
+  .mark::before {
+    animation: none;
+    transition: none;
+  }
+}

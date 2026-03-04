@@ -1,0 +1,7 @@
+/* Shared divider line */
+
+.base {
+  border: none;
+  border-top: 1px solid var(--glass-border);
+  margin: 4px 0;
+}

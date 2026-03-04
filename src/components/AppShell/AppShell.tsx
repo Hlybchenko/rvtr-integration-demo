@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { PersistentPixelStreaming } from '@/components/PersistentPixelStreaming/PersistentPixelStreaming';
 import { useStatusPolling } from '@/hooks/useStatusPolling';
 import { useUiScale } from '@/hooks/useUiScale';
+import { useJellyDrag } from '@/hooks/useJellyDrag';
 import styles from './AppShell.module.css';
 
 const PIN_STORAGE_KEY = 'rvtr-sidebar-pinned-v2';
@@ -35,6 +36,7 @@ export function AppShell() {
   // Global status polling (process, PS reachability, UE health)
   useStatusPolling();
   useUiScale();
+  useJellyDrag();
 
   // Unpin when window shrinks below desktop breakpoint
   useEffect(() => {
@@ -49,7 +51,20 @@ export function AppShell() {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
+  // Track "just opened" to play reveal animation only once (not on pin/unpin toggle)
+  const [revealing, setRevealing] = useState(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((v) => {
+      if (!v) {
+        setRevealing(true);
+        clearTimeout(revealTimer.current);
+        revealTimer.current = setTimeout(() => setRevealing(false), 800);
+      }
+      return !v;
+    });
+  }, []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   const togglePin = useCallback(() => {
@@ -67,35 +82,34 @@ export function AppShell() {
 
   return (
     <div className={layoutClass}>
-      {/* Burger button — hidden when pinned */}
-      {!pinned && (
-        <button
-          type="button"
-          className={styles.burger}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={toggleSidebar}
-          aria-label="Toggle navigation"
-          aria-expanded={sidebarOpen}
-        >
-          <span
-            className={`${styles.burgerLine} ${sidebarOpen ? styles.burgerOpen : ''}`}
-          />
-        </button>
-      )}
-
-      {/* Backdrop (only for overlay mode, not when pinned) */}
-      {!pinned && (
-        <div
-          className={`${styles.backdrop} ${sidebarOpen ? styles.backdropVisible : ''}`}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={closeSidebar}
-          aria-hidden="true"
+      {/* Burger button — animated out when pinned */}
+      <button
+        type="button"
+        className={`${styles.burger} ${pinned ? styles.burgerPinned : ''}`}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={toggleSidebar}
+        aria-label="Toggle navigation"
+        aria-expanded={sidebarOpen}
+        aria-hidden={pinned}
+        tabIndex={pinned ? -1 : 0}
+      >
+        <span
+          className={`${styles.burgerLine} ${sidebarOpen ? styles.burgerOpen : ''}`}
         />
-      )}
+      </button>
+
+      {/* Backdrop — always rendered for smooth fade transitions */}
+      <div
+        className={`${styles.backdrop} ${sidebarOpen && !pinned ? styles.backdropVisible : ''}`}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={closeSidebar}
+        aria-hidden="true"
+      />
 
       <Sidebar
-        className={sidebarOpen || pinned ? styles.sidebarOpen : ''}
+        className={`${sidebarOpen || pinned ? styles.sidebarOpen : ''} ${revealing ? styles.sidebarRevealing : ''}`}
         pinned={pinned}
+        revealing={revealing}
         onTogglePin={togglePin}
       />
 

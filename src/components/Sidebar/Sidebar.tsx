@@ -36,7 +36,7 @@ function applyTheme(theme: ThemeMode): void {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   };
 
-  // Use View Transition API for sunrise/sunset crossfade
+  // Use View Transition API for circular reveal from toggle
   if ('startViewTransition' in document) {
     (document as unknown as { startViewTransition: (cb: () => void) => void })
       .startViewTransition(update);
@@ -53,6 +53,7 @@ const DEVICE_ICONS: Record<string, ReactNode> = {
 interface SidebarProps {
   className?: string;
   pinned?: boolean;
+  revealing?: boolean;
   onTogglePin?: () => void;
 }
 
@@ -62,7 +63,7 @@ const preventFocusSteal = (e: React.MouseEvent) => e.preventDefault();
 
 const ENV_WIDGET_URL = import.meta.env.VITE_DEFAULT_WIDGET_URL || '';
 
-export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
+export function Sidebar({ className, pinned, revealing, onTogglePin }: SidebarProps) {
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const navRef = useRef<HTMLElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
@@ -71,6 +72,20 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
   const logoRafRef = useRef<number | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Track "just unpinned" for unpin animation
+  const [justUnpinned, setJustUnpinned] = useState(false);
+  const prevPinned = useRef(pinned);
+  const unpinTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    if (prevPinned.current && !pinned) {
+      setJustUnpinned(true);
+      clearTimeout(unpinTimer.current);
+      unpinTimer.current = setTimeout(() => setJustUnpinned(false), 500);
+    }
+    prevPinned.current = pinned;
+  }, [pinned]);
 
   // UI scale
   const uiScale = useSettingsStore((s) => s.uiScale);
@@ -217,9 +232,9 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
     // Jelly stretch: if moving, temporarily stretch partway toward old position
     if (oldTop !== null && oldTop !== newTop) {
       const distance = newTop - oldTop;
-      // Only stretch 40% of the gap — subtle pull, not full rubber band
-      const stretchTop = newTop - distance * 0.4;
-      const stretchH = targetH + Math.abs(distance) * 0.4;
+      // Stretch 50% of the gap — snappy pull
+      const stretchTop = newTop - distance * 0.5;
+      const stretchH = targetH + Math.abs(distance) * 0.5;
 
       indicator.style.top = `${Math.min(stretchTop, newTop)}px`;
       indicator.style.height = `${stretchH}px`;
@@ -231,7 +246,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
         indicator.style.top = `${newTop}px`;
         indicator.style.height = `${targetH}px`;
         indicator.style.borderRadius = '';
-      }, 120);
+      }, 80);
     } else {
       indicator.style.top = `${newTop}px`;
       indicator.style.height = `${targetH}px`;
@@ -268,7 +283,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
 
   return (
     <aside
-      className={`${styles.sidebar} ${pinned ? styles.sidebarPinned : ''} ${className ?? ''}`}
+      className={`${styles.sidebar} ${pinned ? styles.sidebarPinned : ''} ${justUnpinned ? styles.sidebarUnpinned : ''} ${className ?? ''}`}
       aria-label="Main navigation"
     >
       {/* Logo */}
@@ -386,7 +401,7 @@ export function Sidebar({ className, pinned, onTogglePin }: SidebarProps) {
           <span className={styles.logoTitle}>
             <span className={styles.logoAccent}>RAVATAR</span>
           </span>
-          <span className={styles.logoSub}>Integration Demo</span>
+          <span className={`${styles.logoSub} ${revealing ? styles.logoSubInertia : ''}`}>Integration Demo</span>
         </div>
       </div>
 

@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { VoiceAgent } from '@/stores/settingsStore';
 
+export type AssistantMode = 'ai' | 'human';
+
 export type ShortcutId = 'agentic-proxy' | 'livelink-hub' | 'kiosk-app';
 
 export interface ShortcutDef {
@@ -24,6 +26,10 @@ interface KiosksState {
   licenseFilePath: string;
   setLicenseFilePath: (path: string) => void;
 
+  /** Assistant mode: AI (voice agents) or Human (face capture) */
+  assistantMode: AssistantMode;
+  setAssistantMode: (mode: AssistantMode) => void;
+
   /** Voice agent selection for kiosks */
   voiceAgent: VoiceAgent;
   setVoiceAgent: (agent: VoiceAgent) => void;
@@ -42,6 +48,9 @@ export const useKiosksStore = create<KiosksState>()(
 
       licenseFilePath: '',
       setLicenseFilePath: (path) => set({ licenseFilePath: path }),
+
+      assistantMode: 'ai',
+      setAssistantMode: (mode) => set({ assistantMode: mode }),
 
       voiceAgent: 'elevenlabs',
       setVoiceAgent: (agent) => set({ voiceAgent: agent }),

@@ -1,0 +1,79 @@
+/* ══════════════════════════════════════════════════════════════
+   Shared badge primitives — composed by component CSS modules
+   ══════════════════════════════════════════════════════════════ */
+
+/* Badge pops up from behind input, lands with jelly bounce */
+@keyframes badgeBounceIn {
+  0%   { opacity: 0; transform: translateY(10px) scaleY(0.6) scaleX(1.15); }
+  18%  { opacity: 1; transform: translateY(-4px) scaleY(1.12) scaleX(0.92); }
+  34%  { transform: translateY(2px) scaleY(0.9) scaleX(1.06); }
+  48%  { transform: translateY(-1.5px) scaleY(1.05) scaleX(0.97); }
+  62%  { transform: translateY(0.8px) scaleY(0.98) scaleX(1.01); }
+  78%  { transform: translateY(-0.3px) scaleY(1.01) scaleX(0.995); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes badgeInvalidBounce {
+  0%   { opacity: 0; transform: translateX(-8px) scaleX(0.7) scaleY(1.1); }
+  20%  { opacity: 1; transform: translateX(3px) scaleX(1.08) scaleY(0.94); }
+  40%  { transform: translateX(-1.5px) scaleX(0.97) scaleY(1.02); }
+  60%  { transform: translateX(0.6px) scaleX(1.01) scaleY(0.99); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes dotBreath {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+.base {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  transform-origin: center bottom;
+  animation: badgeBounceIn 650ms var(--ease-smooth-pop) both;
+  transition: background 250ms ease, color 250ms ease;
+}
+
+.valid {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.invalid {
+  background: var(--danger-soft);
+  color: var(--danger);
+  transform-origin: left center;
+  animation: badgeInvalidBounce 550ms var(--ease-smooth-pop) both;
+}
+
+.running {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.running::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  margin-right: 4px;
+  vertical-align: middle;
+  animation: dotBreath 2.5s ease-in-out infinite;
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .base,
+  .invalid,
+  .running::before {
+    animation: none;
+    transition: none;
+  }
+}

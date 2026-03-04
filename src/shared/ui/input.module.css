@@ -1,0 +1,137 @@
+/* ══════════════════════════════════════════════════════════════
+   Shared input primitives — composed by component CSS modules
+   ══════════════════════════════════════════════════════════════ */
+
+@keyframes inputErrorPulse {
+  0%   { box-shadow: 0 0 0 transparent; }
+  30%  { box-shadow: 0 1px 10px color-mix(in srgb, var(--danger) 16%, transparent); }
+  100% { box-shadow: 0 1px 6px color-mix(in srgb, var(--danger) 10%, transparent); }
+}
+
+@keyframes inputShakeNo {
+  0%   { transform: translateX(0); }
+  12%  { transform: translateX(-6px); }
+  28%  { transform: translateX(5px); }
+  42%  { transform: translateX(-4px); }
+  58%  { transform: translateX(3px); }
+  72%  { transform: translateX(-1.5px); }
+  86%  { transform: translateX(0.5px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes inputSavingPulse {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--accent) 20%, rgba(255, 255, 255, 0.06));
+    box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--accent) 35%, rgba(255, 255, 255, 0.08));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+}
+
+.base {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: var(--font-md);
+  font-family: inherit;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  outline: none;
+  /* Override global :focus-visible outline — input uses box-shadow ring instead */
+  &:focus-visible { outline: none; }
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+  transition:
+    border-color 220ms ease,
+    box-shadow 260ms ease,
+    background 220ms ease;
+}
+
+.base:-webkit-autofill,
+.base:-webkit-autofill:hover,
+.base:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0 1000px color-mix(in srgb, var(--accent) 6%, var(--bg)) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.base::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+.base:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.base:focus {
+  background: color-mix(in srgb, var(--accent) 4%, rgba(255, 255, 255, 0.03));
+  border-color: color-mix(in srgb, var(--accent) 30%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.05),
+    0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.error {
+  background: color-mix(in srgb, var(--danger) 5%, rgba(255, 255, 255, 0.03));
+  border-color: color-mix(in srgb, var(--danger) 25%, rgba(255, 255, 255, 0.06));
+  animation: inputShakeNo 450ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.error:focus {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.05),
+    0 0 0 2px color-mix(in srgb, var(--danger) 12%, transparent);
+  animation: inputErrorPulse 400ms ease both;
+}
+
+.saving {
+  animation: inputSavingPulse 1.5s ease-in-out infinite;
+}
+
+/* ── Light theme overrides ── */
+
+:global(:root[data-theme='light']) .base {
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(20, 27, 45, 0.08);
+  box-shadow: inset 0 1px 2px rgba(20, 27, 45, 0.04);
+}
+
+:global(:root[data-theme='light']) .base:hover {
+  border-color: rgba(20, 27, 45, 0.14);
+  box-shadow: inset 0 1px 2px rgba(20, 27, 45, 0.03);
+}
+
+:global(:root[data-theme='light']) .base:focus {
+  background: color-mix(in srgb, var(--accent) 3%, rgba(255, 255, 255, 0.85));
+  border-color: color-mix(in srgb, var(--accent) 35%, rgba(20, 27, 45, 0.06));
+  box-shadow:
+    inset 0 1px 2px rgba(20, 27, 45, 0.03),
+    0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+:global(:root[data-theme='light']) .error {
+  background: color-mix(in srgb, var(--danger) 4%, rgba(255, 255, 255, 0.8));
+  border-color: color-mix(in srgb, var(--danger) 30%, rgba(20, 27, 45, 0.06));
+}
+
+:global(:root[data-theme='light']) .error:focus {
+  box-shadow:
+    inset 0 1px 2px rgba(20, 27, 45, 0.03),
+    0 0 0 2px color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .base,
+  .error,
+  .saving {
+    animation: none;
+    transition: none;
+  }
+}

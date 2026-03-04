@@ -10,62 +10,37 @@
   }
 }
 
-/* ── Gentle float — lightweight translateY only (GPU-friendly) ── */
-@keyframes blockFloat {
-  0%   { transform: translateY(0); }
-  25%  { transform: translateY(-1px); }
-  50%  { transform: translateY(0.5px); }
-  75%  { transform: translateY(-0.6px); }
-  100% { transform: translateY(0); }
-}
-
 
 /* ── Settings page ── */
 .settings {
   display: flex;
   flex-direction: column;
-  padding: calc(40px * var(--scale)) calc(40px * var(--scale));
+  padding: calc(40px * var(--scale)) calc(40px * var(--scale)) calc(80px * var(--scale));
   gap: var(--space-6);
   max-width: 1100px;
-  animation: fadeInUp 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: fadeInUp 400ms var(--ease-smooth-pop) both;
 }
 
 /* ── Settings block (card) ── */
 .settingsBlock {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: var(--space-4);
-  background: var(--glass-highlight), var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--glass-shadow);
-  animation:
-    fadeInUp 500ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
-    blockFloat var(--float-dur, 18s) ease-in-out var(--float-delay, 0s) infinite;
+  composes: base from '@/shared/ui/card.module.css';
+  /* No animation, no elastic — blocks resize smoothly without amplitude */
+  animation: none;
   transition:
-    border-color var(--transition-normal),
-    background var(--transition-normal);
+    border-color 400ms ease,
+    box-shadow 400ms ease;
 }
 
-
 .settingsBlock:hover {
-  border-color: color-mix(in srgb, var(--glass-border) 80%, var(--accent));
+  transform: none;
 }
 
 .settingsBlockValid {
-  border-color: color-mix(in srgb, var(--success) 45%, var(--glass-border));
-  box-shadow:
-    var(--glass-shadow),
-    0 0 6px color-mix(in srgb, var(--success) 18%, transparent);
+  composes: valid from '@/shared/ui/card.module.css';
 }
 
 .settingsBlockError {
-  border-color: color-mix(in srgb, var(--danger) 50%, var(--glass-border));
-  box-shadow:
-    var(--glass-shadow),
-    0 0 8px color-mix(in srgb, var(--danger) 22%, transparent);
+  composes: error from '@/shared/ui/card.module.css';
 }
 
 .settingsBlockTitle {
@@ -102,269 +77,289 @@
 }
 
 /* Badge */
-@keyframes badgeFadeIn {
-  from { opacity: 0; transform: translateY(3px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes badgeInvalidFadeIn {
-  from { opacity: 0; transform: translateX(-2px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
 .badge {
-  font-size: var(--font-xs);
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-  animation: badgeFadeIn 300ms ease both;
-  transition: background 250ms ease, color 250ms ease;
+  composes: base from '@/shared/ui/badge.module.css';
 }
 
 .badgeValid {
-  background: var(--success-soft);
-  color: var(--success);
+  composes: valid from '@/shared/ui/badge.module.css';
 }
 
 .badgeInvalid {
-  background: var(--danger-soft);
-  color: var(--danger);
-  animation: badgeInvalidFadeIn 350ms ease both;
-}
-
-@keyframes dotBreath {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  composes: invalid from '@/shared/ui/badge.module.css';
 }
 
 .badgeRunning {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.badgeRunning::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-  margin-right: 4px;
-  vertical-align: middle;
-  animation: dotBreath 2.5s ease-in-out infinite;
+  composes: running from '@/shared/ui/badge.module.css';
 }
 
 /* ── Input ── */
-@keyframes inputFocusIn {
-  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
-  40%  { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 14%, transparent); }
-  100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 0 8px color-mix(in srgb, var(--accent) 8%, transparent); }
-}
-
-@keyframes inputErrorPulse {
-  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 0%, transparent); }
-  30%  { box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 30%, transparent), 0 0 10px color-mix(in srgb, var(--danger) 16%, transparent); }
-  60%  { box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 20%, transparent); }
-  100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent); }
-}
-
-@keyframes inputShakeNo {
-  0%   { transform: translateX(0); }
-  12%  { transform: translateX(-6px); }
-  28%  { transform: translateX(5px); }
-  42%  { transform: translateX(-4px); }
-  58%  { transform: translateX(3px); }
-  72%  { transform: translateX(-1.5px); }
-  86%  { transform: translateX(0.5px); }
-  100% { transform: translateX(0); }
-}
-
 .input {
-  width: 100%;
-  padding: 10px 14px;
-  font-size: var(--font-md);
-  font-family: inherit;
-  color: var(--text-primary);
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.06) 0%, transparent 30%, rgba(255, 255, 255, 0.015) 100%),
-    var(--card-nested-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  outline: none;
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.15) inset,
-    0 -1px 0 rgba(255, 255, 255, 0.03) inset,
-    0 1px 2px rgba(0, 0, 0, 0.1);
-  transition:
-    border-color 250ms ease,
-    box-shadow 300ms ease,
-    background 250ms ease,
-    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-sizing: border-box;
-}
-
-/* Override browser autofill white bg */
-.input:-webkit-autofill,
-.input:-webkit-autofill:hover,
-.input:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--text-primary);
-  -webkit-box-shadow: 0 0 0 1000px color-mix(in srgb, var(--accent) 6%, var(--bg)) inset;
-  transition: background-color 5000s ease-in-out 0s;
-}
-
-.input::placeholder {
-  color: var(--text-secondary);
-  opacity: 0.5;
-}
-
-.input:hover {
-  border-color: var(--border-hover);
-  background: var(--panel-hover);
-}
-
-.input:focus {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 4%, var(--card-nested-bg));
-  animation: inputFocusIn 350ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
-  transform: translateY(-0.5px);
+  composes: base from '@/shared/ui/input.module.css';
 }
 
 .inputError {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 3%, var(--card-nested-bg));
-  animation: inputShakeNo 450ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-}
-
-.inputError:focus {
-  animation: inputErrorPulse 400ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
-}
-
-@keyframes inputSavingPulse {
-  0%, 100% {
-    border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
-  }
-  50% {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
-                0 0 8px color-mix(in srgb, var(--accent) 10%, transparent);
-  }
+  composes: error from '@/shared/ui/input.module.css';
 }
 
 .inputSaving {
-  animation: inputSavingPulse 1.5s ease-in-out infinite;
+  composes: saving from '@/shared/ui/input.module.css';
+}
+
+/* ── Worm crawl keyframes ── */
+@keyframes wormBobA {
+  0%   { transform: translateY(0) scaleY(1); }
+  15%  { transform: translateY(-1.5px) scaleY(0.91); }
+  35%  { transform: translateY(1.2px) scaleY(1.06); }
+  55%  { transform: translateY(-0.6px) scaleY(0.97); }
+  75%  { transform: translateY(0.3px) scaleY(1.015); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+
+@keyframes wormBobB {
+  0%   { transform: translateY(0) scaleY(1); }
+  15%  { transform: translateY(-1.5px) scaleY(0.91); }
+  35%  { transform: translateY(1.2px) scaleY(1.06); }
+  55%  { transform: translateY(-0.6px) scaleY(0.97); }
+  75%  { transform: translateY(0.3px) scaleY(1.015); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+
+/* ── Mode switch (AI / Human toggle) ── */
+.modeSwitch {
+  position: relative;
+  display: flex;
+  gap: 0;
+  background: var(--card-nested-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.15) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.03) inset;
+}
+
+/* ── Worm body (sliding indicator) ── */
+.worm {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: calc(var(--radius-md) - 2px);
+
+  /* Default: left position (AI) */
+  left: 3px;
+  right: 50%;
+
+  /* Body */
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0) 40%,
+      rgba(0, 0, 0, 0.06) 100%
+    ),
+    color-mix(in srgb, var(--accent) 22%, var(--glass-bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--glass-border));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 2px 8px color-mix(in srgb, var(--accent) 18%, transparent);
+
+  /* Crawl left ← (front = left edge leads, back = right edge catches up) */
+  transition:
+    left 340ms var(--ease-material),
+    right 340ms 110ms var(--ease-material);
+
+  animation: wormBobA 520ms var(--ease-overshoot);
+}
+
+/* Crawl right → */
+.wormRight {
+  left: 50%;
+  right: 3px;
+
+  /* Front = right edge leads, back = left edge catches up */
+  transition:
+    left 340ms 110ms var(--ease-material),
+    right 340ms var(--ease-material);
+
+  animation: wormBobB 520ms var(--ease-overshoot);
+}
+
+
+@keyframes modeSwitchHint {
+  0%, 100% { color: var(--accent); }
+  50%      { color: color-mix(in srgb, var(--accent) 60%, #fff); }
+}
+
+/* ── AI chip icon animations ── */
+
+@keyframes chipCorePulse {
+  0%, 100% { scale: 1; opacity: 0.55; }
+  50%      { scale: 1.25; opacity: 1; }
+}
+
+@keyframes chipPinSignal {
+  0%, 30%, 100% { opacity: 0.3; }
+  15%           { opacity: 1; }
+}
+
+@keyframes chipBodyGlow {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50%      { filter: drop-shadow(0 0 3px currentColor); }
+}
+
+.aiChipCore {
+  animation: chipCorePulse 3s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.aiChipBody {
+  animation: chipBodyGlow 4s ease-in-out infinite;
+}
+
+.aiPinTop    { animation: chipPinSignal 2.4s ease-in-out infinite; }
+.aiPinRight  { animation: chipPinSignal 2.4s 0.6s ease-in-out infinite; }
+.aiPinBottom { animation: chipPinSignal 2.4s 1.2s ease-in-out infinite; }
+.aiPinLeft   { animation: chipPinSignal 2.4s 1.8s ease-in-out infinite; }
+
+/* Faster pulse when AI mode is active */
+.modeSwitchOptionActive .aiChipCore {
+  animation: chipCorePulse 2s ease-in-out infinite;
+  opacity: 1;
+}
+
+.modeSwitchOption {
+  appearance: none;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 16px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition:
+    color 250ms ease,
+    background 350ms var(--ease-smooth),
+    transform 600ms var(--ease-elastic);
+}
+
+.modeSwitchOption:active:not(.modeSwitchOptionActive) {
+  transform: scale(0.93);
+  transition:
+    color 250ms ease,
+    background 350ms var(--ease-smooth),
+    transform 100ms ease-out;
+}
+
+.modeSwitchOption:not(.modeSwitchOptionActive) {
+  animation: none;
+}
+
+.modeSwitchOption:hover:not(.modeSwitchOptionActive) {
+  color: color-mix(in srgb, var(--accent) 60%, #fff);
+  background: rgba(255, 255, 255, 0.08);
+  animation: none;
+}
+
+.modeSwitchOptionActive {
+  color: #fff;
+  cursor: default;
+  background: transparent;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
+  transition:
+    color 250ms ease,
+    background 180ms ease-out;
+}
+
+/* Suppress jellyPop when mode was switched via drag (worm already animated) */
+:global([data-drag-switch]) .modeSwitchOptionActive {
+  animation: none;
+}
+
+@keyframes jellyPop {
+  0%   { transform: scale(0.88); }
+  30%  { transform: scale(1.06); }
+  55%  { transform: scale(0.97); }
+  75%  { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+
+/* ── Provider height transition — "battle" swap ── */
+.providerWrap {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Synchronized swap: same duration keeps total height stable.
+   Snappy easing (fast attack, smooth settle) gives the "eager push" feel. */
+.providerSection {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 380ms cubic-bezier(0.22, 0.8, 0.25, 1),
+    opacity 180ms ease;
+}
+
+.providerSectionActive {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+/* Inner content wrapper for grid row animation */
+.providerSectionInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Allow badge & speech bubbles to overflow when section is fully open */
+.providerSectionActive .providerSectionInner {
+  overflow: visible;
 }
 
 /* ── Provider row: radio + apply button ── */
 .providerRow {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ── Radio group ── */
 .radioGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  composes: group from '@/shared/ui/radio.module.css';
 }
 
 .radioOption {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-primary);
-  font-size: var(--font-md);
-  cursor: pointer;
+  composes: option from '@/shared/ui/radio.module.css';
 }
 
-/* Hide native radio — use custom mark */
 .radioInput {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
+  composes: input from '@/shared/ui/radio.module.css';
 }
 
-/* Custom radio mark — visible circle */
 .radioMark {
-  position: relative;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--text-secondary);
-  border-radius: 50%;
-  flex-shrink: 0;
-  transition: border-color 300ms ease, box-shadow 300ms ease;
-}
-
-.radioInput:checked + .radioMark {
-  border-color: var(--accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-
-.radioInput:focus-visible + .radioMark {
-  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  outline-offset: 2px;
-}
-
-/* Inner dot — spring bounce pop */
-.radioMark::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  background: var(--accent);
-  transform: scale(0);
-  opacity: 0;
-  transition: transform 200ms ease, opacity 200ms ease;
-}
-
-.radioInput:checked + .radioMark::after {
-  transform: scale(1);
-  opacity: 1;
-  animation: radioDotPop 550ms cubic-bezier(0.22, 0.9, 0.25, 1);
-}
-
-/* Ripple ring burst */
-.radioMark::before {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 2px solid var(--accent);
-  transform: scale(0);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.radioInput:checked + .radioMark::before {
-  animation: radioRipple 650ms ease-out both;
-}
-
-@keyframes radioDotPop {
-  0%   { transform: scale(0) rotate(-60deg); opacity: 0; }
-  20%  { transform: scale(1.6) rotate(15deg); opacity: 1; }
-  38%  { transform: scale(0.7) rotate(-8deg); }
-  52%  { transform: scale(1.25) rotate(4deg); }
-  68%  { transform: scale(0.9) rotate(-1.5deg); }
-  82%  { transform: scale(1.06) rotate(0.5deg); }
-  100% { transform: scale(1) rotate(0deg); }
-}
-
-@keyframes radioRipple {
-  0%   { transform: scale(0.5); opacity: 0.75; }
-  100% { transform: scale(2.2); opacity: 0; }
+  composes: mark from '@/shared/ui/radio.module.css';
 }
 
 .radioGroupDisabled {
-  opacity: 0.45;
-  pointer-events: none;
+  composes: disabled from '@/shared/ui/radio.module.css';
+}
+
+@keyframes hintFadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .disabledHint {
@@ -374,119 +369,384 @@
   font-style: italic;
   padding: 2px 0;
   text-align: center;
-  animation: badgeFadeIn 300ms ease both;
-}
-
-/* ── 3D Button shared effects ── */
-
-/* Shine sweep across button surface on hover (GPU — uses transform, not left) */
-@keyframes buttonShineSweep {
-  0%   { transform: translateX(-200%); opacity: 0; }
-  20%  { opacity: 0.7; }
-  100% { transform: translateX(400%); opacity: 0; }
-}
-
-/* Press ripple burst */
-@keyframes buttonPressRipple {
-  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent); }
-  50%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
-  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  animation: hintFadeIn 300ms ease both;
 }
 
 /* ── Apply / action button ── */
-
 .applyButton {
-  appearance: none;
-  position: relative;
-  overflow: hidden;
+  composes: base md accent glossy shine from '@/shared/ui/button.module.css';
   flex-shrink: 0;
-  margin-left: auto;
-  align-self: flex-start;
-  min-height: 32px;
-  display: inline-flex;
+  min-width: 48px;
+}
+
+/* ── Operator badge — decorative keychain next to FaceCapture ── */
+
+@keyframes operatorBounceIn {
+  0%   { transform: scale(0) translateY(-30px) rotate(-8deg); opacity: 0; }
+  18%  { transform: scale(1.35) translateY(6px) rotate(4deg); opacity: 1; }
+  32%  { transform: scale(0.78) translateY(-5px) rotate(-3deg); }
+  46%  { transform: scale(1.15) translateY(2.5px) rotate(1.5deg); }
+  58%  { transform: scale(0.92) translateY(-1px) rotate(-0.8deg); }
+  72%  { transform: scale(1.05) translateY(0.5px) rotate(0.3deg); }
+  86%  { transform: scale(0.98) translateY(0) rotate(-0.1deg); }
+  100% { transform: scale(1) translateY(0) rotate(0deg); }
+}
+
+@keyframes operatorIdle {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  12%      { transform: rotate(2.5deg) translateY(-1.2px); }
+  28%      { transform: rotate(-1.8deg) translateY(0.6px); }
+  44%      { transform: rotate(1.2deg) translateY(-0.8px); }
+  60%      { transform: rotate(-2deg) translateY(0.4px); }
+  76%      { transform: rotate(0.8deg) translateY(-0.3px); }
+}
+
+/* Breathing glow on SVG icon inside badge */
+@keyframes operatorIconBreath {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50%      { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 25%, transparent)); }
+}
+
+@keyframes operatorNod {
+  0%, 100% { transform: rotate(0); }
+  30%      { transform: rotate(2deg); }
+  65%      { transform: rotate(-1.5deg); }
+}
+
+@keyframes operatorTalk {
+  0%, 100% { transform: translateY(0); }
+  35%      { transform: translateY(-0.5px); }
+  70%      { transform: translateY(0.3px); }
+}
+
+@keyframes operatorEarBob {
+  0%, 100% { transform: scaleY(1); }
+  35%      { transform: scaleY(1.04); }
+  70%      { transform: scaleY(0.97); }
+}
+
+@keyframes operatorGlow {
+  0%, 100% { box-shadow:
+    0 4px 14px rgba(0,0,0,0.2),
+    0 1px 4px rgba(0,0,0,0.15),
+    0 0 12px color-mix(in srgb, var(--accent) 6%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.08);
+  }
+  50% { box-shadow:
+    0 4px 14px rgba(0,0,0,0.2),
+    0 1px 4px rgba(0,0,0,0.15),
+    0 0 18px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.06);
+  }
+}
+
+/* Annoyed fidget — jittery shakes via translate/rotate (independent of transform) */
+@keyframes operatorFidget {
+  0%, 45%, 100% { translate: 0 0; rotate: 0deg; }
+  4%   { translate: -3px 1px; rotate: -5deg; }
+  8%   { translate: 3px -1px; rotate: 4deg; }
+  12%  { translate: -2px 0.5px; rotate: -3.5deg; }
+  16%  { translate: 2.5px -0.5px; rotate: 3deg; }
+  20%  { translate: -1.5px 0; rotate: -2deg; }
+  24%  { translate: 1px 0.5px; rotate: 1.5deg; }
+  28%  { translate: -0.5px 0; rotate: -0.5deg; }
+  55%  { translate: -2.5px 0.5px; rotate: -4deg; }
+  59%  { translate: 2.5px -0.5px; rotate: 3.5deg; }
+  63%  { translate: -1.5px 0; rotate: -2deg; }
+  67%  { translate: 1px 0; rotate: 1deg; }
+  72%  { translate: -0.5px 0; rotate: -0.3deg; }
+}
+
+/* Cartoony squash-into-dot: uses scale property (independent of transform) */
+@keyframes operatorImplode {
+  0%   { scale: 1.06; opacity: 1; border-radius: var(--radius-md); }
+  12%  { scale: 1.2 0.8; }
+  22%  { scale: 0.8 1.2; }
+  35%  { scale: 1.1 0.85; opacity: 0.9; }
+  50%  { scale: 0.5; opacity: 0.7; border-radius: 35%; }
+  65%  { scale: 0.2; opacity: 0.4; border-radius: 50%; }
+  80%  { scale: 0.06; opacity: 0.15; }
+  100% { scale: 0; opacity: 0; border-radius: 50%; }
+}
+
+/* Bubbles sucked back toward badge */
+@keyframes bubbleSuckIn {
+  0%   { opacity: 1; transform: scale(1) translateY(0); }
+  20%  { opacity: 1; transform: scale(1.15) translateY(-3px); }
+  100% { opacity: 0; transform: scale(0) translateY(20px); }
+}
+
+/* Wrapper keeps full hit-area even after badge implodes to scale:0 */
+.operatorBadgeWrap {
+  flex-shrink: 0;
+}
+
+.operatorBadge {
+  position: relative;
+  overflow: visible;
+  display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--accent);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
-    color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
-  color: var(--accent);
+  width: calc(56px * var(--scale));
+  height: calc(56px * var(--scale));
   border-radius: var(--radius-md);
-  padding: 4px 28px;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--glass-border));
+  background:
+    linear-gradient(160deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 40%, transparent 60%),
+    linear-gradient(340deg, rgba(0,0,0,0.1) 0%, transparent 50%),
+    color-mix(in srgb, var(--accent) 8%, var(--glass-bg));
+  color: var(--accent);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
-    0 2px 6px rgba(0, 0, 0, 0.15);
+    0 4px 14px rgba(0,0,0,0.2),
+    0 1px 4px rgba(0,0,0,0.15),
+    0 0 12px color-mix(in srgb, var(--accent) 6%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.08);
+  animation:
+    operatorIdle 5s ease-in-out infinite,
+    operatorGlow 4s ease-in-out infinite;
   transition:
-    border-color 200ms ease,
-    background 200ms ease,
-    color 200ms ease,
-    opacity 200ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 200ms ease;
+    border-color 500ms var(--ease-elastic),
+    scale 400ms var(--ease-overshoot),
+    opacity 300ms ease;
 }
 
-/* Glossy top-edge highlight */
-.applyButton::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 10%;
-  right: 10%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
-  border-radius: 1px;
-  pointer-events: none;
+/* ── Entrance inertia — badge overshoots, icon lags behind ── */
+
+@keyframes badgeEntranceInertia {
+  0%   { translate: 0 8px; }
+  22%  { translate: 0 -5px; }
+  40%  { translate: 0 3px; }
+  56%  { translate: 0 -1.5px; }
+  72%  { translate: 0 0.5px; }
+  100% { translate: 0 0; }
 }
 
-/* Sweep glint on hover */
-.applyButton::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 50%;
-  height: 100%;
-  will-change: transform;
-  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.15) 48%, rgba(255, 255, 255, 0.25) 50%, rgba(255, 255, 255, 0.15) 52%, transparent 70%);
-  pointer-events: none;
+@keyframes badgeIconLag {
+  0%   { translate: 0 6px; }
+  26%  { translate: 0 -4px; }
+  46%  { translate: 0 2px; }
+  64%  { translate: 0 -1px; }
+  100% { translate: 0 0; }
+}
+
+/* JS adds .operatorEntrance on mode switch / mount; removed on animationend */
+.operatorBadge.operatorEntrance {
+  animation:
+    badgeEntranceInertia 800ms cubic-bezier(0.22, 0.9, 0.25, 1),
+    operatorIdle 5s ease-in-out infinite,
+    operatorGlow 4s ease-in-out infinite;
+}
+
+.operatorEntrance > svg {
+  animation: badgeIconLag 650ms 120ms cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+
+/* ── JS-driven hover states (no CSS :hover) ── */
+
+/* Elevated visuals when mouse is over wrapper */
+.operatorBadge.operatorHovered {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--glass-border));
+  scale: 1.06;
+  box-shadow:
+    0 6px 20px rgba(0,0,0,0.25),
+    0 2px 6px rgba(0,0,0,0.18),
+    0 0 24px color-mix(in srgb, var(--accent) 14%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.06);
+}
+
+/* Fidget phase — jittery annoyance (JS adds at 5s) */
+.operatorBadge.operatorFidgeting {
+  animation:
+    operatorIdle 5s ease-in-out infinite,
+    operatorGlow 4s ease-in-out infinite,
+    operatorFidget 1.5s ease-in-out both;
+}
+
+/* Implode phase — squash into dot (JS adds at 7s) */
+.operatorBadge.operatorImploding {
+  animation:
+    operatorImplode 0.8s var(--ease-smooth-pop) both;
+}
+
+/* Hidden after implode completes */
+.operatorBadge.operatorImploded {
+  animation: none;
   opacity: 0;
 }
 
-.applyButton:hover:not(:disabled) {
+/* Return — fly up 10px, bounce-drop into place */
+@keyframes operatorReturn {
+  0%   { scale: 0; opacity: 0; translate: 0 0; }
+  15%  { scale: 1.08; opacity: 1; translate: 0 -10px; }
+  35%  { scale: 0.96; opacity: 1; translate: 0 2px; }
+  50%  { scale: 1.03; translate: 0 -1px; }
+  70%  { scale: 0.99; translate: 0 0; }
+  100% { scale: 1; opacity: 1; translate: 0 0; }
+}
+
+/* Look around nervously after return */
+@keyframes operatorLookAround {
+  0%    { rotate: 0deg; }
+  8%    { rotate: -10deg; }
+  17%   { rotate: 8deg; }
+  25%   { rotate: -6deg; }
+  33%   { rotate: 4deg; }
+  42%   { rotate: -2deg; }
+  50%   { rotate: 0deg; }
+  58%   { rotate: -8deg; }
+  67%   { rotate: 6deg; }
+  75%   { rotate: -3deg; }
+  83%   { rotate: 1deg; }
+  100%  { rotate: 0deg; }
+}
+
+/* CSS-driven return sequence (0,2,0 beats :hover) */
+.operatorBadge.operatorReturning {
+  animation:
+    operatorReturn 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
+    operatorLookAround 2s 700ms ease-in-out both;
+}
+
+/* After return sequence — idle+glow only, no bounceIn replay */
+.operatorBadge.operatorReturnDone {
+  animation:
+    operatorIdle 5s ease-in-out infinite,
+    operatorGlow 4s ease-in-out infinite;
+}
+
+/* Operator SVG parts — smooth start/stop + idle breathing glow */
+.operatorHead,
+.operatorEarL,
+.operatorEarR,
+.operatorMic {
+  transition: transform 400ms var(--ease-smooth);
+}
+
+/* Idle breathing glow on the head icon */
+.operatorHead {
+  animation: operatorIconBreath 3.5s ease-in-out infinite;
+}
+
+/* Activate talking animation when hovered (JS-managed) */
+.operatorHovered .operatorHead { animation: operatorNod 2.5s ease-in-out infinite; }
+.operatorHovered .operatorMic  { animation: operatorTalk 1.8s ease-in-out infinite; }
+.operatorHovered .operatorEarL,
+.operatorHovered .operatorEarR { animation: operatorEarBob 2s ease-in-out infinite; }
+.operatorHovered .operatorEarR { animation-delay: 0.3s; }
+
+/* ── Speech bubbles — comic-style greetings on hover ── */
+
+@keyframes bubblePopIn {
+  0%   { transform: scale(0) translateY(8px); opacity: 0; }
+  40%  { transform: scale(1.15) translateY(-2px); opacity: 1; }
+  60%  { transform: scale(0.92) translateY(1px); }
+  80%  { transform: scale(1.04) translateY(0); }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes bubbleFloat {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50%      { transform: scale(1) translateY(-3px); }
+}
+
+@keyframes bubbleFadeOut {
+  0%   { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.7) translateY(6px); }
+}
+
+.speechBubble {
+  position: absolute;
+  white-space: nowrap;
+  font-size: calc(10px * var(--scale));
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: rgba(255, 255, 255, 0.95);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
-    color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+    linear-gradient(160deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 50%, transparent 100%),
+    rgba(120, 130, 170, 0.35);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: calc(10px * var(--scale));
+  padding: calc(4px * var(--scale)) calc(9px * var(--scale));
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.12) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
-    0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
-  transform: translateY(-1px);
+    0 4px 12px rgba(0,0,0,0.15),
+    0 0 16px color-mix(in srgb, var(--accent) 10%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.12);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0);
+  z-index: 10;
 }
 
-.applyButton:hover:not(:disabled)::after {
-  animation: buttonShineSweep 600ms ease-out;
+/* Comic tail — small triangle pointing toward badge */
+.speechBubble::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid rgba(120, 130, 170, 0.35);
 }
 
-.applyButton:active:not(:disabled) {
-  transform: scale(0.97) translateY(1px);
-  box-shadow:
-    0 -1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 2px 3px rgba(0, 0, 0, 0.1) inset,
-    0 1px 2px rgba(0, 0, 0, 0.1);
-  animation: buttonPressRipple 400ms ease;
+/* Positions — scattered above the badge */
+.speechBubble1 { top: calc(-28px * var(--scale)); left: 50%; transform-origin: center bottom; }
+.speechBubble2 { top: calc(-24px * var(--scale)); left: calc(-30px * var(--scale)); transform-origin: right bottom; }
+.speechBubble3 { top: calc(-30px * var(--scale)); right: calc(-28px * var(--scale)); left: auto; transform-origin: left bottom; }
+.speechBubble4 { top: calc(-48px * var(--scale)); left: calc(-10px * var(--scale)); transform-origin: center bottom; }
+.speechBubble5 { top: calc(-44px * var(--scale)); right: calc(-16px * var(--scale)); left: auto; transform-origin: center bottom; }
+
+/* Tail direction adjustments for side bubbles */
+.speechBubble2::after { left: auto; right: 8px; }
+.speechBubble3::after { left: 8px; }
+
+/* Show bubbles sequentially on hover (JS-managed class) */
+.operatorHovered .speechBubble1 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 100ms both, bubbleFloat 2s 800ms ease-in-out infinite;
+}
+.operatorHovered .speechBubble2 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 500ms both, bubbleFloat 2.2s 1200ms ease-in-out infinite;
+}
+.operatorHovered .speechBubble3 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 900ms both, bubbleFloat 1.8s 1600ms ease-in-out infinite;
+}
+.operatorHovered .speechBubble4 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 1300ms both, bubbleFloat 2.4s 2000ms ease-in-out infinite;
+}
+.operatorHovered .speechBubble5 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 1700ms both, bubbleFloat 2s 2400ms ease-in-out infinite;
 }
 
-.applyButton:disabled {
-  border-color: var(--glass-border);
-  background: var(--glass-bg);
-  color: var(--text-secondary);
-  opacity: 0.5;
-  cursor: default;
-  box-shadow: none;
+/* Suck bubbles back during implode — staggered reverse order */
+.operatorImploding .speechBubble5 { animation: bubbleSuckIn 350ms var(--ease-smooth-pop) both; }
+.operatorImploding .speechBubble4 { animation: bubbleSuckIn 350ms var(--ease-smooth-pop) 80ms both; }
+.operatorImploding .speechBubble3 { animation: bubbleSuckIn 350ms var(--ease-smooth-pop) 160ms both; }
+.operatorImploding .speechBubble2 { animation: bubbleSuckIn 350ms var(--ease-smooth-pop) 240ms both; }
+.operatorImploding .speechBubble1 { animation: bubbleSuckIn 350ms var(--ease-smooth-pop) 320ms both; }
+
+/* ── Greeting bubbles after implode return (JS adds .operatorGreeting) ── */
+.operatorGreeting .speechBubble1 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 100ms both, bubbleFloat 2s 800ms ease-in-out infinite, bubbleFadeOut 400ms ease 3.5s forwards;
+}
+.operatorGreeting .speechBubble2 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 400ms both, bubbleFloat 2.2s 1100ms ease-in-out infinite, bubbleFadeOut 400ms ease 3.7s forwards;
+}
+.operatorGreeting .speechBubble3 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 700ms both, bubbleFloat 1.8s 1400ms ease-in-out infinite, bubbleFadeOut 400ms ease 3.9s forwards;
+}
+.operatorGreeting .speechBubble4 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 1000ms both, bubbleFloat 2.4s 1700ms ease-in-out infinite, bubbleFadeOut 400ms ease 4.1s forwards;
+}
+.operatorGreeting .speechBubble5 {
+  animation: bubblePopIn 450ms var(--ease-overshoot) 1300ms both, bubbleFloat 2s 2000ms ease-in-out infinite, bubbleFadeOut 400ms ease 4.3s forwards;
 }
 
 /* ── File path row ── */
@@ -502,88 +762,8 @@
 }
 
 .filePathAction {
-  appearance: none;
-  position: relative;
-  overflow: hidden;
+  composes: base sm secondary glossy shine from '@/shared/ui/button.module.css';
   flex-shrink: 0;
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--glass-border);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.05) 100%),
-    var(--glass-bg);
-  color: var(--text-primary);
-  border-radius: var(--radius-md);
-  padding: 6px 14px;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.1) inset,
-    0 2px 4px rgba(0, 0, 0, 0.12);
-  transition:
-    border-color 200ms ease,
-    background 200ms ease,
-    opacity 200ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 200ms ease;
-}
-
-.filePathAction::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 10%;
-  right: 10%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  pointer-events: none;
-}
-
-.filePathAction::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 50%;
-  height: 100%;
-  will-change: transform;
-  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.12) 48%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.12) 52%, transparent 70%);
-  pointer-events: none;
-  opacity: 0;
-}
-
-.filePathAction:hover:not(:disabled) {
-  border-color: var(--accent);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.03) 100%),
-    color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.1) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.06) inset,
-    0 4px 10px color-mix(in srgb, var(--accent) 14%, transparent);
-  transform: translateY(-1px);
-}
-
-.filePathAction:hover:not(:disabled)::after {
-  animation: buttonShineSweep 600ms ease-out;
-}
-
-.filePathAction:active:not(:disabled) {
-  transform: scale(0.97) translateY(1px);
-  box-shadow:
-    0 -1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 2px 3px rgba(0, 0, 0, 0.1) inset,
-    0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-.filePathAction:disabled {
-  opacity: 0.5;
-  cursor: default;
-  box-shadow: none;
 }
 
 .filePathValidationError {
@@ -594,140 +774,78 @@
 
 /* ── Divider ── */
 .divider {
-  border: none;
-  border-top: 1px solid var(--glass-border);
-  margin: 4px 0;
+  composes: base from '@/shared/ui/divider.module.css';
 }
 
 /* ── Inline start button (accent) ── */
 .startButton {
-  appearance: none;
-  position: relative;
-  overflow: hidden;
+  composes: base sm accent from '@/shared/ui/button.module.css';
   flex-shrink: 0;
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--accent);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
-    color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
-  color: var(--accent);
-  border-radius: var(--radius-md);
-  padding: 6px 14px;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
-    0 2px 6px rgba(0, 0, 0, 0.15);
-  transition:
-    border-color 200ms ease,
-    background 200ms ease,
-    opacity 200ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 200ms ease;
-}
-
-.startButton:hover:not(:disabled) {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
-    color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.12) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
-    0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
-  transform: translateY(-1px);
-}
-
-.startButton:active:not(:disabled) {
-  transform: scale(0.97) translateY(1px);
-}
-
-.startButton:disabled {
-  border-color: var(--glass-border);
-  background: var(--glass-bg);
-  color: var(--text-secondary);
-  opacity: 0.5;
-  cursor: default;
-  box-shadow: none;
 }
 
 /* ── Inline stop button (danger) ── */
 .stopButton {
-  appearance: none;
-  position: relative;
-  overflow: hidden;
+  composes: base sm danger from '@/shared/ui/button.module.css';
   flex-shrink: 0;
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--danger);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
-    color-mix(in srgb, var(--danger) 10%, var(--glass-bg));
-  color: var(--danger);
-  border-radius: var(--radius-md);
-  padding: 6px 14px;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
-    0 2px 6px rgba(0, 0, 0, 0.15);
-  transition:
-    border-color 200ms ease,
-    background 200ms ease,
-    opacity 200ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 200ms ease;
-}
-
-.stopButton:hover:not(:disabled) {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
-    color-mix(in srgb, var(--danger) 20%, var(--glass-bg));
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.12) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
-    0 4px 14px color-mix(in srgb, var(--danger) 18%, transparent);
-  transform: translateY(-1px);
-}
-
-.stopButton:active:not(:disabled) {
-  transform: scale(0.97) translateY(1px);
-}
-
-.stopButton:disabled {
-  opacity: 0.5;
-  cursor: default;
-  box-shadow: none;
 }
 
 /* ── Reduced motion ── */
+/* NOTE: button/input/badge/radio reduced-motion handled in shared modules */
 @media (prefers-reduced-motion: reduce) {
   .settings,
   .settingsBlock,
-  .badge,
-  .badgeInvalid,
-  .badgeRunning::before,
-  .applyButton,
-  .filePathAction,
-  .inputSaving {
+  .worm,
+  .providerSection,
+  .modeSwitchOptionActive,
+  .aiChipCore,
+  .aiChipBody,
+  .aiPinTop,
+  .aiPinRight,
+  .aiPinBottom,
+  .aiPinLeft,
+  .operatorBadge,
+  .operatorHead,
+  .operatorEarL,
+  .operatorEarR,
+  .operatorMic,
+  .speechBubble {
+    animation: none;
+    transition: none;
+  }
+
+  .operatorBadge.operatorEntrance,
+  .operatorBadge.operatorHovered,
+  .operatorBadge.operatorFidgeting,
+  .operatorBadge.operatorImploding,
+  .operatorBadge.operatorImploded,
+  .operatorBadge.operatorReturning,
+  .operatorBadge.operatorReturnDone {
     animation: none;
   }
 
-  .applyButton,
-  .filePathAction,
-  .input,
-  .badge {
+  .operatorEntrance > svg {
+    animation: none;
+  }
+
+  .operatorHovered .speechBubble,
+  .operatorImploding .speechBubble,
+  .operatorGreeting .speechBubble {
+    animation: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .worm,
+  .wormRight {
+    transition: left 0ms, right 0ms;
+  }
+
+  .providerWrap {
     transition: none;
   }
 }
+
+/* NOTE: light theme input overrides handled in shared input.module.css */
 
 /* ── Mobile adjustments ── */
 @media (max-width: 767px) {

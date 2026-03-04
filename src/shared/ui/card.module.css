@@ -1,0 +1,107 @@
+/* ══════════════════════════════════════════════════════════════
+   Shared card primitives — composed by component CSS modules
+   ══════════════════════════════════════════════════════════════ */
+
+@keyframes cardFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.base {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--space-4);
+  background:
+    linear-gradient(
+      170deg,
+      rgba(255, 255, 255, 0.045) 0%,
+      rgba(255, 255, 255, 0.01) 40%,
+      transparent 70%
+    ),
+    var(--glass-bg);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 60%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    0 1px 3px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  animation: cardFadeInUp 500ms var(--ease-smooth-pop) both;
+  transition:
+    border-color 500ms var(--ease-elastic),
+    box-shadow 550ms var(--ease-elastic),
+    transform 500ms var(--ease-elastic);
+}
+
+.base:hover {
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.3),
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08),
+    0 0 20px color-mix(in srgb, var(--accent) 4%, transparent);
+  transform: translateY(-1px);
+}
+
+.valid {
+  border-color: color-mix(in srgb, var(--success) 25%, transparent);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    0 1px 3px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 16px color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    0 1px 3px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 16px color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.nested {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--scale));
+  padding: calc(10px * var(--scale));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%),
+    var(--card-nested-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: calc(10px * var(--scale));
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.15),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  transition:
+    border-color 250ms ease,
+    box-shadow 250ms ease;
+}
+
+.nested:hover {
+  border-color: color-mix(in srgb, var(--glass-border) 70%, var(--accent));
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.15),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 0 12px color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .base,
+  .nested {
+    animation: none;
+    transition: none;
+  }
+}

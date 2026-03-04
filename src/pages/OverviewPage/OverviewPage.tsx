@@ -9,6 +9,7 @@ import {
   useKiosksStore,
   KIOSK_SHORTCUTS,
   type ShortcutId,
+  type AssistantMode,
 } from '@/stores/kiosksStore';
 import {
   browseForExe,
@@ -70,6 +71,8 @@ export function OverviewPage() {
   const setPath = useKiosksStore((s) => s.setPath);
   const licenseFilePath = useKiosksStore((s) => s.licenseFilePath);
   const setLicenseFilePath = useKiosksStore((s) => s.setLicenseFilePath);
+  const assistantMode = useKiosksStore((s) => s.assistantMode);
+  const setAssistantMode = useKiosksStore((s) => s.setAssistantMode);
   const voiceAgent = useKiosksStore((s) => s.voiceAgent);
   const setVoiceAgent = useKiosksStore((s) => s.setVoiceAgent);
 
@@ -79,6 +82,8 @@ export function OverviewPage() {
 
   const [pendingAgent, setPendingAgent] = useState<VoiceAgent>(voiceAgent);
   const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [faceCaptureError, setFaceCaptureError] = useState<string | null>(null);
 
   // Sync local state with store on external changes (e.g. persist rehydration)
   useEffect(() => { setLicenseInput(licenseFilePath); }, [licenseFilePath]);
@@ -86,6 +91,259 @@ export function OverviewPage() {
 
   const hasLicense = licenseInput.trim().length > 0;
   const hasPendingChange = pendingAgent !== voiceAgent;
+
+  const handleModeSwitch = useCallback((mode: AssistantMode) => {
+    setAssistantMode(mode);
+    setFaceCaptureError(null);
+    setApplyError(null);
+  }, [setAssistantMode]);
+
+  // ── Drag-to-switch for mode toggle ─────────────────────────────────────
+  const modeSwitchRef = useRef<HTMLDivElement>(null);
+  const wormRef = useRef<HTMLSpanElement>(null);
+  const dragRef = useRef<{
+    startX: number;
+    prevX: number;
+    velocity: number;
+    halfW: number;
+    maxDrag: number;
+    mode: AssistantMode;
+  } | null>(null);
+  const wasDragging = useRef(false);
+
+  const onModeDragDown = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>, mode: AssistantMode) => {
+      if (mode !== assistantMode) return;
+      const container = modeSwitchRef.current;
+      const worm = wormRef.current;
+      if (!container || !worm) return;
+      const wormW = worm.getBoundingClientRect().width;
+      dragRef.current = {
+        startX: e.clientX,
+        prevX: e.clientX,
+        velocity: 0,
+        halfW: container.getBoundingClientRect().width / 2,
+        maxDrag: wormW / 3,
+        mode,
+      };
+      wasDragging.current = false;
+      worm.style.willChange = 'translate, scale';
+      worm.style.transition = 'none';
+    },
+    [assistantMode],
+  );
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const onMove = (e: MouseEvent) => {
+      const d = dragRef.current;
+      const worm = wormRef.current;
+      if (!d || !worm) return;
+      const dx = e.clientX - d.startX;
+      if (Math.abs(dx) > 3) wasDragging.current = true;
+
+      // Clamp: full halfW toward switch side, only 1/3 worm width backward (outside container)
+      const min = d.mode === 'ai' ? -d.maxDrag : -d.halfW;
+      const max = d.mode === 'ai' ? d.halfW : d.maxDrag;
+      const clamped = Math.max(min, Math.min(max, dx));
+      const frameDx = e.clientX - d.prevX;
+      d.velocity = d.velocity * 0.7 + frameDx * 0.3;
+      d.prevX = e.clientX;
+
+      const speed = Math.abs(d.velocity);
+      const sx = reducedMotion ? 1 : 1 + Math.min(speed * 0.008, 0.15);
+      const sy = reducedMotion ? 1 : 1 - Math.min(speed * 0.004, 0.08);
+
+      worm.style.translate = `${clamped}px 0`;
+      worm.style.scale = `${sx} ${sy}`;
+    };
+
+    const onUp = () => {
+      const d = dragRef.current;
+      const worm = wormRef.current;
+      if (!d || !worm) return;
+      const dx = parseFloat(worm.style.translate) || 0;
+      const threshold = d.halfW * 0.25;
+      const shouldSwitch =
+        (d.mode === 'ai' && dx > threshold) ||
+        (d.mode === 'human' && dx < -threshold);
+
+      const fromT = worm.style.translate;
+      const fromS = worm.style.scale;
+
+      // Clear inline overrides
+      worm.style.translate = '';
+      worm.style.scale = '';
+      worm.style.willChange = '';
+      worm.style.transition = '';
+
+      if (shouldSwitch) {
+        // Animate translate to 0 in sync with CSS left/right transition (same easing)
+        if (fromT && fromT !== '0px 0') {
+          worm.animate(
+            { translate: [fromT, '0 0'], scale: [fromS || '1 1', '1 1'] },
+            { duration: 450, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' },
+          );
+        }
+        // Suppress jellyPop on the newly-active tab during drag-switch
+        const container = modeSwitchRef.current;
+        if (container) {
+          container.setAttribute('data-drag-switch', '');
+          setTimeout(() => container.removeAttribute('data-drag-switch'), 600);
+        }
+        handleModeSwitch(d.mode === 'ai' ? 'human' : 'ai');
+      } else {
+        // Snap back with spring bounce
+        if (fromT && fromT !== '0px 0') {
+          worm.animate(
+            { translate: [fromT, '0 0'], scale: [fromS || '1 1', '1 1'] },
+            { duration: 400, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' },
+          );
+        }
+      }
+      dragRef.current = null;
+    };
+
+    document.addEventListener('mousemove', onMove, { passive: true });
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [handleModeSwitch]);
+
+  const onModeClick = useCallback(
+    (mode: AssistantMode) => {
+      if (wasDragging.current) {
+        wasDragging.current = false;
+        return;
+      }
+      handleModeSwitch(mode);
+    },
+    [handleModeSwitch],
+  );
+
+  // ── Badge hover + implode-return state machine (fully JS-driven) ────────
+  const badgeRef = useRef<HTMLDivElement>(null);
+  const implodedRef = useRef(false);
+  const greetingTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const fidgetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const implodeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Cleanup badge timers on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(fidgetTimer.current);
+      clearTimeout(implodeTimer.current);
+      clearTimeout(greetingTimer.current);
+    };
+  }, []);
+
+  const addBadgeClass = useCallback((cls: string | undefined) => {
+    if (cls) badgeRef.current?.classList.add(cls);
+  }, []);
+
+  const removeBadgeClasses = useCallback((...classes: (string | undefined)[]) => {
+    const el = badgeRef.current;
+    if (!el) return;
+    for (const cls of classes) {
+      if (cls) el.classList.remove(cls);
+    }
+  }, []);
+
+  const clearBadgeTimers = useCallback(() => {
+    clearTimeout(fidgetTimer.current);
+    clearTimeout(implodeTimer.current);
+  }, []);
+
+  const onBadgeAnimEnd = useCallback((e: React.AnimationEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+
+    if (e.animationName.includes('badgeEntranceInertia')) {
+      removeBadgeClasses(styles.operatorEntrance);
+    }
+
+    if (e.animationName.includes('operatorImplode')) {
+      implodedRef.current = true;
+      removeBadgeClasses(
+        styles.operatorHovered,
+        styles.operatorFidgeting,
+        styles.operatorImploding,
+      );
+      addBadgeClass(styles.operatorImploded);
+    }
+
+    if (e.animationName.includes('operatorLookAround')) {
+      removeBadgeClasses(styles.operatorReturning);
+      addBadgeClass(styles.operatorReturnDone);
+
+      addBadgeClass(styles.operatorGreeting);
+      clearTimeout(greetingTimer.current);
+      greetingTimer.current = setTimeout(() => {
+        removeBadgeClasses(styles.operatorGreeting);
+      }, 5000);
+    }
+  }, [addBadgeClass, removeBadgeClasses]);
+
+  // Entrance inertia when badge appears (mode switch to human or mount)
+  useEffect(() => {
+    if (assistantMode !== 'human') return;
+    addBadgeClass(styles.operatorEntrance);
+  }, [assistantMode, addBadgeClass]);
+
+  const onBadgeWrapEnter = useCallback(() => {
+    clearBadgeTimers();
+    clearTimeout(greetingTimer.current);
+    const el = badgeRef.current;
+    if (!el) return;
+
+    // Clean any leftover state
+    removeBadgeClasses(
+      styles.operatorEntrance,
+      styles.operatorGreeting,
+      styles.operatorReturnDone,
+      styles.operatorReturning,
+      styles.operatorFidgeting,
+      styles.operatorImploding,
+      styles.operatorImploded,
+    );
+    implodedRef.current = false;
+
+    // Start hover phase
+    addBadgeClass(styles.operatorHovered);
+
+    // Schedule fidget at 5s
+    fidgetTimer.current = setTimeout(() => {
+      addBadgeClass(styles.operatorFidgeting);
+    }, 5000);
+
+    // Schedule implode at 7s (keep operatorHovered for bubble visibility)
+    implodeTimer.current = setTimeout(() => {
+      removeBadgeClasses(styles.operatorFidgeting);
+      addBadgeClass(styles.operatorImploding);
+    }, 7000);
+  }, [clearBadgeTimers, addBadgeClass, removeBadgeClasses]);
+
+  const onBadgeWrapLeave = useCallback(() => {
+    clearBadgeTimers();
+    const el = badgeRef.current;
+    if (!el) return;
+
+    if (implodedRef.current) {
+      // Was imploded → trigger return sequence
+      implodedRef.current = false;
+      removeBadgeClasses(styles.operatorImploded);
+      addBadgeClass(styles.operatorReturning);
+    } else {
+      // Left before implode completed → clean up hover classes
+      removeBadgeClasses(
+        styles.operatorHovered,
+        styles.operatorFidgeting,
+        styles.operatorImploding,
+      );
+    }
+  }, [clearBadgeTimers, addBadgeClass, removeBadgeClasses]);
 
   const handleLicenseChange = useCallback((value: string) => {
     setLicenseInput(value);
@@ -116,8 +374,6 @@ export function OverviewPage() {
       setLicenseBrowsing(false);
     }
   }, [setLicenseFilePath]);
-
-  const [applyError, setApplyError] = useState<string | null>(null);
 
   const handleApply = useCallback(async () => {
     setApplying(true);
@@ -466,61 +722,166 @@ export function OverviewPage() {
 
         <div className={styles.field}>
           <div className={styles.fieldHeader}>
-            <span className={styles.label}>Provider</span>
+            <span className={styles.label}>Mode</span>
           </div>
-          <div className={styles.providerRow}>
-            <div
-              className={`${styles.radioGroup} ${!hasLicense ? styles.radioGroupDisabled : ''}`}
-              role="radiogroup"
-              aria-label="Voice agent"
-            >
-              <label className={styles.radioOption}>
-                <input
-                  type="radio"
-                  name="kiosk-voice-agent"
-                  value="elevenlabs"
-                  className={styles.radioInput}
-                  checked={pendingAgent === 'elevenlabs'}
-                  onChange={() => setPendingAgent('elevenlabs')}
-                  disabled={!hasLicense || applying}
-                />
-                <span className={styles.radioMark} />
-                <span>ElevenLabs</span>
-              </label>
-              <label className={styles.radioOption}>
-                <input
-                  type="radio"
-                  name="kiosk-voice-agent"
-                  value="gemini-live"
-                  className={styles.radioInput}
-                  checked={pendingAgent === 'gemini-live'}
-                  onChange={() => setPendingAgent('gemini-live')}
-                  disabled={!hasLicense || applying}
-                />
-                <span className={styles.radioMark} />
-                <span>Gemini Live</span>
-              </label>
-            </div>
+          <div ref={modeSwitchRef} className={styles.modeSwitch} role="radiogroup" aria-label="Assistant mode" data-no-jelly>
+            <span
+              ref={wormRef}
+              className={`${styles.worm} ${assistantMode === 'human' ? styles.wormRight : ''}`}
+              aria-hidden="true"
+            />
             <button
               type="button"
-              className={styles.applyButton}
-              onClick={() => void handleApply()}
-              disabled={
-                !hasLicense ||
-                applying ||
-                !hasPendingChange ||
-                !paths['kiosk-app'].trim()
-              }
+              className={`${styles.modeSwitchOption} ${assistantMode === 'ai' ? styles.modeSwitchOptionActive : ''}`}
+              onMouseDown={(e) => onModeDragDown(e, 'ai')}
+              onClick={() => onModeClick('ai')}
+              aria-checked={assistantMode === 'ai'}
+              role="radio"
             >
-              {applying ? 'Applying...' : 'Apply & restart'}
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <rect className={styles.aiChipBody} x="6" y="6" width="12" height="12" rx="2" />
+                <circle className={styles.aiChipCore} cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+                <path className={styles.aiPinTop} d="M9 2v4M15 2v4" />
+                <path className={styles.aiPinRight} d="M18 9h4M18 15h4" />
+                <path className={styles.aiPinBottom} d="M9 18v4M15 18v4" />
+                <path className={styles.aiPinLeft} d="M2 9h4M2 15h4" />
+              </svg>
+              AI Assistant
+            </button>
+            <button
+              type="button"
+              className={`${styles.modeSwitchOption} ${assistantMode === 'human' ? styles.modeSwitchOptionActive : ''}`}
+              onMouseDown={(e) => onModeDragDown(e, 'human')}
+              onClick={() => onModeClick('human')}
+              aria-checked={assistantMode === 'human'}
+              role="radio"
+            >
+              Human Assistant
             </button>
           </div>
-          {!hasLicense && (
-            <p className={styles.disabledHint}>
-              Configure a license file path above to enable agent selection
-            </p>
-          )}
-          {applyError && <span className={styles.filePathValidationError}>{applyError}</span>}
+        </div>
+
+        <div className={styles.field}>
+          <div className={styles.fieldHeader}>
+            <span className={styles.label}>Provider</span>
+          </div>
+
+          <div className={styles.providerWrap}>
+            {/* AI provider — collapses when Human mode */}
+            <div className={`${styles.providerSection} ${assistantMode === 'ai' ? styles.providerSectionActive : ''}`}>
+              <div className={styles.providerSectionInner}>
+                <div className={styles.providerRow}>
+                  <div
+                    className={`${styles.radioGroup} ${!hasLicense ? styles.radioGroupDisabled : ''}`}
+                    role="radiogroup"
+                    aria-label="Voice agent"
+                  >
+                    <label className={styles.radioOption}>
+                      <input
+                        type="radio"
+                        name="kiosk-voice-agent"
+                        value="elevenlabs"
+                        className={styles.radioInput}
+                        checked={pendingAgent === 'elevenlabs'}
+                        onChange={() => setPendingAgent('elevenlabs')}
+                        disabled={!hasLicense || applying}
+                      />
+                      <span className={styles.radioMark} />
+                      <span>ElevenLabs</span>
+                    </label>
+                    <label className={styles.radioOption}>
+                      <input
+                        type="radio"
+                        name="kiosk-voice-agent"
+                        value="gemini-live"
+                        className={styles.radioInput}
+                        checked={pendingAgent === 'gemini-live'}
+                        onChange={() => setPendingAgent('gemini-live')}
+                        disabled={!hasLicense || applying}
+                      />
+                      <span className={styles.radioMark} />
+                      <span>Gemini Live</span>
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.applyButton}
+                    onClick={() => void handleApply()}
+                    disabled={
+                      !hasLicense ||
+                      applying ||
+                      !hasPendingChange ||
+                      !paths['kiosk-app'].trim()
+                    }
+                  >
+                    {applying ? 'Applying...' : 'Apply & restart'}
+                  </button>
+                </div>
+                {!hasLicense && (
+                  <p className={styles.disabledHint}>
+                    Configure a license file path above to enable agent selection
+                  </p>
+                )}
+                {applyError && <span className={styles.filePathValidationError}>{applyError}</span>}
+              </div>
+            </div>
+
+            {/* Human provider — collapses when AI mode */}
+            <div className={`${styles.providerSection} ${assistantMode === 'human' ? styles.providerSectionActive : ''}`}>
+              <div className={styles.providerSectionInner}>
+                <div className={styles.providerRow}>
+                  <div className={styles.radioGroup} role="radiogroup" aria-label="Human provider">
+                    <label className={styles.radioOption}>
+                      <input
+                        type="radio"
+                        name="kiosk-human-provider"
+                        value="face-capture"
+                        className={styles.radioInput}
+                        checked
+                        readOnly
+                      />
+                      <span className={styles.radioMark} />
+                      <span>FaceCapture</span>
+                    </label>
+                  </div>
+                  <div
+                    className={styles.operatorBadgeWrap}
+                    onMouseEnter={onBadgeWrapEnter}
+                    onMouseLeave={onBadgeWrapLeave}
+                  >
+                    <div
+                      ref={badgeRef}
+                      className={styles.operatorBadge}
+                      aria-label="Human operator"
+                      onAnimationEnd={onBadgeAnimEnd}
+                    >
+                      <svg
+                        width="34"
+                        height="34"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path className={styles.operatorHead} d="M4 15v-3a8 8 0 0 1 16 0v3" />
+                        <path className={styles.operatorEarL} d="M2 14.5h2a1 1 0 0 1 1 1v2.5a1 1 0 0 1-1 1H2v-4.5Z" />
+                        <path className={styles.operatorEarR} d="M22 14.5h-2a1 1 0 0 0-1 1v2.5a1 1 0 0 0 1 1h2v-4.5Z" />
+                        <path className={styles.operatorMic} d="M18 19c0 1.5-2.5 3-6 3" />
+                      </svg>
+                      <span className={`${styles.speechBubble} ${styles.speechBubble1}`}>Hello!</span>
+                      <span className={`${styles.speechBubble} ${styles.speechBubble2}`}>Bonjour</span>
+                      <span className={`${styles.speechBubble} ${styles.speechBubble3}`}>Hola!</span>
+                      <span className={`${styles.speechBubble} ${styles.speechBubble4}`}>Ciao</span>
+                      <span className={`${styles.speechBubble} ${styles.speechBubble5}`}>Hej!</span>
+                    </div>
+                  </div>
+                </div>
+                {faceCaptureError && <span className={styles.filePathValidationError}>{faceCaptureError}</span>}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -1,19 +1,77 @@
 .sidebar {
+  --sidebar-inset: calc(8px * var(--scale));
+
   position: fixed;
-  top: 0;
-  left: 0;
+  top: var(--sidebar-inset);
+  left: var(--sidebar-inset);
   width: var(--sidebar-width);
-  height: 100vh;
+  height: calc(100vh - 2 * var(--sidebar-inset));
   display: flex;
   flex-direction: column;
-  background: var(--glass-highlight), color-mix(in srgb, var(--bg) 82%, var(--glass-bg));
-  border-right: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
-  box-shadow: var(--glass-shadow);
+
+  /* ── Translucent layered glass — depth through transparency ── */
+  background:
+    /* Top-edge specular highlight — simulates light hitting a 3D bevel */
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 3%,
+      transparent 12%
+    ),
+    /* Vertical depth gradient — lighter top, darker bottom = curvature */
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      transparent 40%,
+      rgba(0, 0, 0, 0.06) 85%,
+      rgba(0, 0, 0, 0.12) 100%
+    ),
+    /* Left-edge highlight — simulates side-lit 3D panel */
+    linear-gradient(90deg,
+      rgba(255, 255, 255, 0.035) 0%,
+      transparent 30%
+    ),
+    var(--glass-highlight),
+    /* Semi-transparent base — lets the bg-gradient bleed through */
+    color-mix(in srgb, var(--bg) 62%, var(--glass-bg));
+
+  border: 1px solid var(--glass-border);
+  /* Differential border opacity — thicker/brighter top, darker bottom */
+  border-top-color: rgba(255, 255, 255, 0.18);
+  border-left-color: rgba(255, 255, 255, 0.1);
+  border-right-color: rgba(255, 255, 255, 0.06);
+  border-bottom-color: rgba(0, 0, 0, 0.22);
+  border-radius: var(--radius-lg);
+
+  /* Stronger blur for frosted depth */
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+
+  /* Multi-layer shadow system for 3D lift */
+  box-shadow:
+    /* Ambient shadow — large, soft, far */
+    0 20px 60px rgba(0, 0, 0, 0.35),
+    /* Mid shadow — medium depth */
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    /* Contact shadow — tight, dark, close */
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    /* Accent ambient glow — subtle color bleeding */
+    0 0 40px color-mix(in srgb, var(--accent) 4%, transparent),
+    /* Inner top highlight — frosted glass edge catch */
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    /* Inner left highlight — side bevel */
+    inset 1px 0 0 rgba(255, 255, 255, 0.04),
+    /* Inner bottom shadow — recessed bottom edge */
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+    /* Inner depth — soft vignette on bottom */
+    inset 0 -30px 40px -20px rgba(0, 0, 0, 0.08);
+
   z-index: 20;
-  transform: translateX(-100%);
-  transition: transform 300ms cubic-bezier(0.22, 0.9, 0.25, 1);
+  /* Use independent translate property so transform is free for 3D tilt */
+  translate: calc(-100% - var(--sidebar-inset)) 0;
+  /* Exit: accelerate away with slight ease; box-shadow animates on pin/unpin */
+  transition:
+    translate 280ms cubic-bezier(0.55, 0, 0.85, 0.36),
+    box-shadow 500ms var(--ease-smooth),
+    scale 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .logo {
@@ -21,14 +79,96 @@
   align-items: center;
   gap: calc(12px * var(--scale));
   min-height: calc(80px * var(--scale));
-  padding: calc(18px * var(--scale)) calc(14px * var(--scale)) calc(18px * var(--scale)) calc(70px * var(--scale));
+  padding: calc(18px * var(--scale)) calc(14px * var(--scale)) calc(18px * var(--scale)) calc(50px * var(--scale));
   border-bottom: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   cursor: pointer;
+  transition:
+    padding 400ms var(--ease-smooth-pop),
+    border-radius 400ms var(--ease-smooth-pop);
 }
 
-/* When pinned — reduce logo left padding (no burger overlap) */
+/* ── Border glint — conic-gradient sweep along the border ── */
+
+@property --glint-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes borderGlintSweep {
+  from { --glint-angle: 0deg; }
+  to   { --glint-angle: 360deg; }
+}
+
+.sidebar::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--glint-angle),
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 8%, rgba(255, 255, 255, 0.06)) 3%,
+    transparent 6%,
+    transparent 100%
+  );
+  /* Mask to border-only: exclude content box, keep border ring */
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  padding: 1px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+
+/* Glint plays on pin — slow subtle sweep */
+.sidebarPinned::after {
+  animation: borderGlintSweep 3s ease-in-out;
+  opacity: 1;
+}
+
+/* Glint plays on unpin — slow reverse */
+.sidebarUnpinned::after {
+  animation: borderGlintSweep 2.5s ease-in-out reverse;
+  opacity: 1;
+}
+
+/* ── Pin reaction — sidebar gets "nailed down" to background ── */
+
+/* Pin whip: fast snap down, hold briefly, quick return */
+@keyframes pinNailSquash {
+  0%   { scale: 1; }
+  30%  { scale: 0.993; }
+  100% { scale: 1; }
+}
+
+/* When pinned — slide logo into freed space */
 .sidebarPinned .logo {
-  padding-left: calc(16px * var(--scale));
+  padding-left: calc(18px * var(--scale));
+}
+
+/* Nail-down — slightly smaller when pinned, single fast scale transition */
+.sidebarPinned {
+  scale: 0.985;
+}
+
+/* Unpin release: gentle expand, slower ease back */
+@keyframes pinRelease {
+  0%   { scale: 1; }
+  30%  { scale: 1.004; }
+  100% { scale: 1; }
+}
+
+.sidebarUnpinned {
+  animation: pinRelease 350ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 /* ── Pin button (bottom section) ── */
@@ -154,22 +294,116 @@
   50%      { opacity: 1; }
 }
 
-/* --- Icon wrapper (30x30) --- */
-.pinIconWrap {
-  position: relative;
-  width: calc(30px * var(--scale));
-  height: calc(30px * var(--scale));
-  flex-shrink: 0;
-  transform: rotate(45deg);
+/* Pinned idle — gentle pendulum sway like a stuck thumbtack */
+@keyframes pinIdleSway {
+  0%, 100% { transform: rotate(0deg); }
+  20%      { transform: rotate(2deg); }
+  40%      { transform: rotate(-1.5deg); }
+  60%      { transform: rotate(1deg); }
+  80%      { transform: rotate(-0.5deg); }
 }
 
+/* Hover yank anticipation — wiggle like about to be pulled */
+@keyframes pinYankWiggle {
+  0%   { transform: rotate(0deg) translateY(0); }
+  15%  { transform: rotate(-3deg) translateY(-1px); }
+  30%  { transform: rotate(2.5deg) translateY(-0.5px); }
+  45%  { transform: rotate(-2deg) translateY(-1.5px); }
+  60%  { transform: rotate(1.5deg) translateY(-0.8px); }
+  75%  { transform: rotate(-0.8deg) translateY(-0.3px); }
+  100% { transform: rotate(0deg) translateY(0); }
+}
+
+/* Nav link entrance — slide from left */
+@keyframes navLinkSlideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Nav label entrance — gentle fade */
+@keyframes navLabelFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Active icon bob — breathing with gentle rotation */
+@keyframes navIconBob {
+  0%, 100% { transform: translateY(0) scale(1) rotate(0deg); }
+  25%      { transform: translateY(-1px) scale(1.04) rotate(1.5deg); }
+  50%      { transform: translateY(0.5px) scale(0.97) rotate(-0.5deg); }
+  75%      { transform: translateY(-0.3px) scale(1.015) rotate(0.3deg); }
+}
+
+/* Glint sweep across hover link */
+@keyframes navGlintSweep {
+  0%   { transform: translateX(-100%) skewX(-20deg); }
+  100% { transform: translateX(300%) skewX(-20deg); }
+}
+
+/* Active link text shimmer */
+@keyframes navTextShimmer {
+  0%, 100% { text-shadow: 0 0 0 transparent; }
+  50%      { text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 15%, transparent); }
+}
+
+/* --- Icon wrapper — machined socket housing (shared bezel) --- */
+.pinIconWrap {
+  position: relative;
+  width: calc(32px * var(--scale));
+  height: calc(32px * var(--scale));
+  flex-shrink: 0;
+  transform: rotate(45deg);
+  /* Barely visible glass socket — ghost bezel */
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%),
+    color-mix(in srgb, var(--glass-bg) 30%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--glass-border) 35%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 1px 4px rgba(0,0,0,0.1),
+    inset 0 1px 0 rgba(255,255,255,0.03);
+  transition:
+    border-color 400ms var(--ease-elastic),
+    box-shadow 400ms var(--ease-elastic),
+    background 400ms var(--ease-elastic);
+}
+
+.pinButton:hover .pinIconWrap {
+  border-color: color-mix(in srgb, var(--glass-border) 60%, transparent);
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.15),
+    0 0 8px color-mix(in srgb, var(--accent) 6%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* Hover on pinned — wiggle like about to yank it out */
+.pinButton.pinned:hover .pinIconWrap {
+  animation:
+    pinYankWiggle 500ms var(--ease-overshoot) both;
+  box-shadow:
+    0 3px 8px rgba(0,0,0,0.2),
+    0 0 12px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* Pinned — bezel becomes visible and glows, then gently sways */
 .pinned .pinIconWrap {
-  animation: pinSlamIn 750ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
-  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.25));
+  animation:
+    pinSlamIn 750ms var(--ease-smooth-pop) both,
+    pinIdleSway 6s 900ms ease-in-out infinite;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%),
+    color-mix(in srgb, var(--glass-bg) 75%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--glass-border));
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.25),
+    0 4px 14px rgba(0,0,0,0.1),
+    0 0 10px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
 .pinButton:not(.pinned) .pinIconWrap {
-  animation: pinYankOut 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: pinYankOut 700ms var(--ease-smooth-pop) both;
 }
 
 /* --- Pin head — 3D metallic ball --- */
@@ -203,12 +437,12 @@
     0 1px 3px rgba(0,0,0,0.3),
     inset 0 1px 0 rgba(255,255,255,0.2);
   animation:
-    headSmashIn 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
+    headSmashIn 700ms var(--ease-smooth-pop) both,
     aliveGlow 2.5s 900ms ease-in-out infinite;
 }
 
 .pinButton:not(.pinned) .pinHead {
-  animation: headPopOut 600ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: headPopOut 600ms var(--ease-smooth-pop) both;
 }
 
 /* --- Shine — glossy highlight that sweeps across head --- */
@@ -261,11 +495,11 @@
     color-mix(in srgb, var(--accent) 80%, #fff) 60%,
     color-mix(in srgb, var(--accent) 60%, #1a1040)
   );
-  animation: needleDriveIn 700ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: needleDriveIn 700ms var(--ease-smooth-pop) both;
 }
 
 .pinButton:not(.pinned) .pinNeedle {
-  animation: needlePullOut 600ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: needlePullOut 600ms var(--ease-smooth-pop) both;
 }
 
 /* --- Shadow — soft oval under the tip when pinned --- */
@@ -305,7 +539,7 @@
 }
 
 .pinned .pinRipple {
-  animation: rippleBurst 550ms 280ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: rippleBurst 550ms 280ms var(--ease-smooth-pop) both;
 }
 
 /* ── Logo mark ── */
@@ -342,6 +576,24 @@
   100% { transform: rotate(0deg) scale(1) translateY(0); }
 }
 
+/* Red dot pulse — staggered alive-breathing on mid-arrow dots */
+@keyframes logoDotPulse {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50%      { transform: scale(1.8); opacity: 0.9; }
+}
+
+/* Prism edge shimmer — desynced from facet breathing */
+@keyframes logoEdgeShimmer {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.85; }
+}
+
+/* Prism glass reflection — ultra-subtle living glass */
+@keyframes logoPrismReflect {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-0.3px); }
+}
+
 .logoMark {
   width: calc(44px * var(--scale));
   height: calc(40px * var(--scale));
@@ -354,33 +606,52 @@
    (paused animations still override inline styles per the CSS spec) */
 .logoMarkMagnetic {
   animation: none !important;
-  transition: transform 80ms ease-out;
+  transition: transform 60ms ease-out;
 }
 
 /* ── Prism body ── */
 .logoPrismOuter { opacity: 0.85; }
 .logoFacetFill  {
   opacity: 0.85;
-  animation: logoFacetLight 8s ease-in-out infinite;
+  animation:
+    logoFacetLight 8s ease-in-out infinite,
+    logoPrismReflect 10s ease-in-out infinite;
 }
-.logoEdgeInner  { opacity: 0.55; }
+.logoEdgeInner  {
+  opacity: 0.55;
+  animation: logoEdgeShimmer 6s ease-in-out infinite;
+}
 
 /* ── Red accent arrows — desynchronised sway ── */
 .logoArrowTL {
   transform-origin: center;
   animation: logoArrowSwayA 6s ease-in-out infinite;
+  transition: filter 400ms var(--ease-smooth);
 }
 .logoArrowTR {
   transform-origin: center;
   animation: logoArrowSwayB 7.5s ease-in-out infinite;
+  transition: filter 400ms var(--ease-smooth);
 }
 .logoArrowBot {
   transform-origin: center;
   animation: logoArrowSwayA 8s ease-in-out 1.5s infinite;
   animation-direction: reverse;
+  transition: filter 400ms var(--ease-smooth);
 }
 
+/* Arrow glow on hover */
+.logo:hover .logoArrowTL,
+.logo:hover .logoArrowTR,
+.logo:hover .logoArrowBot {
+  filter: drop-shadow(0 0 3px rgba(235, 77, 61, 0.4));
+}
+
+/* ── Red mid-dots — staggered pulse ── */
 .logoMidTL, .logoMidTR, .logoMidBot { opacity: 0.3; }
+.logoMidTL  { animation: logoDotPulse 3s ease-in-out infinite; }
+.logoMidTR  { animation: logoDotPulse 3s ease-in-out 1s infinite; }
+.logoMidBot { animation: logoDotPulse 3s ease-in-out 2s infinite; }
 
 /* ── Light theme: glass prism — white fill, dark edges ── */
 :global([data-theme='light']) .logoFacetFill  {
@@ -437,9 +708,24 @@
 }
 
 @keyframes logoSubGlow {
-  0%   { color: var(--text-secondary); }
-  50%  { color: color-mix(in srgb, var(--text-secondary) 55%, #EB4D3D); }
-  100% { color: var(--text-secondary); }
+  0%, 100% { color: var(--text-secondary); text-shadow: none; }
+  40%      { color: color-mix(in srgb, var(--text-secondary) 55%, #EB4D3D); text-shadow: 0 0 8px color-mix(in srgb, #EB4D3D 12%, transparent); }
+  60%      { color: color-mix(in srgb, var(--text-secondary) 70%, var(--accent)); text-shadow: 0 0 6px color-mix(in srgb, var(--accent) 8%, transparent); }
+}
+
+@keyframes logoSubFloat {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  30%      { transform: translateY(-1.5px) translateX(0.8px); }
+  60%      { transform: translateY(1px) translateX(-0.6px); }
+}
+
+/* Inertia overshoot — logoSub slides further right, then settles back */
+@keyframes logoSubSlideInertia {
+  0%   { translate: 0 0; }
+  30%  { translate: 10px 0; }
+  55%  { translate: -2px 0; }
+  75%  { translate: 1px 0; }
+  100% { translate: 0 0; }
 }
 
 .logoSub {
@@ -449,7 +735,18 @@
   line-height: 1;
   opacity: 0.65;
   white-space: nowrap;
-  animation: logoSubGlow 12s ease-in-out infinite;
+  transition: transform 600ms var(--ease-smooth);
+  animation:
+    logoSubGlow 10s ease-in-out infinite,
+    logoSubFloat 8s 2s ease-in-out infinite;
+}
+
+/* Plays on sidebar reveal — translate composes with transform (float) */
+.logoSubInertia {
+  animation:
+    logoSubGlow 10s ease-in-out infinite,
+    logoSubFloat 8s 2s ease-in-out infinite,
+    logoSubSlideInertia 900ms var(--ease-smooth-pop);
 }
 
 .nav {
@@ -457,7 +754,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: calc(6px * var(--scale));
+  gap: calc(10px * var(--scale));
   padding: calc(12px * var(--scale)) calc(10px * var(--scale));
   overflow-y: auto;
 }
@@ -471,18 +768,19 @@
   pointer-events: none;
   opacity: 0;
   background:
-    linear-gradient(170deg, rgba(255,255,255,0.05) 0%, transparent 50%, rgba(0,0,0,0.03) 100%),
-    color-mix(in srgb, var(--accent) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 14%, transparent);
+    linear-gradient(170deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 40%, transparent 60%, rgba(0,0,0,0.04) 100%),
+    color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   box-shadow:
-    0 0 10px color-mix(in srgb, var(--accent) 8%, transparent),
-    0 1px 0 rgba(255,255,255,0.04) inset,
-    0 -1px 0 rgba(0,0,0,0.06) inset;
+    0 3px 10px rgba(0, 0, 0, 0.18),
+    0 0 14px color-mix(in srgb, var(--accent) 10%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.08);
   transition:
-    top 600ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    height 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 300ms ease,
-    border-radius 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    top 420ms cubic-bezier(0.22, 1.4, 0.36, 1),
+    height 300ms cubic-bezier(0.22, 1.4, 0.36, 1),
+    opacity 200ms ease,
+    border-radius 350ms cubic-bezier(0.22, 1.4, 0.36, 1);
   will-change: top, height;
 }
 
@@ -493,21 +791,29 @@
   text-transform: uppercase;
   color: var(--muted);
   padding: calc(8px * var(--scale)) calc(10px * var(--scale)) 4px;
+  animation: navLabelFadeIn 350ms 50ms var(--ease-smooth-pop) both;
 }
 
 /* Accent bar spring-in */
 @keyframes accentBarSpring {
   0%   { transform: scaleY(0); }
-  30%  { transform: scaleY(1.2); }
-  50%  { transform: scaleY(0.9); }
-  70%  { transform: scaleY(1.05); }
+  30%  { transform: scaleY(1.25); }
+  50%  { transform: scaleY(0.88); }
+  70%  { transform: scaleY(1.06); }
+  85%  { transform: scaleY(0.98); }
   100% { transform: scaleY(1); }
 }
 
-/* Active bar alive pulse — gentle glow breath (opacity-only, no box-shadow repaint) */
+/* Active bar glow breath */
 @keyframes accentBarPulse {
-  0%, 100% { opacity: 0.7; }
-  50%      { opacity: 1; }
+  0%, 100% { opacity: 0.75; filter: brightness(1); }
+  50%      { opacity: 1;    filter: brightness(1.2); }
+}
+
+/* Accent bar shimmer — light traveling up the bar */
+@keyframes accentBarShimmer {
+  0%   { background-position: 0% 200%; }
+  100% { background-position: 0% -100%; }
 }
 
 /* ── Nav links — GPU-only transitions (transform, opacity, color) ── */
@@ -527,72 +833,118 @@
   cursor: pointer;
   border: 1px solid transparent;
   background: transparent;
+  overflow: hidden;
+  animation: navLinkSlideIn 400ms var(--ease-smooth-pop) both;
   transition:
-    color 300ms ease,
-    border-color 300ms ease,
-    background 300ms ease,
-    transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    color 250ms ease,
+    border-color 250ms ease,
+    background 280ms ease,
+    box-shadow 300ms ease,
+    transform 350ms var(--ease-overshoot),
+    text-shadow 300ms ease;
 }
 
-/* Top-edge highlight — static gradient, fade with opacity only */
+/* Staggered entrance delays */
+.nav > a:nth-of-type(1) { animation-delay: 80ms; }
+.nav > a:nth-of-type(2) { animation-delay: 140ms; }
+.nav > a:nth-of-type(3) { animation-delay: 200ms; }
+.nav > a:nth-of-type(4) { animation-delay: 260ms; }
+.nav > a:nth-of-type(5) { animation-delay: 320ms; }
+
+/* Glint sweep — skewed light band that sweeps across on hover */
 .navLink::after {
   content: '';
   position: absolute;
-  top: 0;
-  left: 8%;
-  right: 8%;
-  height: 1px;
-  border-radius: 1px;
+  inset: 0;
+  border-radius: inherit;
   background: linear-gradient(
-    90deg,
+    105deg,
     transparent 0%,
-    rgba(255,255,255,0.10) 50%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 255, 255, 0.03) 50%,
+    transparent 55%,
     transparent 100%
   );
+  background-size: 200% 100%;
+  background-position: 100% 0;
   opacity: 0;
-  transition: opacity 300ms ease;
+  transition: opacity 250ms ease;
   pointer-events: none;
 }
 
-/* Left accent bar — transform + opacity only (no width, no box-shadow transition) */
+/* Left accent bar — gradient with shimmer */
 .navLink::before {
   content: '';
   position: absolute;
-  left: 0;
+  left: -1px;
   top: 15%;
-  width: 3.5px;
+  width: 3px;
   height: 70%;
-  border-radius: 0 4px 4px 0;
-  background: var(--accent);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 0 3px 3px 0;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--accent) 70%, white) 0%,
+      var(--accent) 40%,
+      color-mix(in srgb, var(--accent) 80%, black) 100%
+    );
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--accent) 25%, transparent),
+    0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
   transform: scaleY(0);
   transform-origin: center;
   transition:
-    transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 300ms ease;
+    transform 350ms var(--ease-overshoot),
+    opacity 250ms ease,
+    width 300ms var(--ease-overshoot),
+    box-shadow 300ms ease;
   opacity: 0;
 }
 
 .navLink:hover {
   color: var(--text);
   transform: translateX(calc(4px * var(--scale)));
-  border-color: color-mix(in srgb, var(--glass-border) 80%, var(--accent));
-  background: color-mix(in srgb, var(--glass-bg) 70%, transparent);
+  border-color: color-mix(in srgb, var(--glass-border) 60%, var(--accent));
+  background:
+    linear-gradient(170deg, rgba(255, 255, 255, 0.035) 0%, transparent 50%),
+    color-mix(in srgb, var(--accent) 4%, transparent);
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.14),
+    0 0 16px color-mix(in srgb, var(--accent) 6%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .navLink:hover::after {
   opacity: 1;
+  animation: navGlintSweep 700ms 80ms ease-out both;
 }
 
 .navLink:hover::before {
   transform: scaleY(0.5);
-  opacity: 0.4;
+  opacity: 0.45;
+}
+
+/* Press feedback — snappy squish */
+.navLink:active {
+  transform: scale(0.97) translateX(calc(2px * var(--scale)));
+  transition-duration: 60ms;
+  box-shadow: none;
 }
 
 .navLinkActive {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 10%, transparent);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  background:
+    linear-gradient(170deg, rgba(255, 255, 255, 0.035) 0%, transparent 45%),
+    color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.12),
+    0 0 14px color-mix(in srgb, var(--accent) 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.06);
+  text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 12%, transparent);
+  animation: navLinkSlideIn 400ms var(--ease-smooth-pop) both, navTextShimmer 4s 1s ease-in-out infinite;
 }
 
 .navLinkActive::after {
@@ -602,21 +954,37 @@
 .navLinkActive::before {
   transform: scaleY(1);
   opacity: 1;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
+  width: 3.5px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--accent) 60%, white) 0%,
+      var(--accent) 30%,
+      var(--accent) 70%,
+      color-mix(in srgb, var(--accent) 60%, white) 100%
+    ),
+    /* shimmer overlay */
+    linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
+  background-size: 100% 100%, 100% 300%;
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--accent) 40%, transparent),
+    0 0 3px color-mix(in srgb, var(--accent) 60%, transparent);
   animation:
-    accentBarSpring 600ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
-    accentBarPulse 3s ease-in-out 600ms infinite;
+    accentBarSpring 550ms var(--ease-smooth-pop) both,
+    accentBarPulse 3.5s ease-in-out 600ms infinite,
+    accentBarShimmer 3s 700ms linear infinite;
 }
 
 .navLinkActive:hover {
   transform: translateX(calc(3px * var(--scale)));
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .navLinkActive:hover::before {
   opacity: 1;
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--accent) 50%, transparent),
+    0 0 4px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 .navIcon {
@@ -626,10 +994,11 @@
   width: calc(18px * var(--scale));
   height: calc(18px * var(--scale));
   flex-shrink: 0;
-  opacity: 0.6;
+  opacity: 0.55;
   transition:
-    transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 300ms ease;
+    transform 350ms var(--ease-overshoot),
+    opacity 250ms ease,
+    filter 300ms ease;
 }
 
 /* Force SVGs inside navIcon to fill container regardless of intrinsic size */
@@ -639,30 +1008,40 @@
 }
 
 .navLink:hover .navIcon {
-  transform: scale(1.12);
-  opacity: 0.95;
+  transform: scale(1.14) rotate(-3deg);
+  opacity: 0.9;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 15%, transparent));
 }
 
 .navLinkActive .navIcon {
   opacity: 1;
-  animation: aliveGlow 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 20%, transparent));
+  animation: navIconBob 4s ease-in-out infinite;
 }
 
 .navLink:active .navIcon {
-  transform: none;
+  transform: scale(0.95);
+  transition-duration: 60ms;
 }
 
-.navLinkActive .navIcon {
-  opacity: 1;
+/* ── Shared instrument panel tokens ── */
+@keyframes instrumentBreath {
+  0%, 100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 10%, transparent));
+  }
 }
 
 .navBottom {
   display: flex;
   flex-direction: column;
-  gap: calc(6px * var(--scale));
+  gap: calc(8px * var(--scale));
   margin-top: auto;
-  padding: calc(12px * var(--scale)) calc(8px * var(--scale)) calc(8px * var(--scale));
+  padding: calc(14px * var(--scale)) calc(8px * var(--scale)) calc(10px * var(--scale));
   border-top: 1px solid var(--glass-border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .themeRow {
@@ -684,19 +1063,25 @@
 
 /* --- Theme keyframes --- */
 
-/* Thumb slides with smooth, fluid motion */
+/* Thumb bounces across like a ball — squash & stretch */
 @keyframes thumbSlideToDark {
-  0%   { transform: translateX(calc(26px * var(--scale))) rotate(0.5turn) scale(1); }
-  40%  { transform: translateX(calc(2px * var(--scale))) rotate(0.08turn) scale(1.06); }
-  70%  { transform: translateX(calc(-1px * var(--scale))) rotate(-0.01turn) scale(0.98); }
-  100% { transform: translateX(0) rotate(0turn) scale(1); }
+  0%   { transform: translateX(calc(26px * var(--scale))) scale(1, 1); }
+  10%  { transform: translateX(calc(24px * var(--scale))) scale(0.88, 1.12); }
+  35%  { transform: translateX(calc(2px * var(--scale))) scale(1.1, 0.9); }
+  50%  { transform: translateX(calc(-2px * var(--scale))) scale(0.95, 1.05); }
+  65%  { transform: translateX(calc(1.5px * var(--scale))) scale(1.03, 0.97); }
+  80%  { transform: translateX(calc(-0.5px * var(--scale))) scale(0.99, 1.01); }
+  100% { transform: translateX(0) scale(1, 1); }
 }
 
 @keyframes thumbSlideToLight {
-  0%   { transform: translateX(0) rotate(0turn) scale(1); }
-  40%  { transform: translateX(calc(24px * var(--scale))) rotate(0.4turn) scale(1.06); }
-  70%  { transform: translateX(calc(27px * var(--scale))) rotate(0.52turn) scale(0.98); }
-  100% { transform: translateX(calc(26px * var(--scale))) rotate(0.5turn) scale(1); }
+  0%   { transform: translateX(0) scale(1, 1); }
+  10%  { transform: translateX(calc(2px * var(--scale))) scale(0.88, 1.12); }
+  35%  { transform: translateX(calc(24px * var(--scale))) scale(1.1, 0.9); }
+  50%  { transform: translateX(calc(28px * var(--scale))) scale(0.95, 1.05); }
+  65%  { transform: translateX(calc(24.5px * var(--scale))) scale(1.03, 0.97); }
+  80%  { transform: translateX(calc(26.5px * var(--scale))) scale(0.99, 1.01); }
+  100% { transform: translateX(calc(26px * var(--scale))) scale(1, 1); }
 }
 
 /* Moon glyph gently rotates into view */
@@ -732,6 +1117,22 @@
 }
 
 /* Track background colour breathes on switch */
+/* Dark track perpetual glow breathing */
+@keyframes trackGlowBreath {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 3px rgba(0, 0, 0, 0.2),
+      0 0 10px color-mix(in srgb, var(--accent) 18%, transparent),
+      0 0 24px color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 3px rgba(0, 0, 0, 0.2),
+      0 0 14px color-mix(in srgb, var(--accent) 25%, transparent),
+      0 0 32px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+}
+
 @keyframes trackPulseDark {
   0%   { box-shadow: inset 0 1px 3px rgba(0,0,0,0.2), 0 0 0 0 color-mix(in srgb, var(--accent) 15%, transparent); }
   50%  { box-shadow: inset 0 1px 3px rgba(0,0,0,0.2), 0 0 8px 1px color-mix(in srgb, var(--accent) 10%, transparent); }
@@ -744,23 +1145,67 @@
   100% { box-shadow: inset 0 1px 3px rgba(0,0,0,0.1), 0 0 0 0 transparent; }
 }
 
-/* Track tilts so the thumb "rolls downhill" — jelly squash on tilt */
-@keyframes trackTiltToDark {
-  0%   { transform: rotate(0deg) scaleX(1) scaleY(1); }
-  12%  { transform: rotate(-14deg) scaleX(1.03) scaleY(0.97); }
-  35%  { transform: rotate(-9deg) scaleX(0.985) scaleY(1.015); }
-  55%  { transform: rotate(-4deg) scaleX(1.01) scaleY(0.99); }
-  75%  { transform: rotate(-1deg) scaleX(0.998) scaleY(1.002); }
-  100% { transform: rotate(0deg) scaleX(1) scaleY(1); }
+/* Track squeeze — horizontal squish-stretch like a rubber tube the thumb pushes through */
+@keyframes trackSqueezeToDark {
+  0%   { transform: scaleX(1) scaleY(1); }
+  15%  { transform: scaleX(0.94) scaleY(1.04); }
+  30%  { transform: scaleX(1.03) scaleY(0.97); }
+  45%  { transform: scaleX(0.99) scaleY(1.01); }
+  60%  { transform: scaleX(1.01) scaleY(0.99); }
+  100% { transform: scaleX(1) scaleY(1); }
 }
 
-@keyframes trackTiltToLight {
-  0%   { transform: rotate(0deg) scaleX(1) scaleY(1); }
-  12%  { transform: rotate(14deg) scaleX(1.03) scaleY(0.97); }
-  35%  { transform: rotate(9deg) scaleX(0.985) scaleY(1.015); }
-  55%  { transform: rotate(4deg) scaleX(1.01) scaleY(0.99); }
-  75%  { transform: rotate(1deg) scaleX(0.998) scaleY(1.002); }
-  100% { transform: rotate(0deg) scaleX(1) scaleY(1); }
+@keyframes trackSqueezeToLight {
+  0%   { transform: scaleX(1) scaleY(1); }
+  15%  { transform: scaleX(0.94) scaleY(1.04); }
+  30%  { transform: scaleX(1.03) scaleY(0.97); }
+  45%  { transform: scaleX(0.99) scaleY(1.01); }
+  60%  { transform: scaleX(1.01) scaleY(0.99); }
+  100% { transform: scaleX(1) scaleY(1); }
+}
+
+/* Dark mode track idle — gentle starfield twinkle glow */
+@keyframes trackStarfieldBreath {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 3px rgba(0, 0, 0, 0.2),
+      0 0 8px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 3px rgba(0, 0, 0, 0.2),
+      0 0 14px color-mix(in srgb, var(--accent) 20%, transparent),
+      0 0 28px color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+}
+
+/* Light mode — warm solar glow */
+@keyframes trackSolarGlow {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, 0.06),
+      0 0 6px color-mix(in srgb, #ffd75a 8%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, 0.06),
+      0 0 12px color-mix(in srgb, #ffd75a 14%, transparent),
+      0 0 24px color-mix(in srgb, #ffd75a 5%, transparent);
+  }
+}
+
+/* Slow idle ray rotation for light mode sun */
+@keyframes raysIdleSpin {
+  from { transform: scale(1) rotate(0deg); }
+  to   { transform: scale(1) rotate(360deg); }
+}
+
+/* Star re-twinkle — periodic blink for dark mode */
+@keyframes starRetwinkle {
+  0%, 70%, 100% { opacity: 0.92; transform: scale(1) rotate(0deg); }
+  75%           { opacity: 0.4; transform: scale(0.7) rotate(-8deg); }
+  82%           { opacity: 1; transform: scale(1.15) rotate(4deg); }
+  90%           { opacity: 0.92; transform: scale(0.95) rotate(-1deg); }
 }
 
 /* --- Theme toggle structure --- */
@@ -781,45 +1226,69 @@
   border-radius: 999px;
 }
 
-/* --- Track — glass border matching dial bezel --- */
+/* --- Track — shared instrument bezel --- */
 .themeToggleTrack {
   position: relative;
   width: calc(56px * var(--scale));
   height: calc(30px * var(--scale));
   border-radius: 999px;
-  border: 1.5px solid var(--glass-border);
+  border: 2px solid var(--bezel);
   background:
-    linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 50%),
-    color-mix(in srgb, var(--glass-bg) 80%, var(--panel));
+    linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%),
+    color-mix(in srgb, var(--glass-bg) 85%, var(--panel));
   overflow: hidden;
   flex-shrink: 0;
   box-shadow:
-    inset 0 1px 3px rgba(0,0,0,0.2),
-    inset 0 -1px 0 rgba(255,255,255,0.05),
-    0 1px 0 rgba(255,255,255,0.04);
-  transition: border-color 440ms ease, box-shadow 440ms ease;
+    0 2px 6px rgba(0,0,0,0.3),
+    0 4px 14px rgba(0,0,0,0.12),
+    inset 0 1px 2px rgba(0,0,0,0.2),
+    inset 0 -1px 0 rgba(255,255,255,0.05);
+  transition: border-color 350ms ease, box-shadow 350ms ease;
 }
 
 .themeToggle:hover .themeToggleTrack {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
+  border-color: var(--bezel-hover);
   box-shadow:
-    inset 0 1px 3px rgba(0,0,0,0.2),
-    0 0 5px color-mix(in srgb, var(--accent) 8%, transparent);
+    0 2px 8px rgba(0,0,0,0.32),
+    0 4px 16px rgba(0,0,0,0.15),
+    0 0 12px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 2px rgba(0,0,0,0.2);
 }
 
+/* Dark track — subtle accent tint + squeeze + idle glow */
 .themeToggleDark .themeToggleTrack {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, transparent 50%),
+    color-mix(in srgb, var(--accent) 8%, var(--glass-bg));
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--glass-border));
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.3),
+    0 4px 14px rgba(0,0,0,0.12),
+    inset 0 1px 2px rgba(0,0,0,0.2);
   animation:
     trackPulseDark 1400ms ease both,
-    trackTiltToDark 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+    trackSqueezeToDark 800ms var(--ease-overshoot) both,
+    trackStarfieldBreath 4s 1.5s ease-in-out infinite;
 }
 
+/* Light track — warm glow + squeeze */
 .themeToggleLight .themeToggleTrack {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 50%),
+    color-mix(in srgb, var(--glass-bg) 92%, var(--panel));
+  border-color: var(--bezel);
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.2),
+    0 4px 14px rgba(0,0,0,0.08),
+    inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  opacity: 0.8;
   animation:
     trackPulseLight 1400ms ease both,
-    trackTiltToLight 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+    trackSqueezeToLight 800ms var(--ease-overshoot) both,
+    trackSolarGlow 5s 1.5s ease-in-out infinite;
 }
 
-/* --- Thumb — metallic like dial lens --- */
+/* --- Thumb — convex glass lens (matches dial lens) --- */
 .themeToggleThumb {
   position: absolute;
   left: calc(3px * var(--scale));
@@ -828,13 +1297,16 @@
   height: calc(22px * var(--scale));
   border-radius: 50%;
   background:
-    radial-gradient(ellipse 70% 50% at 38% 30%, rgba(255,255,255,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 38% 30%, rgba(255,255,255,0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 90% 80% at 50% 50%, transparent 50%, rgba(20, 27, 45, 0.06) 100%),
     color-mix(in srgb, var(--accent) 15%, var(--glass-bg));
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--glass-border));
+  border: 1.5px solid color-mix(in srgb, var(--accent) 25%, var(--glass-border));
   box-shadow:
-    0 1px 4px rgba(0,0,0,0.3),
-    inset 0 1px 0 rgba(255,255,255,0.08);
-  transform: translateX(0) rotate(0turn) scale(1);
+    0 2px 4px rgba(0,0,0,0.25),
+    0 0 6px color-mix(in srgb, var(--accent) 10%, transparent),
+    inset 0 1px 2px rgba(255,255,255,0.1),
+    inset 0 -1px 1px rgba(0,0,0,0.08);
+  transform: translateX(0) scale(1);
   transform-origin: center;
   will-change: transform;
 }
@@ -912,16 +1384,16 @@
     transparent 97%, #000 100%
   );
   transition:
-    --glyph-cutout-x 1000ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
-    --glyph-cutout-y 1000ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
-    --glyph-cutout-r 1000ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    --glyph-cutout-x 1000ms var(--ease-decelerate),
+    --glyph-cutout-y 1000ms var(--ease-decelerate),
+    --glyph-cutout-r 1000ms var(--ease-decelerate),
     box-shadow 800ms ease;
 }
 
 /* ─── Dark state (moon + star) ─── */
 
 .themeToggleDark .themeToggleThumb {
-  animation: thumbSlideToDark 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation: thumbSlideToDark 1200ms var(--ease-decelerate) both;
 }
 
 .themeToggleDark .themeGlyph {
@@ -929,7 +1401,7 @@
   --glyph-cutout-y: 5.5px;
   --glyph-cutout-r: 5.5px;
   box-shadow: 0 0 6px color-mix(in srgb, #ffd75a 18%, transparent);
-  animation: moonAppear 1100ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation: moonAppear 1100ms var(--ease-decelerate) both;
 }
 
 .themeToggleDark .themeToggleThumb::before {
@@ -938,13 +1410,15 @@
 }
 
 .themeToggleDark .themeToggleThumb::after {
-  animation: starTwinkle 900ms 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation:
+    starTwinkle 900ms 300ms var(--ease-decelerate) both,
+    starRetwinkle 5s 2s ease-in-out infinite;
 }
 
 /* ─── Light state (sun + rays) ─── */
 
 .themeToggleLight .themeToggleThumb {
-  animation: thumbSlideToLight 1200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation: thumbSlideToLight 1200ms var(--ease-decelerate) both;
   background:
     radial-gradient(ellipse 70% 50% at 38% 30%, rgba(255,255,255,0.15) 0%, transparent 60%),
     color-mix(in srgb, var(--panel-hover) 84%, var(--accent));
@@ -958,11 +1432,13 @@
   box-shadow:
     0 0 0 1.5px color-mix(in srgb, #ffd75a 65%, transparent),
     0 0 10px color-mix(in srgb, #ffd75a 30%, transparent);
-  animation: sunAppear 1100ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation: sunAppear 1100ms var(--ease-decelerate) both;
 }
 
 .themeToggleLight .themeToggleThumb::before {
-  animation: raysSpinIn 1000ms 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  animation:
+    raysSpinIn 1000ms 200ms var(--ease-decelerate) both,
+    raysIdleSpin 30s 1.5s linear infinite;
 }
 
 .themeToggleLight .themeToggleThumb::after {
@@ -1076,7 +1552,7 @@
   );
   pointer-events: none;
   z-index: 4;
-  transition: --dial-angle 500ms cubic-bezier(0.22, 0.9, 0.25, 1);
+  transition: --dial-angle 500ms var(--ease-smooth-pop);
 }
 
 /* Bottom ambient reflection */
@@ -1112,7 +1588,7 @@
   );
   pointer-events: none;
   /* Trails behind indicator — slower transition creates the wave lag */
-  transition: --dial-angle 500ms cubic-bezier(0.22, 0.9, 0.25, 1);
+  transition: --dial-angle 500ms var(--ease-smooth-pop);
   /* Soft glow edge */
   filter: blur(1.5px);
   opacity: 0.7;
@@ -1126,7 +1602,7 @@
 
 .scaleDialActive {
   cursor: grabbing;
-  animation: dialSquashIn 350ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: dialSquashIn 350ms var(--ease-smooth-pop) both;
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
     drop-shadow(0 1px 2px rgba(0, 0, 0, 0.08));
@@ -1168,13 +1644,13 @@
       rgba(255, 255, 255, 0.02) 100%
     ),
     var(--glass-bg);
-  border: 1.5px solid var(--glass-border);
+  border: 2px solid var(--bezel);
   /* 3D bevel: bright top edge, dark bottom edge, inner recess */
   box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.35),
-    0 4px 14px rgba(0, 0, 0, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    0 4px 14px rgba(0, 0, 0, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
   transition: transform 100ms ease-out, border-color 250ms ease, box-shadow 300ms ease;
   will-change: transform;
   animation: dialIdlePulse 4s ease-in-out infinite;
@@ -1220,22 +1696,22 @@
 }
 
 .scaleDial:hover .scaleDialRing {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--glass-border));
+  border-color: var(--bezel-hover);
   box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.38),
-    0 4px 16px rgba(0, 0, 0, 0.20),
+    0 2px 8px rgba(0, 0, 0, 0.32),
+    0 4px 16px rgba(0, 0, 0, 0.15),
+    0 0 12px color-mix(in srgb, var(--accent) 12%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.10),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
-    0 0 14px color-mix(in srgb, var(--accent) 12%, transparent);
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
 }
 
 .scaleDialActive .scaleDialRing {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+  border-color: var(--bezel-active);
   box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.45),
+    0 1px 3px rgba(0, 0, 0, 0.4),
+    0 0 18px color-mix(in srgb, var(--accent) 20%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.20),
-    0 0 18px color-mix(in srgb, var(--accent) 20%, transparent);
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
   animation: none;
 }
 
@@ -1306,7 +1782,7 @@
   text-shadow:
     0 0 8px color-mix(in srgb, var(--accent) 30%, transparent),
     0 1px 2px rgba(0, 0, 0, 0.5);
-  transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 250ms var(--ease-overshoot);
 }
 
 .scaleDialActive .scaleDialValue {
@@ -1386,6 +1862,9 @@
   .themeGlyph,
   .themeToggleThumb::before,
   .themeToggleThumb::after,
+  .sidebarPinned,
+  .sidebarUnpinned,
+  .sidebarPinned .logo,
   .pinIconWrap,
   .pinHead,
   .pinShine,
@@ -1393,19 +1872,29 @@
   .pinShadow,
   .pinRipple,
   .pinLabel,
+  .navLabel,
   .navLink,
   .navLinkActive,
   .navLinkActive::before,
   .navLink::before,
   .navLink::after,
   .navIcon,
+  .logoMidTL,
+  .logoMidTR,
+  .logoMidBot,
+  .logoEdgeInner,
+  .logoFacetFill,
   .scaleDial,
   .scaleDialActive,
   .scaleDialRing,
   .scaleDialRing::before,
   .scaleDialWave,
   .scaleDialLens::after,
-  .scaleDialValue {
+  .scaleDialValue,
+  .sidebar::after,
+  .sidebarPinned::after,
+  .sidebarUnpinned::after,
+  .logoSubInertia {
     animation: none;
     transition: none;
   }

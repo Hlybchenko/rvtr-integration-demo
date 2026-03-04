@@ -147,12 +147,40 @@
   overflow: visible;
 }
 
-/* Central prism — rocks side to side */
+/* ── Pulse rings — expanding from prism center ── */
+
+@keyframes loaderPulseRing {
+  0%   { scale: 0.3; opacity: 0.5; border-width: 1.5px; }
+  60%  { opacity: 0.15; }
+  100% { scale: 2.8; opacity: 0; border-width: 0.5px; }
+}
+
+.loaderRing {
+  position: absolute;
+  top: 28%;
+  left: 50%;
+  width: calc(22px * var(--scale));
+  height: calc(22px * var(--scale));
+  margin: calc(-11px * var(--scale)) 0 0 calc(-11px * var(--scale));
+  border: 1.5px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: loaderPulseRing 2.8s ease-out infinite;
+}
+
+/* ── Prism glow — breathing halo ── */
+
+@keyframes loaderPrismGlow {
+  0%, 100% { filter: drop-shadow(0 0 2px transparent); }
+  50%      { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 25%, transparent)) drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 8%, transparent)); }
+}
+
+/* Central prism — rocks side to side + breathing glow */
 .loaderPrism {
   position: relative;
   z-index: 1;
-  animation: loaderPrismRock 4s ease-in-out infinite;
-  will-change: transform;
+  animation: loaderPrismRock 4s ease-in-out infinite, loaderPrismGlow 3s ease-in-out infinite;
+  will-change: transform, filter;
 }
 
 @keyframes loaderPrismRock {
@@ -174,13 +202,14 @@
   will-change: transform;
 }
 
-/* Arrow SVG — handles breathing scale only */
+/* Arrow SVG — breathing scale + accent glow trail */
 .loaderArrows {
   width: 100%;
   height: 100%;
   overflow: visible;
   transform-origin: 50% 33.3%;
   animation: loaderStab 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 30%, transparent));
 }
 
 @keyframes loaderOrbit {
@@ -256,7 +285,10 @@
 
   .loaderPrism,
   .loaderArrows,
-  .loaderText {
+  .loaderText,
+  .loaderRing,
+  .loaderChar,
+  .loaderDot {
     animation: none;
   }
 }

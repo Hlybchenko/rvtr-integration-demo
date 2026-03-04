@@ -1,0 +1,57 @@
+/* ══════════════════════════════════════════════════════════════
+   Shared select dropdown — composed by component CSS modules
+   ══════════════════════════════════════════════════════════════ */
+
+.base {
+  width: 100%;
+  padding: calc(8px * var(--scale)) calc(10px * var(--scale));
+  font-size: var(--font-sm);
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--text-primary);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%),
+    var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: calc(8px * var(--scale));
+  outline: none;
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    box-shadow 250ms ease,
+    background 200ms ease;
+  color-scheme: dark;
+}
+
+.base option {
+  background: #1a1c2e;
+  color: #e2e4f0;
+}
+
+.base option:checked {
+  background: var(--accent, #6c5ce7);
+  color: #fff;
+}
+
+.base:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-border));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 100%),
+    color-mix(in srgb, var(--accent) 4%, var(--glass-bg));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.base:focus {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 0 8px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .base {
+    transition: none;
+  }
+}

@@ -1,0 +1,289 @@
+/* ══════════════════════════════════════════════════════════════
+   Shared button primitives — composed by component CSS modules
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Keyframes ── */
+
+@keyframes shineSweep {
+  0%   { transform: translateX(-200%); opacity: 0; }
+  20%  { opacity: 0.7; }
+  100% { transform: translateX(400%); opacity: 0; }
+}
+
+@keyframes pressRipple {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent); }
+  50%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+@keyframes pressJelly {
+  0%   { transform: scale(1); }
+  30%  { transform: scaleX(1.06) scaleY(0.9); }
+  55%  { transform: scaleX(0.97) scaleY(1.04); }
+  75%  { transform: scaleX(1.01) scaleY(0.99); }
+  100% { transform: scale(1); }
+}
+
+/* ── Base ── */
+
+.base {
+  appearance: none;
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    color 200ms ease,
+    opacity 200ms ease,
+    transform 250ms var(--ease-overshoot),
+    box-shadow 200ms ease;
+}
+
+.base:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+.base:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+}
+
+/* ── Decorators ── */
+
+.glossy::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.15) 48%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.15) 52%,
+    transparent 70%
+  );
+  pointer-events: none;
+  opacity: 0;
+}
+
+.shine:hover:not(:disabled)::after {
+  will-change: transform;
+  animation: shineSweep 600ms ease-out;
+}
+
+/* ── Sizes ── */
+
+.md {
+  min-height: 42px;
+  padding: 8px 18px;
+  font-size: var(--font-sm);
+}
+
+.sm {
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: var(--font-sm);
+}
+
+.xs {
+  min-height: calc(30px * var(--scale));
+  padding: calc(4px * var(--scale)) calc(12px * var(--scale));
+  font-size: var(--font-sm);
+}
+
+/* ── Color variants ── */
+
+.accent {
+  border: 1px solid var(--accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+  color: var(--accent);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.accent:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--accent) 24%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.accent:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 3px rgba(0, 0, 0, 0.1) inset,
+    0 1px 2px rgba(0, 0, 0, 0.1);
+  animation: pressRipple 400ms ease;
+}
+
+.accent:disabled {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+}
+
+/* ── Danger ── */
+
+.danger {
+  border: 1px solid var(--danger);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.06) 100%),
+    color-mix(in srgb, var(--danger) 10%, var(--glass-bg));
+  color: var(--danger);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.danger:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.04) 100%),
+    color-mix(in srgb, var(--danger) 20%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 14px color-mix(in srgb, var(--danger) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.danger:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+}
+
+/* ── Secondary (glass-border) ── */
+
+.secondary {
+  border: 1px solid var(--glass-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.05) 100%),
+    var(--glass-bg);
+  color: var(--text-primary);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.1) inset,
+    0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.03) 100%),
+    color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.1) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.06) inset,
+    0 4px 10px color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.secondary:active:not(:disabled) {
+  transform: scale(0.97) translateY(1px);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 2px 3px rgba(0, 0, 0, 0.1) inset,
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Glass (UeControlPanel small buttons) ── */
+
+.glass {
+  border: 1px solid var(--glass-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 100%),
+    var(--glass-bg);
+  color: var(--text-primary);
+  border-radius: calc(8px * var(--scale));
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    color 200ms ease,
+    box-shadow 250ms ease,
+    transform 250ms var(--ease-overshoot);
+}
+
+.glass:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%),
+    color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
+  color: var(--accent);
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--accent) 10%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.glass::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  border-radius: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 30%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0.1) 70%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+
+.glass:hover:not(:disabled)::after {
+  opacity: 1;
+}
+
+.glass:active:not(:disabled) {
+  animation: pressJelly 350ms var(--ease-smooth-pop) both;
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .base,
+  .accent,
+  .danger,
+  .secondary,
+  .glass {
+    animation: none;
+    transition: none;
+  }
+}

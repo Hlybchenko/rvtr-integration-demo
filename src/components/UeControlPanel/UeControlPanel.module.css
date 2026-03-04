@@ -45,13 +45,13 @@
   color: var(--text-secondary);
   cursor: pointer;
   /* backdrop-filter removed — causes PS iframe recompositing freeze */
-  animation: triggerPopIn 500ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: triggerPopIn 500ms var(--ease-smooth-pop) both;
   transition:
     border-color 200ms ease,
     background 200ms ease,
     color 200ms ease,
     box-shadow 250ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform 250ms var(--ease-overshoot);
 }
 
 .trigger:hover {
@@ -97,7 +97,7 @@
   align-items: center;
   justify-content: center;
   line-height: 1;
-  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 300ms var(--ease-overshoot);
 }
 
 .trigger:hover .triggerIcon {
@@ -112,7 +112,7 @@
 .knob1,
 .knob2,
 .knob3 {
-  transition: transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 500ms var(--ease-overshoot);
 }
 
 .trigger:hover .knob1 { transform: translateX(2px); }
@@ -166,7 +166,7 @@
   border-radius: 100px;
   /* backdrop-filter removed — causes PS iframe recompositing freeze */
   white-space: nowrap;
-  animation: statusSlideIn 500ms 200ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: statusSlideIn 500ms 200ms var(--ease-smooth-pop) both;
   transition:
     border-color 400ms ease,
     box-shadow 400ms ease,
@@ -177,7 +177,7 @@
 .statusConnected {
   border-color: color-mix(in srgb, var(--success) 20%, var(--glass-border));
   animation:
-    statusSlideIn 500ms 200ms cubic-bezier(0.22, 0.9, 0.25, 1) both,
+    statusSlideIn 500ms 200ms var(--ease-smooth-pop) both,
     statusGlowBreathe 4s ease-in-out 700ms infinite;
 }
 
@@ -266,7 +266,7 @@
     var(--glass-shadow),
     0 8px 32px rgba(0, 0, 0, 0.3);
   /* backdrop-filter removed — causes PS iframe recompositing freeze */
-  animation: panelIn 350ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  animation: panelIn 350ms var(--ease-smooth-pop) both;
 }
 
 /* Thin glossy top-edge highlight on panel */
@@ -297,19 +297,8 @@
 }
 
 .section {
-  display: flex;
-  flex-direction: column;
-  gap: calc(8px * var(--scale));
-  padding: calc(10px * var(--scale));
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%),
-    var(--card-nested-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: calc(10px * var(--scale));
-  animation: sectionSlideIn 350ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
-  transition:
-    border-color 250ms ease,
-    box-shadow 250ms ease;
+  composes: nested from '@/shared/ui/card.module.css';
+  animation: sectionSlideIn 350ms var(--ease-smooth-pop) both;
 }
 
 /* Stagger sections */
@@ -318,11 +307,6 @@
 .section:nth-child(3) { animation-delay: 130ms; }
 .section:nth-child(4) { animation-delay: 180ms; }
 .section:nth-child(5) { animation-delay: 230ms; }
-
-.section:hover {
-  border-color: color-mix(in srgb, var(--glass-border) 70%, var(--accent));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 6%, transparent);
-}
 
 .sectionTitle {
   margin: 0;
@@ -451,7 +435,7 @@
     0 0 6px color-mix(in srgb, var(--accent) 30%, transparent),
     inset 0 1px 1px rgba(255,255,255,0.2);
   transition:
-    transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 200ms var(--ease-overshoot),
     box-shadow 200ms ease;
 }
 
@@ -473,219 +457,19 @@
 /* ═══════════════════ Select ═══════════════════ */
 
 .select {
-  width: 100%;
-  padding: calc(8px * var(--scale)) calc(10px * var(--scale));
-  font-size: var(--font-sm);
-  font-family: inherit;
-  font-weight: 500;
-  color: var(--text-primary);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%),
-    var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: calc(8px * var(--scale));
-  outline: none;
-  cursor: pointer;
-  transition:
-    border-color 200ms ease,
-    box-shadow 250ms ease,
-    background 200ms ease;
-  /* Force dark dropdown on Windows (native <select> ignores parent theme) */
-  color-scheme: dark;
-}
-
-.select option {
-  background: #1a1c2e;
-  color: #e2e4f0;
-}
-
-.select option:checked {
-  background: var(--accent, #6c5ce7);
-  color: #fff;
-}
-
-.select:hover {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-border));
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%),
-    color-mix(in srgb, var(--accent) 4%, var(--glass-bg));
-  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 6%, transparent);
-}
-
-.select:focus {
-  border-color: var(--accent);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
-    0 0 8px color-mix(in srgb, var(--accent) 10%, transparent);
+  composes: base from '@/shared/ui/select.module.css';
 }
 
 /* ═══════════════════ Toggle switch ═══════════════════ */
 
-@keyframes toggleBounceOn {
-  0%   { transform: translateX(0); }
-  35%  { transform: translateX(calc(18px * var(--scale))) scaleX(1.15) scaleY(0.88); }
-  55%  { transform: translateX(calc(14px * var(--scale))) scaleX(0.95) scaleY(1.06); }
-  72%  { transform: translateX(calc(17px * var(--scale))) scaleX(1.02) scaleY(0.98); }
-  100% { transform: translateX(calc(16px * var(--scale))) scaleX(1) scaleY(1); }
-}
-
-@keyframes toggleBounceOff {
-  0%   { transform: translateX(calc(16px * var(--scale))); }
-  35%  { transform: translateX(calc(-2px * var(--scale))) scaleX(1.15) scaleY(0.88); }
-  55%  { transform: translateX(calc(3px * var(--scale))) scaleX(0.95) scaleY(1.06); }
-  72%  { transform: translateX(calc(-1px * var(--scale))) scaleX(1.02) scaleY(0.98); }
-  100% { transform: translateX(0) scaleX(1) scaleY(1); }
-}
-
-@keyframes toggleTrackGlowOn {
-  0%   { box-shadow: inset 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
-  50%  { box-shadow: inset 0 0 10px 1px color-mix(in srgb, var(--accent) 35%, transparent); }
-  100% { box-shadow: inset 0 0 4px 0 color-mix(in srgb, var(--accent) 15%, transparent); }
-}
-
 .toggle {
-  position: relative;
-  width: calc(38px * var(--scale));
-  height: calc(22px * var(--scale));
-  flex-shrink: 0;
-  appearance: none;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%),
-    var(--glass-border);
-  border: 1px solid color-mix(in srgb, var(--glass-border) 70%, transparent);
-  border-radius: calc(11px * var(--scale));
-  cursor: pointer;
-  transition:
-    background 350ms ease,
-    border-color 350ms ease,
-    box-shadow 350ms ease;
-}
-
-.toggle:checked {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 100%),
-    var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  animation: toggleTrackGlowOn 500ms ease both;
-}
-
-.toggle::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: calc(16px * var(--scale));
-  height: calc(16px * var(--scale));
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 38% 35%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.15) 60%, transparent 100%),
-    white;
-  box-shadow:
-    0 1px 3px rgba(0,0,0,0.2),
-    inset 0 -1px 1px rgba(0,0,0,0.06);
-  transition:
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 250ms ease;
-}
-
-.toggle:checked::before {
-  animation: toggleBounceOn 500ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
-  box-shadow:
-    0 1px 4px rgba(0,0,0,0.25),
-    0 0 8px color-mix(in srgb, var(--accent) 30%, transparent),
-    inset 0 -1px 1px rgba(0,0,0,0.06);
-}
-
-.toggle:not(:checked)::before {
-  animation: toggleBounceOff 500ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
-}
-
-.toggle:hover::before {
-  box-shadow:
-    0 1px 4px rgba(0,0,0,0.25),
-    0 0 6px color-mix(in srgb, var(--accent) 20%, transparent);
+  composes: base from '@/shared/ui/toggle.module.css';
 }
 
 /* ═══════════════════ Small action buttons ═══════════════════ */
 
-@keyframes btnPressJelly {
-  0%   { transform: scale(1); }
-  30%  { transform: scaleX(1.06) scaleY(0.9); }
-  55%  { transform: scaleX(0.97) scaleY(1.04); }
-  75%  { transform: scaleX(1.01) scaleY(0.99); }
-  100% { transform: scale(1); }
-}
-
 .smallButton {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: calc(30px * var(--scale));
-  padding: calc(4px * var(--scale)) calc(12px * var(--scale));
-  font-size: var(--font-sm);
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--text-primary);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 100%),
-    var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: calc(8px * var(--scale));
-  cursor: pointer;
-  transition:
-    border-color 200ms ease,
-    background 200ms ease,
-    color 200ms ease,
-    box-shadow 250ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-/* Glossy top-edge shine */
-.smallButton::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 1px;
-  border-radius: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255,255,255,0.1) 30%,
-    rgba(255,255,255,0.16) 50%,
-    rgba(255,255,255,0.1) 70%,
-    transparent 100%
-  );
-  opacity: 0;
-  transition: opacity 200ms ease;
-  pointer-events: none;
-}
-
-.smallButton {
-  position: relative;
-  overflow: hidden;
-}
-
-.smallButton:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border));
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%),
-    color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
-  color: var(--accent);
-  box-shadow:
-    0 0 10px color-mix(in srgb, var(--accent) 10%, transparent),
-    inset 0 1px 0 rgba(255,255,255,0.08);
-  transform: translateY(-1px);
-}
-
-.smallButton:hover::after {
-  opacity: 1;
-}
-
-.smallButton:active {
-  animation: btnPressJelly 350ms cubic-bezier(0.22, 0.9, 0.25, 1) both;
+  composes: base xs glass from '@/shared/ui/button.module.css';
 }
 
 .buttonRow {
@@ -725,7 +509,7 @@
     background 200ms ease,
     color 200ms ease,
     box-shadow 250ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform 250ms var(--ease-overshoot);
 }
 
 .resetButton:hover {
@@ -770,6 +554,7 @@
 }
 
 /* ═══════════════════ Reduced motion ═══════════════════ */
+/* NOTE: toggle/select/smallButton reduced-motion handled in shared modules */
 
 @media (prefers-reduced-motion: reduce) {
   .trigger,
@@ -778,9 +563,6 @@
   .statusLabel,
   .statusDotConnected,
   .statusDotDisconnected,
-  .toggle,
-  .toggle::before,
-  .smallButton,
   .resetButton {
     animation: none;
   }
@@ -788,10 +570,6 @@
   .trigger,
   .sliderTrack::before,
   .sliderThumb,
-  .select,
-  .toggle,
-  .toggle::before,
-  .smallButton,
   .resetButton,
   .controlRow,
   .controlLabel,

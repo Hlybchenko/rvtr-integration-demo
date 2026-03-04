@@ -324,6 +324,43 @@ export async function forceRewriteVoiceAgentFile(
 }
 
 // ---------------------------------------------------------------------------
+// Face capture — human assistant mode
+// ---------------------------------------------------------------------------
+
+export async function sendFaceCapture(
+  enabled: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const response = await fetchWithTimeout(`${WRITER_BASE_URL}/face-capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+
+    const payload = await parseJsonSafely(response);
+    const record = (payload && typeof payload === 'object' ? payload : {}) as Record<
+      string,
+      unknown
+    >;
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          typeof record.error === 'string' ? record.error : 'Failed to send face capture command',
+      };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Failed to send face capture command',
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Executable path — global .bat/.sh for start2stream
 // ---------------------------------------------------------------------------
 
