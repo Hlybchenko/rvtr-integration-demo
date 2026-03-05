@@ -396,7 +396,6 @@ export function OverviewPage() {
       if (!result.matched) {
         throw new Error('File verification failed — provider was not written');
       }
-      setVoiceAgent(pendingAgent);
 
       // 2. Restart kiosk-app: stop then start
       const kioskId: ShortcutId = 'kiosk-app';
@@ -423,6 +422,10 @@ export function OverviewPage() {
           setLaunching((prev) => ({ ...prev, [kioskId]: false }));
         }, LAUNCH_COOLDOWN_MS);
       }
+
+      // 3. Commit agent to store only after all steps succeeded —
+      //    prevents inconsistent state when file is written but process restart fails
+      setVoiceAgent(pendingAgent);
     } catch (err) {
       setApplyError(err instanceof Error ? err.message : String(err));
       setLaunching((prev) => ({ ...prev, 'kiosk-app': false }));

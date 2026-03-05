@@ -1,5 +1,5 @@
 .sidebar {
-  --sidebar-inset: calc(8px * var(--scale));
+  --sidebar-inset: var(--space-2);
 
   position: fixed;
   top: var(--sidebar-inset);
@@ -665,7 +665,7 @@
 .logoTextWrap {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(2px * var(--scale));
   min-width: 0;
 }
 
@@ -1853,6 +1853,23 @@
 :global([data-theme='light']) .scaleDialWave {
   opacity: 0.9;
   filter: blur(1px);
+}
+
+/* ── Light theme sidebar overrides ── */
+:global([data-theme='light']) .sidebar {
+  border-top-color: rgba(255, 255, 255, 0.6);
+  border-left-color: rgba(255, 255, 255, 0.4);
+  border-right-color: rgba(255, 255, 255, 0.25);
+  border-bottom-color: rgba(20, 27, 45, 0.08);
+  box-shadow:
+    0 20px 60px rgba(20, 27, 45, 0.08),
+    0 8px 24px rgba(20, 27, 45, 0.05),
+    0 2px 6px rgba(20, 27, 45, 0.04),
+    0 0 40px color-mix(in srgb, var(--accent) 3%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 1px 0 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(20, 27, 45, 0.04),
+    inset 0 -30px 40px -20px rgba(20, 27, 45, 0.02);
 }
 
 @media (prefers-reduced-motion: reduce) {

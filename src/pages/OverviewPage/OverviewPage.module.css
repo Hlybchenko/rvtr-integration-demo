@@ -15,7 +15,7 @@
 .settings {
   display: flex;
   flex-direction: column;
-  padding: calc(40px * var(--scale)) calc(40px * var(--scale)) calc(80px * var(--scale));
+  padding: var(--space-7) var(--space-7) calc(80px * var(--scale));
   gap: var(--space-6);
   max-width: 1100px;
   animation: fadeInUp 400ms var(--ease-smooth-pop) both;
@@ -187,7 +187,7 @@
 
 @keyframes modeSwitchHint {
   0%, 100% { color: var(--accent); }
-  50%      { color: color-mix(in srgb, var(--accent) 60%, #fff); }
+  50%      { color: color-mix(in srgb, var(--accent) 60%, var(--text-primary)); }
 }
 
 /* ── AI chip icon animations ── */
@@ -263,13 +263,13 @@
 }
 
 .modeSwitchOption:hover:not(.modeSwitchOptionActive) {
-  color: color-mix(in srgb, var(--accent) 60%, #fff);
+  color: color-mix(in srgb, var(--accent) 60%, var(--text-primary));
   background: rgba(255, 255, 255, 0.08);
   animation: none;
 }
 
 .modeSwitchOptionActive {
-  color: #fff;
+  color: var(--text-primary);
   cursor: default;
   background: transparent;
   text-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
@@ -842,6 +842,10 @@
 }
 
 /* NOTE: light theme input overrides handled in shared input.module.css */
+
+:root[data-theme='light'] .modeSwitchOption:hover:not(.modeSwitchOptionActive) {
+  background: rgba(0, 0, 0, 0.06);
+}
 
 :root[data-theme='light'] .modeSwitchOptionActive {
   color: var(--text-primary);

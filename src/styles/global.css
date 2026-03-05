@@ -37,6 +37,9 @@ body,
 a {
   color: var(--accent);
   text-decoration: none;
+  transition:
+    color var(--transition-fast),
+    opacity var(--transition-fast);
 }
 a:hover {
   color: var(--accent-hover);
@@ -45,10 +48,21 @@ a:hover {
 button {
   font-family: inherit;
   cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 input {
   font-family: inherit;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 :focus-visible {
@@ -93,6 +107,13 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
+  }
+
   body,
   #root {
     transition: none;

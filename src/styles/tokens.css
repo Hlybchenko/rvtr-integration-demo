@@ -76,11 +76,14 @@
   --space-4: calc(16px * var(--scale));
   --space-5: calc(24px * var(--scale));
   --space-6: calc(32px * var(--scale));
+  --space-7: calc(40px * var(--scale));
+  --space-8: calc(48px * var(--scale));
 
   /* Sidebar */
   --sidebar-width: calc(260px * var(--scale));
 
   /* Transitions */
+  --transition-fast: 200ms ease;
   --transition-slow: 360ms ease;
 
   /* ── Easing ── */

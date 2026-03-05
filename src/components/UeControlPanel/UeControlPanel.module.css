@@ -261,7 +261,7 @@
     var(--glass-highlight),
     var(--glass-bg);
   border: 1px solid var(--glass-border);
-  border-radius: calc(12px * var(--scale));
+  border-radius: var(--radius-md);
   box-shadow:
     var(--glass-shadow),
     0 8px 32px rgba(0, 0, 0, 0.3);
@@ -334,7 +334,7 @@
   align-items: center;
   gap: calc(8px * var(--scale));
   padding: calc(4px * var(--scale)) calc(6px * var(--scale));
-  border-radius: calc(8px * var(--scale));
+  border-radius: var(--radius-sm);
   transition:
     background 200ms ease,
     box-shadow 250ms ease;
@@ -501,7 +501,7 @@
     linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%),
     var(--glass-bg);
   border: 1px solid var(--glass-border);
-  border-radius: calc(8px * var(--scale));
+  border-radius: var(--radius-sm);
   cursor: pointer;
   overflow: hidden;
   transition:
@@ -537,7 +537,7 @@
   color: var(--text-secondary);
   background: var(--card-nested-bg);
   border: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--glass-border));
-  border-radius: calc(8px * var(--scale));
+  border-radius: var(--radius-sm);
   line-height: 1.5;
   text-align: center;
 }

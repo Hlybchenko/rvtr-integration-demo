@@ -84,6 +84,10 @@ export function useSliderSend({
 
       inFlightRef.current.add(key);
 
+      // Capture deviceId at send time — prevents stale closure reads if the
+      // component re-renders with a new deviceId while this request is in-flight.
+      const sendDeviceId = deviceId;
+
       void sendCommand(url, {
         command: cmd.command,
         [cmd.param]: String(delta),
@@ -98,7 +102,8 @@ export function useSliderSend({
             // Catch-up: if slider moved while we were in-flight, send again.
             // Only on success — on failure committed stays unchanged, and the
             // next debounce fire will recompute the full delta automatically.
-            const latest = useUeControlStore.getState().deviceSettings[deviceId]?.[key] ?? 0;
+            // Skip if deviceId changed (component re-rendered for a different device).
+            const latest = useUeControlStore.getState().deviceSettings[sendDeviceId]?.[key] ?? 0;
             if (latest !== target) {
               fireSliderSend(key);
             }
