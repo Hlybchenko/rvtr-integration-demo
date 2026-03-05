@@ -90,6 +90,9 @@
   cursor: pointer;
   align-items: center;
   justify-content: center;
+  /* Ensure iOS taps register over scroll containers */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   animation: burgerPopIn 500ms var(--ease-smooth-pop) both;
   transition:
     border-color 200ms ease,
