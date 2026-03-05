@@ -139,19 +139,19 @@
   position: absolute;
   left: 0;
   transition:
-    top 300ms var(--ease-smooth-pop),
+    translate 300ms var(--ease-smooth-pop),
     transform 400ms var(--ease-overshoot),
     width 300ms var(--ease-smooth-pop),
     opacity 250ms ease;
 }
 
 .burgerLine::before {
-  top: -6px;
+  translate: 0 -6px;
   width: calc(14px * var(--scale));
 }
 
 .burgerLine::after {
-  top: 6px;
+  translate: 0 6px;
   width: calc(12px * var(--scale));
 }
 
@@ -161,13 +161,13 @@
 }
 
 .burgerOpen::before {
-  top: 0;
+  translate: 0 0;
   width: calc(18px * var(--scale));
   transform: rotate(225deg);
 }
 
 .burgerOpen::after {
-  top: 0;
+  translate: 0 0;
   width: calc(18px * var(--scale));
   transform: rotate(-225deg);
 }

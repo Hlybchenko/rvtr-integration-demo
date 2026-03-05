@@ -203,8 +203,8 @@
 }
 
 @keyframes chipBodyGlow {
-  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
-  50%      { filter: drop-shadow(0 0 3px currentColor); }
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
 }
 
 .aiChipCore {
@@ -397,10 +397,10 @@
   76%      { transform: rotate(0.8deg) translateY(-0.3px); }
 }
 
-/* Breathing glow on SVG icon inside badge */
+/* Breathing glow on SVG icon inside badge — opacity-only (composite) */
 @keyframes operatorIconBreath {
-  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
-  50%      { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 25%, transparent)); }
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; }
 }
 
 @keyframes operatorNod {

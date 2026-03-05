@@ -46,6 +46,11 @@ const WIDGET_DEVICES: DeviceField[] = [
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
+  // ── UE API URL ────────────────────────────────────────────────────────
+  const ueApiUrl = useUeControlStore((s) => s.ueApiUrl);
+  const setUeApiUrl = useUeControlStore((s) => s.setUeApiUrl);
+  const ueUrlSave = useDebouncedUrlSave({ storeValue: ueApiUrl, saveFn: setUeApiUrl });
+
   // ── Widget ──────────────────────────────────────────────────────────────
   const phoneUrl = useSettingsStore((s) => s.phoneUrl);
   const laptopUrl = useSettingsStore((s) => s.laptopUrl);
@@ -902,6 +907,28 @@ export function OverviewPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* UE Remote API URL */}
+        <div className={styles.field}>
+          <div className={styles.fieldHeader}>
+            <label className={styles.label} htmlFor="ue-api-url">UE API URL</label>
+            {ueUrlSave.input.trim().length > 0 && (
+              <span className={`${styles.badge} ${isValidUrl(ueUrlSave.input) ? styles.badgeValid : styles.badgeInvalid}`}>
+                {isValidUrl(ueUrlSave.input) ? '✓ Valid' : '✗ Invalid URL'}
+              </span>
+            )}
+          </div>
+          <input
+            id="ue-api-url"
+            className={`${styles.input} ${ueUrlSave.input.trim().length > 0 && !isValidUrl(ueUrlSave.input) ? styles.inputError : ''} ${ueUrlSave.isSaving ? styles.inputSaving : ''}`}
+            type="url"
+            placeholder="http://127.0.0.1:8081"
+            value={ueUrlSave.input}
+            onChange={(e) => ueUrlSave.setInput(e.target.value)}
+            spellCheck={false}
+            autoComplete="url"
+          />
         </div>
       </section>
 

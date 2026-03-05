@@ -68,21 +68,18 @@
   align-items: center;
   justify-content: center;
   background: color-mix(in srgb, var(--glass-bg) 98%, transparent);
-  /* Start invisible — .deviceBootOverlayActive fades in */
+  /* Start invisible — .deviceBootOverlayActive fades in.
+     Blur is always set; only opacity animates (composite-only).
+     At opacity:0 browsers skip the blur computation entirely. */
   opacity: 0;
-  backdrop-filter: blur(0);
-  -webkit-backdrop-filter: blur(0);
-  transition:
-    opacity 600ms ease-in-out,
-    backdrop-filter 600ms ease-in-out,
-    -webkit-backdrop-filter 600ms ease-in-out;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: opacity 600ms ease-in-out;
   pointer-events: none;
 }
 
 .deviceBootOverlayActive {
   opacity: 1;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
 }
 
 .loaderMinimal {
@@ -150,9 +147,9 @@
 /* ── Pulse rings — expanding from prism center ── */
 
 @keyframes loaderPulseRing {
-  0%   { scale: 0.3; opacity: 0.5; border-width: 1.5px; }
+  0%   { scale: 0.3; opacity: 0.5; }
   60%  { opacity: 0.15; }
-  100% { scale: 2.8; opacity: 0; border-width: 0.5px; }
+  100% { scale: 2.8; opacity: 0; }
 }
 
 .loaderRing {
